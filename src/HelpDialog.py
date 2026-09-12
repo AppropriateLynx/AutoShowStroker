@@ -50,6 +50,27 @@ HELP_TOPICS = [
         "</ul>",
     ),
     (
+        "On-Screen Display",
+        "<h3>Session Timer</h3>"
+        "<p>Top-left of the media area, shows how long the current session has been running "
+        "(<code>⏱ mm:ss</code>, or <code>h:mm:ss</code> past an hour). It's a wall-clock "
+        "reading - pauses count too. Toggle it off in Settings &gt; Playback &gt; Show "
+        "session timer.</p>"
+        "<h3>Record-Chase Badge</h3>"
+        "<p>Top-right of the media area. It stays hidden most of the session and only "
+        "appears once you're within reach of a personal record (currently within 20%), then "
+        "flips to \"New Record!\" the moment you actually break it - a deliberate "
+        "anticipation moment, not a permanent stats display. Toggle it off in "
+        "Settings &gt; Playback &gt; Show live personal-record chase.</p>"
+        "<h3>Callouts</h3>"
+        "<p>Bottom-center of the media area - the teasing phrases that fire on beat changes "
+        "and session events. See the Adding Languages tab for how these are sourced.</p>"
+        "<h3>Climax Banner &amp; Strokemeter</h3>"
+        "<p>The footer below the media area: the Strokemeter pulses on every beat, and the "
+        "climax banner above it lights up with the session's outcome (Cum / Ruined / "
+        "Denied) once it's decided.</p>",
+    ),
+    (
         "Adding Languages",
         "<h3>Callouts are just JSON files</h3>"
         "<p>Every teasing phrase you see comes from a JSON file in <code>res/callouts/</code> "

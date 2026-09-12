@@ -18,7 +18,8 @@ def test_has_a_tab_per_help_topic(dialog):
 
 
 def test_beats_tab_explains_pattern_number_meaning(dialog):
-    beats_tab = dialog.tabs.widget(0)
+    titles = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
+    beats_tab = dialog.tabs.widget(titles.index("Beats && Rhythm"))
     text = " ".join(w.text() for w in beats_tab.findChildren(QLabel))
     assert "audible beat" in text
     assert "silent step" in text
@@ -27,11 +28,26 @@ def test_beats_tab_explains_pattern_number_meaning(dialog):
 
 
 def test_languages_tab_explains_adding_a_language(dialog):
-    languages_tab = dialog.tabs.widget(1)
+    titles = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
+    languages_tab = dialog.tabs.widget(titles.index("Adding Languages"))
     text = " ".join(w.text() for w in languages_tab.findChildren(QLabel))
     assert "res/callouts/" in text
     assert "Trigger Key" in text
     assert "Manage Custom Phrase Files" in text
+
+
+def test_on_screen_display_tab_documents_the_overlays(dialog):
+    titles = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
+    assert "On-Screen Display" in titles
+    assert titles.index("On-Screen Display") == 1
+    tab = dialog.tabs.widget(titles.index("On-Screen Display"))
+    text = " ".join(w.text() for w in tab.findChildren(QLabel))
+    assert "Session Timer" in text
+    assert "Top-left" in text
+    assert "Record-Chase" in text
+    assert "Top-right" in text
+    assert "personal record" in text
+    assert "Playback" in text
 
 
 def test_shortcuts_tab_lists_every_shortcut(dialog):
