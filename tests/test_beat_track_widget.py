@@ -47,6 +47,48 @@ def test_hit_zone_is_near_the_left_edge(widget):
     assert 0 < widget._hit_zone_x() < widget.width() / 2
 
 
+# --- caption never sits on top of the notes ---
+
+
+def test_notes_sit_below_the_caption_band(widget):
+    widget.set_status("New Beat! [1, 2, 2, -1, -1]", "new_beat")
+    # A note's whole circle has to clear the caption band, or the text renders on top
+    # of incoming notes (which is exactly what it did before this was fixed).
+    assert widget._note_center_y() - widget._note_radius() >= widget._caption_height()
+
+
+def test_notes_stay_inside_the_widget_when_squeezed(qtbot, handler):
+    # The climax banner takes roughly half the fixed 110px footer while it's visible.
+    w = BeatTrackWidget(handler)
+    qtbot.addWidget(w)
+    w.resize(800, 48)
+    w.set_status("New Beat! [1]", "new_beat")
+
+    assert w._note_center_y() - w._note_radius() >= w._caption_height()
+    assert w._note_center_y() + w._note_radius() <= w.height()
+
+
+def test_caption_band_is_zero_without_a_caption(widget):
+    assert widget._caption_height() == 0
+
+
+def test_notes_hidden_while_paused(widget):
+    widget.set_status("Pause: 7 seconds left.", "pause")
+    assert widget._notes_visible() is False
+
+
+def test_notes_hidden_while_idle(widget):
+    widget.set_status("Strokemeter appears here.", "idle")
+    assert widget._notes_visible() is False
+
+
+def test_notes_visible_during_a_running_beat(widget):
+    widget.set_status("New Beat! [1]", "new_beat")
+    assert widget._notes_visible() is True
+    widget.set_status("UP", "up")
+    assert widget._notes_visible() is True
+
+
 # --- status caption ---
 
 
@@ -148,11 +190,22 @@ def test_painting_asks_the_handler_for_its_lead_time_window(qtbot, handler):
     w = BeatTrackWidget(handler)
     qtbot.addWidget(w)
     w.resize(800, 110)
+    w.set_status("New Beat! [1]", "new_beat")
 
     w.grab()
 
     assert handler.horizons
     assert handler.horizons[-1] == BeatTrackWidget.LEAD_TIME_SEC
+
+
+def test_painting_while_idle_does_not_query_the_handler(qtbot, handler):
+    w = BeatTrackWidget(handler)
+    qtbot.addWidget(w)
+    w.resize(800, 110)
+
+    w.grab()
+
+    assert handler.horizons == []
 
 
 def test_painting_survives_a_squeezed_footer(qtbot, handler):

@@ -16,6 +16,12 @@ HIT_ZONE_WIDTH = 6
 NOTE_RADIUS = 11
 FLASH_MS = 130
 CAPTION_MARGIN = 10
+CAPTION_PADDING = 4
+TRACK_INSET = 4
+
+# Kinds with nothing in flight to draw - upcoming_beats() is empty for both anyway
+# (start_pause stops the beat timer), so the track shows just its caption.
+_NOTELESS_KINDS = ("idle", "pause")
 
 # (track background, caption color) per beat_meter_update_event kind. The track keeps a
 # stable backdrop and only the accents move - unlike the old QLabel, which flashed its
@@ -99,6 +105,31 @@ class BeatTrackWidget(QWidget):
         hit_x = self._hit_zone_x()
         return hit_x + (seconds_until / LEAD_TIME_SEC) * (self.width() - hit_x)
 
+    def _notes_visible(self) -> bool:
+        return self._kind not in _NOTELESS_KINDS
+
+    def _caption_height(self) -> float:
+        """Height of the band reserved for the caption. The caption gets its own band
+        rather than sharing the notes' row - drawn over them it landed directly on top
+        of incoming notes, worst of all in the squeezed-footer case."""
+        if not self._caption:
+            return 0
+        return self.fontMetrics().height() + CAPTION_PADDING
+
+    def _note_lane(self) -> tuple[float, float]:
+        """(top, height) of the strip the notes travel through, below the caption band."""
+        top = self._caption_height() + TRACK_INSET
+        return top, max(1.0, self.height() - TRACK_INSET - top)
+
+    def _note_center_y(self) -> float:
+        top, height = self._note_lane()
+        return top + height / 2
+
+    def _note_radius(self) -> float:
+        _top, height = self._note_lane()
+        # Shrink rather than overflow when the climax banner squeezes the footer.
+        return min(NOTE_RADIUS, max(3.0, height / 2 - 2))
+
     # --- painting ---
 
     def paintEvent(self, event) -> None:
@@ -111,32 +142,29 @@ class BeatTrackWidget(QWidget):
         painter.setBrush(QColor(background))
         painter.drawRoundedRect(track_rect, 8, 8)
 
-        self._paint_hit_zone(painter, track_rect)
-        if self._kind != "pause":
-            self._paint_notes(painter, track_rect)
+        self._paint_hit_zone(painter)
+        if self._notes_visible():
+            self._paint_notes(painter)
         self._paint_caption(painter, track_rect, caption_color)
 
         painter.end()
 
-    def _paint_hit_zone(self, painter, track_rect) -> None:
+    def _paint_hit_zone(self, painter) -> None:
         hit_x = self._hit_zone_x()
+        top, height = self._note_lane()
         flashing = self.is_flashing()
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(theme.ACCENT if flashing else theme.SECONDARY))
-        painter.drawRoundedRect(
-            QRectF(hit_x - HIT_ZONE_WIDTH / 2, track_rect.top() + 4, HIT_ZONE_WIDTH, track_rect.height() - 8),
-            3, 3,
-        )
+        painter.drawRoundedRect(QRectF(hit_x - HIT_ZONE_WIDTH / 2, top, HIT_ZONE_WIDTH, height), 3, 3)
         if flashing:
             painter.setPen(QPen(QColor(theme.ACCENT), 2))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(QPointF(hit_x, track_rect.center().y()), NOTE_RADIUS + 7, NOTE_RADIUS + 7)
+            radius = self._note_radius() + 7
+            painter.drawEllipse(QPointF(hit_x, self._note_center_y()), radius, radius)
 
-    def _paint_notes(self, painter, track_rect) -> None:
-        center_y = track_rect.center().y()
-        # Shrink the notes rather than let them overflow when the climax banner squeezes
-        # the footer - the track has to stay readable at roughly half height.
-        radius = min(NOTE_RADIUS, max(4.0, track_rect.height() / 2 - 6))
+    def _paint_notes(self, painter) -> None:
+        center_y = self._note_center_y()
+        radius = self._note_radius()
         for seconds_until, is_audible, _weight in self.beat_handler.upcoming_beats(LEAD_TIME_SEC):
             center = QPointF(self._note_x(seconds_until), center_y)
             if is_audible:
@@ -152,10 +180,17 @@ class BeatTrackWidget(QWidget):
     def _paint_caption(self, painter, track_rect, caption_color) -> None:
         if not self._caption:
             return
-        # Overlaid inside the track rather than stacked above it, so a squeezed footer
-        # shrinks the highway instead of clipping the text off.
         painter.setPen(QColor(caption_color))
-        text_rect = track_rect.adjusted(CAPTION_MARGIN, 0, -CAPTION_MARGIN, 0)
+        text_rect = QRectF(
+            track_rect.left() + CAPTION_MARGIN,
+            track_rect.top(),
+            max(1.0, track_rect.width() - CAPTION_MARGIN * 2),
+            self._caption_height(),
+        )
+        # Vertically centered in the whole track while nothing is in flight (pause/idle),
+        # otherwise kept to its own band at the top so notes never run underneath it.
+        if not self._notes_visible():
+            text_rect = QRectF(text_rect.left(), track_rect.top(), text_rect.width(), track_rect.height())
         painter.drawText(
             text_rect,
             int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
