@@ -1,4 +1,3 @@
-import json
 import os
 import random
 import sys
@@ -75,8 +74,9 @@ class BeatHandler(QObject):
     # same pattern CalloutHandler/ClimaxHandler already use for their GoonerApp-owned labels.
     beat_meter_update_event = pyqtSignal(str, str)
 
-    def __init__(self, beat_file=None, settings=None):
+    def __init__(self, beat_file=None, settings=None, data_store=None):
         super().__init__()
+        self.data_store = data_store
         self.beat_changed_counter = 5
         self.just_changed_beat = False
         self.beat_meter_pause_timer = QTimer()
@@ -136,12 +136,13 @@ class BeatHandler(QObject):
                 # Standard: Alle Muster aktiv
                 self.selected_beat_patterns = list(self.BEAT_PATTERNS_MAP.keys())
 
-            raw_custom_patterns = self.settings.value("BeatHandler/custom_patterns")
-            self.custom_beat_patterns = json.loads(raw_custom_patterns) if raw_custom_patterns else {}
-
         else:
             self.selected_beat_patterns = list(self.BEAT_PATTERNS_MAP.keys())
-            self.custom_beat_patterns = {}
+
+        # Pattern *definitions* are user-authored data, so they live in a JSON file rather
+        # than the registry (see src/user_data.py). Which patterns are *selected* stays in
+        # QSettings above - that's config, not content.
+        self.custom_beat_patterns = self._load_custom_patterns()
 
         self.beat_meter_timer = QTimer()
         self.beat_meter_timer.timeout.connect(self.beat)
@@ -384,8 +385,15 @@ class BeatHandler(QObject):
             self.selected_beat_patterns.remove(name)
         self._save_custom_patterns()
 
+    def _load_custom_patterns(self) -> dict:
+        if not self.data_store:
+            return {}
+        return self.data_store.load(
+            "custom_patterns", {}, self.settings, "BeatHandler/custom_patterns"
+        )
+
     def _save_custom_patterns(self):
-        if not self.settings:
-            return
-        self.settings.setValue("BeatHandler/custom_patterns", json.dumps(self.custom_beat_patterns))
-        self.settings.setValue("BeatHandler/selected_beat_patterns", self.selected_beat_patterns)
+        if self.data_store:
+            self.data_store.save("custom_patterns", self.custom_beat_patterns)
+        if self.settings:
+            self.settings.setValue("BeatHandler/selected_beat_patterns", self.selected_beat_patterns)

@@ -1,4 +1,3 @@
-import json
 import time
 
 from src import utils
@@ -22,9 +21,11 @@ class ScoreTracker:
         "average_beat_speed_active": "beats/sec",
         "fakeout_count": "fakeouts",
     }
-    # Bounds the size of the JSON blob persisted in QSettings (the Windows registry has no
-    # practical need to grow this without limit).
-    MAX_HISTORY_ENTRIES = 200
+    # History lives in its own JSON file now (see src/user_data.py), so the old, much
+    # tighter cap - which existed only to keep the blob from bloating the registry - is
+    # gone. A bound still exists because LongTermStatisticsDialog renders every entry into
+    # a table, not because the storage minds.
+    MAX_HISTORY_ENTRIES = 5000
     # Live record-chase only reveals itself once a metric is at least this close (current/best)
     # to its personal best - an anticipation/payoff moment, not a permanent stats HUD.
     CHASE_REVEAL_THRESHOLD = 0.8
@@ -42,8 +43,9 @@ class ScoreTracker:
             return f"{value:.2f} beats/sec"
         return f"{value}"
 
-    def __init__(self, settings=None):
+    def __init__(self, settings=None, data_store=None):
         self.settings = settings
+        self.data_store = data_store
         self.number_of_pauses = 0
         self.total_duration_of_pauses = 0
         self.beat_count = 0
@@ -224,12 +226,13 @@ class ScoreTracker:
         self._save_history()
 
     def _load_history(self) -> list:
-        if not self.settings:
+        if not self.data_store:
             return []
-        raw_history = self.settings.value("ScoreTracker/session_history")
-        return json.loads(raw_history) if raw_history else []
+        return self.data_store.load(
+            "session_history", [], self.settings, "ScoreTracker/session_history"
+        )
 
     def _save_history(self):
-        if not self.settings:
+        if not self.data_store:
             return
-        self.settings.setValue("ScoreTracker/session_history", json.dumps(self.history))
+        self.data_store.save("session_history", self.history)

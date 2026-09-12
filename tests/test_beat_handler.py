@@ -4,6 +4,7 @@ import pytest
 from PyQt6.QtCore import QSettings
 
 from src.BeatHandler import BeatHandler
+from src.user_data import UserDataStore
 
 
 @pytest.fixture
@@ -305,15 +306,18 @@ def test_add_custom_pattern_auto_selects_it(handler):
     assert "My Pattern" in handler.selected_beat_patterns
 
 
-def test_add_custom_pattern_persists_to_settings(tmp_path):
+def test_add_custom_pattern_persists_to_the_data_store(tmp_path):
     ini = tmp_path / "settings.ini"
     settings = QSettings(str(ini), QSettings.Format.IniFormat)
-    handler = BeatHandler(settings=settings)
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+    handler = BeatHandler(settings=settings, data_store=store)
 
     handler.add_or_update_custom_pattern("My Pattern", [1, -1, 2])
 
-    saved = json.loads(settings.value("BeatHandler/custom_patterns"))
-    assert saved == {"My Pattern": [1, -1, 2]}
+    assert json.loads(store.path_for("custom_patterns").read_text(encoding="utf-8")) == {
+        "My Pattern": [1, -1, 2]
+    }
+    # The *selection* of which rhythms are active stays config, so it stays in QSettings.
     assert "My Pattern" in settings.value("BeatHandler/selected_beat_patterns")
     handler.stop()
 
@@ -325,14 +329,27 @@ def test_update_existing_custom_pattern_does_not_duplicate_selection(handler):
     assert handler.selected_beat_patterns.count("My Pattern") == 1
 
 
-def test_custom_patterns_loaded_from_settings(tmp_path):
-    ini = tmp_path / "settings.ini"
-    settings = QSettings(str(ini), QSettings.Format.IniFormat)
-    settings.setValue("BeatHandler/custom_patterns", json.dumps({"Loaded": [1, -1]}))
+def test_custom_patterns_loaded_from_the_data_store(tmp_path):
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+    store.save("custom_patterns", {"Loaded": [1, -1]})
 
-    handler = BeatHandler(settings=settings)
+    handler = BeatHandler(data_store=store)
 
     assert handler.available_beat_patterns["Loaded"] == [1, -1]
+    handler.stop()
+
+
+def test_custom_patterns_migrate_out_of_settings_on_first_load(tmp_path):
+    ini = tmp_path / "settings.ini"
+    settings = QSettings(str(ini), QSettings.Format.IniFormat)
+    settings.setValue("BeatHandler/custom_patterns", json.dumps({"Legacy": [1, -1]}))
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+
+    handler = BeatHandler(settings=settings, data_store=store)
+
+    assert handler.available_beat_patterns["Legacy"] == [1, -1]
+    assert store.path_for("custom_patterns").exists()
+    assert settings.value("BeatHandler/custom_patterns") is None
     handler.stop()
 
 

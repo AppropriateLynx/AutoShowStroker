@@ -33,6 +33,7 @@ from src.ScoreTracker import ScoreTracker
 from src.SettingsDialog import SettingsDialog
 from src.StatisticsDialog import StatisticsDialog
 from src.UpdateChecker import UpdateChecker
+from src.user_data import UserDataStore
 from src.utils import format_clock, get_current_version, get_project_root
 from src.WhatsNewDialog import WhatsNewDialog
 
@@ -57,10 +58,12 @@ class GoonerApp(QMainWindow):
         "show_session_timer": True,
     }
 
-    def __init__(self, settings: QSettings | None = None):
+    def __init__(self, settings: QSettings | None = None, data_store=None):
         super().__init__()
 
         self.settings = settings if settings is not None else QSettings("GoonerCock", "GoonerApp")
+        self.data_store = data_store if data_store is not None else UserDataStore()
+        self.data_store.prune_legacy_registry_keys(self.settings)
 
         self.setWindowTitle("Auto Hero Generation")
 
@@ -257,7 +260,7 @@ class GoonerApp(QMainWindow):
         media_layout.addWidget(self.controls_container)
         self.main_splitter.addWidget(media_container)
 
-        self.beat_handler = BeatHandler(settings=self.settings)
+        self.beat_handler = BeatHandler(settings=self.settings, data_store=self.data_store)
 
         self.climax_status_label = QLabel("")
         self.climax_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -308,9 +311,9 @@ class GoonerApp(QMainWindow):
         self._was_maximized_before_fullscreen = False
         self.is_muted = False
 
-        self.callout_handler = CalloutHandler(self.settings)
+        self.callout_handler = CalloutHandler(self.settings, data_store=self.data_store)
 
-        self.score_tracker = ScoreTracker(settings=self.settings)
+        self.score_tracker = ScoreTracker(settings=self.settings, data_store=self.data_store)
         self._session_start_bests = {}
 
         self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
