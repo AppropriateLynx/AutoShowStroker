@@ -662,6 +662,76 @@ def test_stopping_session_hides_record_chase_label(app, tmp_path):
     assert app.record_chase_label.isHidden()
 
 
+# --- session timer ---
+
+
+def test_session_timer_label_hidden_by_default(app):
+    assert app.session_timer_label.isHidden()
+
+
+def test_show_session_timer_defaults_to_true(app):
+    assert app.show_session_timer is True
+
+
+def test_starting_session_shows_session_timer_at_zero(app, tmp_path):
+    img = tmp_path / "a.png"
+    img.write_bytes(b"")
+    app.playlist = [img]
+
+    app.start()
+
+    assert not app.session_timer_label.isHidden()
+    assert "00:00" in app.session_timer_label.text()
+
+
+def test_session_timer_reflects_elapsed_time(app, tmp_path):
+    img = tmp_path / "a.png"
+    img.write_bytes(b"")
+    app.playlist = [img]
+    app.start()
+
+    app.score_tracker.session_start_time -= 522
+
+    app._update_session_timer()
+
+    assert "08:42" in app.session_timer_label.text()
+
+
+def test_session_timer_hidden_when_setting_disabled(app, tmp_path):
+    app.show_session_timer = False
+    img = tmp_path / "a.png"
+    img.write_bytes(b"")
+    app.playlist = [img]
+
+    app.start()
+
+    assert app.session_timer_label.isHidden()
+
+
+def test_stopping_session_hides_session_timer_label(app, tmp_path):
+    img = tmp_path / "a.png"
+    img.write_bytes(b"")
+    app.playlist = [img]
+    app.start()
+    assert not app.session_timer_label.isHidden()
+
+    app.stop()
+
+    assert app.session_timer_label.isHidden()
+
+
+def test_stopping_session_stops_the_session_timer_tick(app, tmp_path):
+    img = tmp_path / "a.png"
+    img.write_bytes(b"")
+    app.playlist = [img]
+    app.start()
+    assert app.session_timer_tick.isActive()
+
+    app.stop()
+
+    assert not app.session_timer_tick.isActive()
+
+
 def test_climax_handler_status_event_wired_to_label(app):
     app.climax_handler.status_changed_event.emit("ruined")
     assert app.climax_status_label.text() == "RUINED"
