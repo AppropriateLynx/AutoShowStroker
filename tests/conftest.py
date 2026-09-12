@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QDialog, QMessageBox  # noqa: E402
 
 from src.BeatHandler import BeatHandler  # noqa: E402
 from src.GoonerApp import GoonerApp  # noqa: E402
+from src.user_data import UserDataStore  # noqa: E402
 
 
 class _FakeSoundEffect:
@@ -53,7 +54,18 @@ def qsettings(tmp_path):
 
 
 @pytest.fixture
-def app(qtbot, qsettings):
-    window = GoonerApp(settings=qsettings)
+def data_store(tmp_path):
+    """Same reasoning as qsettings: never let a test touch the user's real data.
+
+    UserDataStore defaults to QStandardPaths' AppDataLocation, which resolves through the
+    QApplication's applicationName - and pytest-qt sets that itself, so an un-injected
+    store would write session history into a real directory.
+    """
+    return UserDataStore(base_dir=tmp_path / "appdata")
+
+
+@pytest.fixture
+def app(qtbot, qsettings, data_store):
+    window = GoonerApp(settings=qsettings, data_store=data_store)
     qtbot.addWidget(window)
     return window

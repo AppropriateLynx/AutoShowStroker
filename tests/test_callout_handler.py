@@ -6,6 +6,7 @@ from PyQt6.QtCore import QSettings
 
 from src import CalloutHandler as callout_module
 from src.CalloutHandler import TRIGGER_KEYS, CalloutHandler
+from src.user_data import UserDataStore
 
 
 @pytest.fixture
@@ -192,7 +193,8 @@ def test_invalid_json_file_is_skipped_but_language_stays_listed(qapp, tmp_path, 
 def handler_with_settings(qapp, callout_dir, monkeypatch, tmp_path):
     monkeypatch.setattr(callout_module, "get_resource_path", lambda _relative_path: str(callout_dir))
     settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
-    return CalloutHandler(settings=settings)
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+    return CalloutHandler(settings=settings, data_store=store)
 
 
 def _write_custom_file(tmp_path, name, data):
@@ -296,6 +298,26 @@ def test_load_custom_file_persists_and_reloads_across_instances(handler_with_set
     custom_path = _write_custom_file(tmp_path, "custom.json", {"session_started": ["persisted phrase"]})
     handler_with_settings.load_custom_file(custom_path, "en")
 
-    second = CalloutHandler(settings=handler_with_settings.settings)
+    second = CalloutHandler(
+        settings=handler_with_settings.settings,
+        data_store=handler_with_settings.data_store,
+    )
 
     assert second.callout_data["en"]["session_started"] == ["en session_started phrase", "persisted phrase"]
+
+
+def test_custom_phrase_files_migrate_out_of_settings(qapp, callout_dir, monkeypatch, tmp_path):
+    monkeypatch.setattr(callout_module, "get_resource_path", lambda _relative_path: str(callout_dir))
+    custom_path = _write_custom_file(tmp_path, "legacy.json", {"session_started": ["legacy phrase"]})
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    settings.setValue(
+        "CalloutHandler/custom_phrase_files",
+        json.dumps([{"path": custom_path, "lang": "en"}]),
+    )
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+
+    handler = CalloutHandler(settings=settings, data_store=store)
+
+    assert handler.callout_data["en"]["session_started"] == ["en session_started phrase", "legacy phrase"]
+    assert store.path_for("custom_phrase_files").exists()
+    assert settings.value("CalloutHandler/custom_phrase_files") is None

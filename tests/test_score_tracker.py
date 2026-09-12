@@ -5,6 +5,19 @@ import pytest
 from PyQt6.QtCore import QSettings
 
 from src.ScoreTracker import ScoreTracker
+from src.user_data import UserDataStore
+
+
+def _history_entry(**overrides):
+    entry = {
+        "ended_at": "2026-01-01 00:00",
+        "total_dur_sec": 1.0,
+        "total_num_beat": 1,
+        "average_beat_speed_active": 1.0,
+        "fakeout_count": 0,
+    }
+    entry.update(overrides)
+    return entry
 
 
 def test_initial_state():
@@ -177,42 +190,58 @@ def test_session_ended_appends_a_history_entry(monkeypatch):
     assert "ended_at" in history[0]
 
 
-def test_session_ended_persists_history_to_settings(tmp_path, monkeypatch):
-    ini = tmp_path / "settings.ini"
-    settings = QSettings(str(ini), QSettings.Format.IniFormat)
-    tracker = ScoreTracker(settings=settings)
+def test_session_ended_persists_history_to_the_data_store(tmp_path, monkeypatch):
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+    tracker = ScoreTracker(data_store=store)
     tracker.session_start_time = 0.0
     monkeypatch.setattr(time, "time", lambda: 5.0)
 
     tracker.session_ended()
 
-    saved = json.loads(settings.value("ScoreTracker/session_history"))
+    saved = json.loads(store.path_for("session_history").read_text(encoding="utf-8"))
     assert len(saved) == 1
     assert saved[0]["total_dur_sec"] == pytest.approx(5.0)
 
 
-def test_history_loaded_from_settings(tmp_path):
-    ini = tmp_path / "settings.ini"
-    settings = QSettings(str(ini), QSettings.Format.IniFormat)
-    settings.setValue(
-        "ScoreTracker/session_history",
-        json.dumps(
-            [
-                {
-                    "ended_at": "2026-01-01 00:00",
-                    "total_dur_sec": 42.0,
-                    "total_num_beat": 1,
-                    "average_beat_speed_active": 1.0,
-                    "fakeout_count": 0,
-                }
-            ]
-        ),
-    )
+def test_history_loaded_from_the_data_store(tmp_path):
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+    store.save("session_history", [_history_entry(total_dur_sec=42.0)])
 
-    tracker = ScoreTracker(settings=settings)
+    tracker = ScoreTracker(data_store=store)
 
     assert len(tracker.get_history()) == 1
     assert tracker.get_history()[0]["total_dur_sec"] == 42.0
+
+
+def test_history_migrates_out_of_settings_on_first_load(tmp_path):
+    # Existing installs keep their history: it is copied into the data file and the
+    # registry value is dropped only afterwards.
+    ini = tmp_path / "settings.ini"
+    settings = QSettings(str(ini), QSettings.Format.IniFormat)
+    settings.setValue("ScoreTracker/session_history", json.dumps([_history_entry(total_dur_sec=42.0)]))
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+
+    tracker = ScoreTracker(settings=settings, data_store=store)
+
+    assert len(tracker.get_history()) == 1
+    assert tracker.get_history()[0]["total_dur_sec"] == 42.0
+    assert store.path_for("session_history").exists()
+    assert settings.value("ScoreTracker/session_history") is None
+
+
+def test_history_survives_a_migration_then_a_new_session(tmp_path, monkeypatch):
+    ini = tmp_path / "settings.ini"
+    settings = QSettings(str(ini), QSettings.Format.IniFormat)
+    settings.setValue("ScoreTracker/session_history", json.dumps([_history_entry(total_dur_sec=42.0)]))
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+
+    ScoreTracker(settings=settings, data_store=store)  # migrates
+    second = ScoreTracker(settings=settings, data_store=store)
+    second.session_start_time = 0.0
+    monkeypatch.setattr(time, "time", lambda: 5.0)
+    second.session_ended()
+
+    assert len(ScoreTracker(settings=settings, data_store=store).get_history()) == 2
 
 
 def test_history_capped_at_max_entries(monkeypatch):

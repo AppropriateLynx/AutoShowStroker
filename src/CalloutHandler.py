@@ -42,9 +42,10 @@ class CalloutHandler(QObject):
         "lang": "en",
     }
 
-    def __init__(self, settings=None):
+    def __init__(self, settings=None, data_store=None):
         super().__init__()
         self.settings = settings
+        self.data_store = data_store
         self.tease_active_timer = QTimer()
         self.tease_active_timer.timeout.connect(self._tease_timer_handler)
         self.tease_time = 7000
@@ -66,8 +67,13 @@ class CalloutHandler(QObject):
             self.active_callout = bool(self.settings.value('CalloutHandler/active_callout', type=bool))
             self.set_lang(str(self.settings.value("CalloutHandler/selected_lang")))
             self.talking_chance = float(self.settings.value("CalloutHandler/talking_chance", type=float))
-            raw_custom_files = self.settings.value("CalloutHandler/custom_phrase_files")
-            self.custom_phrase_files = json.loads(raw_custom_files) if raw_custom_files else []
+
+        # Which phrase files the user added is their own data, so it lives in a JSON file
+        # rather than the registry (see src/user_data.py).
+        if self.data_store is not None:
+            self.custom_phrase_files = self.data_store.load(
+                "custom_phrase_files", [], self.settings, "CalloutHandler/custom_phrase_files"
+            )
             self._apply_stored_custom_files()
 
     def _load_available_languages(self):
@@ -148,9 +154,9 @@ class CalloutHandler(QObject):
         self._save_custom_phrase_files()
 
     def _save_custom_phrase_files(self):
-        if not self.settings:
+        if not self.data_store:
             return
-        self.settings.setValue("CalloutHandler/custom_phrase_files", json.dumps(self.custom_phrase_files))
+        self.data_store.save("custom_phrase_files", self.custom_phrase_files)
 
     def session_started(self):
         self.select_and_output_sentence("session_started")
