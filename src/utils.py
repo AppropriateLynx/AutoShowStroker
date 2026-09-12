@@ -42,3 +42,14 @@ def format_duration(seconds: float) -> str:
     if secs == 0:
         return f"{minutes} Min"
     return f"{minutes} Min {secs}s"
+
+
+def format_clock(seconds: float) -> str:
+    if seconds is None:
+        return "N/A"
+    total_seconds = int(seconds)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"

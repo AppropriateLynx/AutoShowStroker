@@ -50,11 +50,15 @@ class SettingsDialog(QDialog):
         self.show_record_chase_checkbox = QCheckBox("Show live personal-record chase")
         self.show_record_chase_checkbox.setChecked(self.main_app.show_record_chase)
         self._current_layout.addWidget(self.show_record_chase_checkbox)
+        self.show_session_timer_checkbox = QCheckBox("Show session timer")
+        self.show_session_timer_checkbox.setChecked(self.main_app.show_session_timer)
+        self._current_layout.addWidget(self.show_session_timer_checkbox)
         self.playback_reset_button = self.add_reset_button(
             ["min_dur", "max_dur", "video_min_dur", "beat_loudness", "vid_loudness"],
             checkbox_defaults=[
                 (self.show_startup_splash_checkbox, self.main_app.DEFAULTS["show_startup_splash"]),
                 (self.show_record_chase_checkbox, self.main_app.DEFAULTS["show_record_chase"]),
+                (self.show_session_timer_checkbox, self.main_app.DEFAULTS["show_session_timer"]),
             ],
         )
         self._current_layout.addStretch()
@@ -254,6 +258,10 @@ class SettingsDialog(QDialog):
         settings.setValue("GoonerApp/show_record_chase", self.show_record_chase_checkbox.isChecked())
         self.main_app.show_record_chase = self.show_record_chase_checkbox.isChecked()
         self.main_app._update_record_chase()
+
+        settings.setValue("GoonerApp/show_session_timer", self.show_session_timer_checkbox.isChecked())
+        self.main_app.show_session_timer = self.show_session_timer_checkbox.isChecked()
+        self.main_app._update_session_timer()
 
         new_selected_patterns = []
         for name, checkbox in self.beat_checkboxes.items():

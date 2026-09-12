@@ -3,7 +3,7 @@ import sys
 import pytest
 
 from src import utils
-from src.utils import format_duration, get_current_version, get_project_root
+from src.utils import format_clock, format_duration, get_current_version, get_project_root
 
 
 def test_get_project_root_finds_repo_root_from_script():
@@ -42,3 +42,19 @@ def test_get_current_version_strips_whitespace(monkeypatch, tmp_path):
 )
 def test_format_duration(seconds, expected):
     assert format_duration(seconds) == expected
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [
+        (None, "N/A"),
+        (0, "00:00"),
+        (42, "00:42"),
+        (522, "08:42"),
+        (522.9, "08:42"),
+        (3600, "1:00:00"),
+        (3735, "1:02:15"),
+    ],
+)
+def test_format_clock(seconds, expected):
+    assert format_clock(seconds) == expected

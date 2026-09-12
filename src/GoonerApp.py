@@ -33,7 +33,7 @@ from src.ScoreTracker import ScoreTracker
 from src.SettingsDialog import SettingsDialog
 from src.StatisticsDialog import StatisticsDialog
 from src.UpdateChecker import UpdateChecker
-from src.utils import get_current_version, get_project_root
+from src.utils import format_clock, get_current_version, get_project_root
 from src.WhatsNewDialog import WhatsNewDialog
 
 
@@ -54,6 +54,7 @@ class GoonerApp(QMainWindow):
         "vid_loudness": 1.0,
         "show_startup_splash": True,
         "show_record_chase": True,
+        "show_session_timer": True,
     }
 
     def __init__(self, settings: QSettings | None = None):
@@ -138,6 +139,22 @@ class GoonerApp(QMainWindow):
         self.record_chase_label.setGraphicsEffect(record_chase_glow)
         self.record_chase_label.hide()
 
+        self.session_timer_label = QLabel("")
+        self.session_timer_label.setStyleSheet(f"""
+                    color: {theme.ACCENT};
+                    font-size: 13px;
+                    font-weight: bold;
+                    padding: 6px 10px;
+                    background-color: rgba(45, 29, 58, 0.85);
+                    border-radius: 8px;
+                """)
+        session_timer_glow = QGraphicsDropShadowEffect()
+        session_timer_glow.setColor(QColor(theme.ACCENT))
+        session_timer_glow.setBlurRadius(18)
+        session_timer_glow.setOffset(0, 0)
+        self.session_timer_label.setGraphicsEffect(session_timer_glow)
+        self.session_timer_label.hide()
+
         self.overlay_widget = QWidget()
         self.overlay_layout = QGridLayout(self.overlay_widget)
         self.overlay_layout.setContentsMargins(0, 0, 0, 0)
@@ -155,6 +172,12 @@ class GoonerApp(QMainWindow):
             self.record_chase_label,
             0, 0,
             Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight
+        )
+
+        self.overlay_layout.addWidget(
+            self.session_timer_label,
+            0, 0,
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
         )
 
         media_layout.addWidget(self.overlay_widget, stretch=4)
@@ -215,6 +238,9 @@ class GoonerApp(QMainWindow):
         self.auto_play_timer = QTimer()
         self.auto_play_timer.timeout.connect(self.next_img_timer)
 
+        self.session_timer_tick = QTimer()
+        self.session_timer_tick.timeout.connect(self._update_session_timer)
+
         self.max_dur = float(self.settings.value("GoonerApp/max_dur", 4.0))
         self.min_dur = float(self.settings.value("GoonerApp/min_dur", 0.5))
         self.video_min_dur = float(self.settings.value("GoonerApp/video_min_dur", 1.5))
@@ -223,6 +249,9 @@ class GoonerApp(QMainWindow):
         )
         self.show_record_chase = bool(
             self.settings.value("GoonerApp/show_record_chase", self.DEFAULTS["show_record_chase"], type=bool)
+        )
+        self.show_session_timer = bool(
+            self.settings.value("GoonerApp/show_session_timer", self.DEFAULTS["show_session_timer"], type=bool)
         )
 
         media_layout.addWidget(self.controls_container)
@@ -371,9 +400,11 @@ class GoonerApp(QMainWindow):
         self.register_start_event(self.callout_handler.session_started)
         self.register_start_event(self.climax_handler.session_started)
         self.register_start_event(self._start_record_chase)
+        self.register_start_event(self._start_session_timer)
 
         self.register_end_event(self.score_tracker.session_ended)
         self.register_end_event(self._end_record_chase)
+        self.register_end_event(self._end_session_timer)
 
         self.register_media_skip_event(self.score_tracker.media_skipped)
         self.register_media_skip_event(self.callout_handler.media_skipped)
@@ -724,6 +755,22 @@ class GoonerApp(QMainWindow):
             text = f"\U0001f3c6 Closing in on your {label} record: {current_text} / {best_text}"
         self.record_chase_label.setText(text)
         self.record_chase_label.show()
+
+    def _start_session_timer(self):
+        self.session_timer_tick.start(1000)
+        self._update_session_timer()
+
+    def _end_session_timer(self):
+        self.session_timer_tick.stop()
+        self.session_timer_label.hide()
+
+    def _update_session_timer(self):
+        if not self.show_session_timer:
+            self.session_timer_label.hide()
+            return
+        elapsed = self.score_tracker.live_metrics().get("total_dur_sec", 0)
+        self.session_timer_label.setText(f"⏱ {format_clock(elapsed)}")
+        self.session_timer_label.show()
 
     def register_start_event(self, handler):
         self.session_started_event.connect(handler)
