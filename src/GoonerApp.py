@@ -15,7 +15,6 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -24,6 +23,7 @@ from PyQt6.QtWidgets import (
 
 from src import changelog, media_kinds, theme
 from src.BeatHandler import BeatHandler
+from src.BeatTrackWidget import BeatTrackWidget
 from src.CalloutHandler import CalloutHandler
 from src.ClimaxHandler import ClimaxHandler
 from src.HelpDialog import HelpDialog
@@ -275,12 +275,9 @@ class GoonerApp(QMainWindow):
         self._climax_status_text = ""
         self._climax_status_colors = ("transparent", "transparent")
 
-        self.beat_meter = QLabel("Strokemeter appears here.")
-        self.beat_meter.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.beat_meter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        background, color = self.BEAT_METER_COLORS["idle"]
-        self.beat_meter.setStyleSheet(self._beat_meter_style(background, color))
-        self.beat_handler.register_beat_meter_update_event(self._update_beat_meter)
+        self.beat_track = BeatTrackWidget(self.beat_handler)
+        self.beat_track.set_status("Strokemeter appears here.", "idle")
+        self.beat_handler.register_beat_meter_update_event(self._update_beat_track)
 
         # Fixed total height so the media area above never wobbles when the climax label
         # appears/disappears - only the split *within* this container changes (beat_meter
@@ -291,7 +288,7 @@ class GoonerApp(QMainWindow):
         self.footer_layout.setContentsMargins(0, 0, 0, 0)
         self.footer_layout.setSpacing(0)
         self.footer_layout.addWidget(self.climax_status_label, stretch=0)
-        self.footer_layout.addWidget(self.beat_meter, stretch=1)
+        self.footer_layout.addWidget(self.beat_track, stretch=1)
         self.main_splitter.addWidget(self.footer_container)
 
         self.video_start_time = 0
@@ -386,6 +383,7 @@ class GoonerApp(QMainWindow):
 
         self.beat_handler.register_beat_event(self.score_tracker.beat)
         self.beat_handler.register_beat_event(self._update_record_chase)
+        self.beat_handler.register_beat_event(self.beat_track.flash)
 
         self.beat_handler.register_beat_change_event(self.score_tracker.beat_changed)
         self.beat_handler.register_beat_change_event(self.callout_handler.beat_change_general)
@@ -401,10 +399,12 @@ class GoonerApp(QMainWindow):
         self.register_start_event(self.climax_handler.session_started)
         self.register_start_event(self._start_record_chase)
         self.register_start_event(self._start_session_timer)
+        self.register_start_event(self.beat_track.start)
 
         self.register_end_event(self.score_tracker.session_ended)
         self.register_end_event(self._end_record_chase)
         self.register_end_event(self._end_session_timer)
+        self.register_end_event(self.beat_track.stop)
 
         self.register_media_skip_event(self.score_tracker.media_skipped)
         self.register_media_skip_event(self.callout_handler.media_skipped)
@@ -711,24 +711,8 @@ class GoonerApp(QMainWindow):
         if self._climax_status_text:
             self.climax_status_label.setStyleSheet(self._climax_label_style(self._climax_status_colors[0]))
 
-    BEAT_METER_COLORS = {
-        "idle": (theme.SECONDARY, theme.TEXT),
-        "up": (theme.SECONDARY, theme.TEXT),
-        "down": (theme.ACCENT, theme.BACKGROUND),
-        "new_beat": (theme.ACCENT, theme.BACKGROUND),
-        "pause": (theme.PAUSE, theme.TEXT),
-    }
-
-    def _beat_meter_style(self, background, color):
-        return (
-            f"background-color: {background}; color: {color}; "
-            "font-weight: bold; font-size: 24px; border-radius: 8px;"
-        )
-
-    def _update_beat_meter(self, text, kind):
-        self.beat_meter.setText(text)
-        background, color = self.BEAT_METER_COLORS[kind]
-        self.beat_meter.setStyleSheet(self._beat_meter_style(background, color))
+    def _update_beat_track(self, text, kind):
+        self.beat_track.set_status(text, kind)
 
     def _start_record_chase(self):
         self._session_start_bests = self.score_tracker.get_all_time_bests()

@@ -419,7 +419,7 @@ def test_upcoming_beats_spacing_matches_frequency(handler):
     upcoming = handler.upcoming_beats(3.5)
     times = [t for t, _audible, _weight in upcoming]
     assert len(times) == 4  # 0.0, 1.0, 2.0, 3.0
-    for earlier, later in zip(times, times[1:]):
+    for earlier, later in zip(times, times[1:], strict=False):  # pairwise: last has no successor
         assert later - earlier == pytest.approx(1.0, abs=0.01)
 
 
