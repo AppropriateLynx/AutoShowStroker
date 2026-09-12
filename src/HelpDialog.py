@@ -16,9 +16,10 @@ HELP_TOPICS = [
     (
         "Beats && Rhythm",  # QTabWidget treats a lone & as a mnemonic marker - && renders one literal &
         "<h3>How the Strokemeter works</h3>"
-        "<p>The footer bar pulses on a randomized beat, driven by a <b>frequency</b> "
-        "(beats per second, picked between your Min./Max. beat frequency settings) and a "
-        "<b>rhythm pattern</b> that decides which beats land and which get skipped.</p>"
+        "<p>The footer track scrolls notes toward its hit line on a randomized beat, driven "
+        "by a <b>frequency</b> (beats per second, picked between your Min./Max. beat "
+        "frequency settings) and a <b>rhythm pattern</b> that decides which beats land and "
+        "which get skipped.</p>"
         "<h3>What the pattern numbers mean</h3>"
         "<p>A pattern is a list of numbers, e.g. <code>[1, 2, 2, -1, -1]</code>. Each number "
         "is one step of the pattern:</p>"
@@ -65,10 +66,16 @@ HELP_TOPICS = [
         "<h3>Callouts</h3>"
         "<p>Bottom-center of the media area - the teasing phrases that fire on beat changes "
         "and session events. See the Adding Languages tab for how these are sourced.</p>"
-        "<h3>Climax Banner &amp; Strokemeter</h3>"
-        "<p>The footer below the media area: the Strokemeter pulses on every beat, and the "
-        "climax banner above it lights up with the session's outcome (Cum / Ruined / "
-        "Denied) once it's decided.</p>",
+        "<h3>The Strokemeter</h3>"
+        "<p>The track along the bottom. Notes travel right-to-left and land on the glowing "
+        "hit line near the left edge exactly when the beat sounds, so you can see each beat "
+        "coming before you hear it. Filled notes are audible beats; hollow ones are the "
+        "pattern's silent steps, so the gaps in a rhythm are visible too. The caption on the "
+        "right shows the current pattern, or the countdown while the Strokemeter is taking a "
+        "break.</p>"
+        "<h3>Climax Banner</h3>"
+        "<p>Sits just above the Strokemeter and lights up with the session's outcome "
+        "(Cum / Ruined / Denied) once it's decided.</p>",
     ),
     (
         "Adding Languages",
