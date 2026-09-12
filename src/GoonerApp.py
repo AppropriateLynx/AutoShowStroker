@@ -387,6 +387,7 @@ class GoonerApp(QMainWindow):
 
         self.beat_handler.register_beat_change_event(self.score_tracker.beat_changed)
         self.beat_handler.register_beat_change_event(self.callout_handler.beat_change_general)
+        self.beat_handler.register_beat_change_event(self.beat_track.pulse_change)
 
         self.beat_handler.register_beat_change_event(self.climax_handler.on_beat_change)
         self.climax_handler.register_outcome_event(self.score_tracker.climax_decided)

@@ -1,7 +1,7 @@
 import time
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
-from PyQt6.QtGui import QColor, QPainter, QPen
+from PyQt6.QtGui import QColor, QLinearGradient, QPainter, QPen
 from PyQt6.QtWidgets import QSizePolicy, QWidget
 
 from src import theme
@@ -18,6 +18,12 @@ FLASH_MS = 130
 CAPTION_MARGIN = 10
 CAPTION_PADDING = 4
 TRACK_INSET = 4
+
+# A pattern change re-seeds the whole prediction, so every note on screen jumps at once.
+# A sweep of light across the track plus the notes fading back in covers that reset - a
+# hard cut would just read as a glitch.
+CHANGE_FLASH_MS = 420
+SWEEP_WIDTH_RATIO = 0.18
 
 # Kinds with nothing in flight to draw - upcoming_beats() is empty for both anyway
 # (start_pause stops the beat timer), so the track shows just its caption.
@@ -55,6 +61,7 @@ class BeatTrackWidget(QWidget):
     LEAD_TIME_SEC = LEAD_TIME_SEC
     FRAME_INTERVAL_MS = FRAME_INTERVAL_MS
     FLASH_MS = FLASH_MS
+    CHANGE_FLASH_MS = CHANGE_FLASH_MS
     KIND_COLORS = KIND_COLORS
 
     def __init__(self, beat_handler, parent=None):
@@ -63,6 +70,7 @@ class BeatTrackWidget(QWidget):
         self._caption = ""
         self._kind = "idle"
         self._flash_until = 0.0
+        self._change_started_at = None
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -94,6 +102,26 @@ class BeatTrackWidget(QWidget):
     def is_flashing(self) -> bool:
         return time.monotonic() < self._flash_until
 
+    def pulse_change(self, _freq=None, _pattern_name=None):
+        """Starts the pattern-change sweep. Takes beat_change_event's (freq, pattern_name)
+        payload so it can be connected to it directly, but doesn't need either value."""
+        self._change_started_at = time.monotonic()
+        self.update()
+
+    def _change_progress(self):
+        """0.0 -> 1.0 across the transition, or None when no transition is running."""
+        if self._change_started_at is None:
+            return None
+        elapsed = time.monotonic() - self._change_started_at
+        if elapsed >= CHANGE_FLASH_MS / 1000:
+            self._change_started_at = None
+            return None
+        return elapsed / (CHANGE_FLASH_MS / 1000)
+
+    def _note_opacity(self) -> float:
+        progress = self._change_progress()
+        return 1.0 if progress is None else progress
+
     # --- geometry ---
 
     def _hit_zone_x(self) -> float:
@@ -107,6 +135,21 @@ class BeatTrackWidget(QWidget):
 
     def _notes_visible(self) -> bool:
         return self._kind not in _NOTELESS_KINDS
+
+    def _visible_notes(self):
+        """Upcoming audible steps as (seconds_from_now, weight).
+
+        Silent steps are deliberately dropped rather than drawn as hollow markers - as
+        ghosts they read like extra beats you were supposed to hit. The rests still show
+        up, as the gaps they create in the spacing.
+        """
+        if not self._notes_visible():
+            return []
+        return [
+            (seconds, weight)
+            for seconds, is_audible, weight in self.beat_handler.upcoming_beats(LEAD_TIME_SEC)
+            if is_audible
+        ]
 
     def _caption_height(self) -> float:
         """Height of the band reserved for the caption. The caption gets its own band
@@ -143,8 +186,8 @@ class BeatTrackWidget(QWidget):
         painter.drawRoundedRect(track_rect, 8, 8)
 
         self._paint_hit_zone(painter)
-        if self._notes_visible():
-            self._paint_notes(painter)
+        self._paint_notes(painter)
+        self._paint_change_sweep(painter, track_rect)
         self._paint_caption(painter, track_rect, caption_color)
 
         painter.end()
@@ -163,19 +206,39 @@ class BeatTrackWidget(QWidget):
             painter.drawEllipse(QPointF(hit_x, self._note_center_y()), radius, radius)
 
     def _paint_notes(self, painter) -> None:
+        notes = self._visible_notes()
+        if not notes:
+            return
         center_y = self._note_center_y()
         radius = self._note_radius()
-        for seconds_until, is_audible, _weight in self.beat_handler.upcoming_beats(LEAD_TIME_SEC):
-            center = QPointF(self._note_x(seconds_until), center_y)
-            if is_audible:
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor(theme.ACCENT))
-                painter.drawEllipse(center, radius, radius)
-            else:
-                # Silent steps drawn hollow: the rhythm's rests are part of its shape.
-                painter.setPen(QPen(QColor(theme.PAUSE), 2))
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawEllipse(center, radius * 0.6, radius * 0.6)
+        painter.save()
+        painter.setOpacity(self._note_opacity())
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(theme.ACCENT))
+        for seconds_until, _weight in notes:
+            painter.drawEllipse(QPointF(self._note_x(seconds_until), center_y), radius, radius)
+        painter.restore()
+
+    def _paint_change_sweep(self, painter, track_rect) -> None:
+        progress = self._change_progress()
+        if progress is None:
+            return
+        sweep_width = track_rect.width() * SWEEP_WIDTH_RATIO
+        center_x = track_rect.left() - sweep_width + progress * (track_rect.width() + sweep_width * 2)
+
+        glow = QColor(theme.ACCENT)
+        gradient = QLinearGradient(center_x - sweep_width, 0.0, center_x + sweep_width, 0.0)
+        edge = QColor(glow)
+        edge.setAlpha(0)
+        peak = QColor(glow)
+        peak.setAlpha(int(190 * (1 - progress)))  # fades out as it crosses
+        gradient.setColorAt(0.0, edge)
+        gradient.setColorAt(0.5, peak)
+        gradient.setColorAt(1.0, edge)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(gradient)
+        painter.drawRoundedRect(track_rect, 8, 8)
 
     def _paint_caption(self, painter, track_rect, caption_color) -> None:
         if not self._caption:

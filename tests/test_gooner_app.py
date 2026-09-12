@@ -589,6 +589,17 @@ def test_beat_event_flashes_the_beat_track(app):
     assert app.beat_track.is_flashing() is True
 
 
+def test_beat_change_sweeps_the_beat_track(app):
+    # recalc_beat re-seeds the whole prediction, so every note on screen jumps at once -
+    # the sweep is what covers that reset.
+    assert app.beat_track._change_progress() is None
+
+    app.beat_handler.selected_beat_patterns = ["Standard Beat"]
+    app.beat_handler.recalc_beat()
+
+    assert app.beat_track._change_progress() is not None
+
+
 def test_beat_track_animates_only_while_a_session_runs(app, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")

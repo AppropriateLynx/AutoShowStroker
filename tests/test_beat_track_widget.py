@@ -131,6 +131,73 @@ def test_unknown_kind_does_not_raise(widget):
     assert widget._kind == "not_a_real_kind"
 
 
+# --- only audible steps are drawn ---
+
+
+def test_silent_steps_are_not_drawn(widget, handler):
+    # Hollow "ghost" notes for the pattern's silent steps read as confusing extra beats -
+    # the rests stay visible as gaps in the spacing instead.
+    handler.upcoming = [(0.0, True, 1), (0.5, False, 1), (1.0, True, 2)]
+    widget.set_status("New Beat! [1, -1, 2]", "new_beat")
+
+    visible = widget._visible_notes()
+
+    assert [seconds for seconds, _weight in visible] == [0.0, 1.0]
+
+
+def test_visible_notes_empty_while_paused(widget, handler):
+    handler.upcoming = [(0.0, True, 1)]
+    widget.set_status("Pause: 3 seconds left.", "pause")
+    assert widget._visible_notes() == []
+
+
+# --- beat-change transition ---
+
+
+def test_no_change_transition_initially(widget):
+    assert widget._change_progress() is None
+
+
+def test_pulse_change_starts_the_transition(widget):
+    widget.pulse_change()
+    progress = widget._change_progress()
+    assert progress is not None
+    assert 0.0 <= progress <= 1.0
+
+
+def test_pulse_change_accepts_the_beat_change_event_payload(widget):
+    # beat_change_event carries (freq, pattern_name) - the slot has to tolerate them.
+    widget.pulse_change(2.5, "Quick Swing")
+    assert widget._change_progress() is not None
+
+
+def test_change_transition_expires(widget, qtbot):
+    widget.pulse_change()
+    qtbot.wait(BeatTrackWidget.CHANGE_FLASH_MS + 80)
+    assert widget._change_progress() is None
+
+
+def test_notes_fade_in_during_the_change_transition(widget):
+    # Fading the notes in is what actually hides the resync: when recalc_beat picks a new
+    # random pattern the predicted positions jump, and a hard cut would show that pop.
+    assert widget._note_opacity() == 1.0
+
+    widget.pulse_change()
+
+    assert widget._note_opacity() < 1.0
+
+
+def test_painting_during_a_change_transition_does_not_raise(qtbot, handler):
+    handler.upcoming = [(0.0, True, 1), (0.6, True, 2)]
+    w = BeatTrackWidget(handler)
+    qtbot.addWidget(w)
+    w.resize(800, 110)
+    w.set_status("New Beat! [1, 2]", "new_beat")
+    w.pulse_change()
+
+    w.grab()
+
+
 # --- hit flash ---
 
 
