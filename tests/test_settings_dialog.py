@@ -170,6 +170,23 @@ def test_accept_settings_updates_show_record_chase(app, dialog, monkeypatch):
     assert called.get("called") is True
 
 
+def test_session_timer_checkbox_initialized_from_app(app, dialog):
+    assert dialog.show_session_timer_checkbox.isChecked() == app.show_session_timer
+
+
+def test_accept_settings_updates_show_session_timer(app, dialog, monkeypatch):
+    called = {}
+    monkeypatch.setattr(app, "_update_session_timer", lambda: called.setdefault("called", True))
+    dialog.show_session_timer_checkbox.setChecked(not app.show_session_timer)
+    expected = dialog.show_session_timer_checkbox.isChecked()
+
+    dialog.accept_settings()
+
+    assert app.show_session_timer == expected
+    assert app.settings.value("GoonerApp/show_session_timer", type=bool) == expected
+    assert called.get("called") is True
+
+
 def test_ramping_fields_initialized_from_beat_handler(app, dialog):
     assert dialog.ramping_active_checkbox.isChecked() == app.beat_handler.ramping_active
     assert dialog.settings_fields["min_ramp_duration"]["object"] is app.beat_handler
@@ -241,6 +258,7 @@ def test_playback_reset_button_resets_fields(app, dialog):
     dialog.settings_fields["vid_loudness"]["widget"].setValue(0.0)
     dialog.show_startup_splash_checkbox.setChecked(not app.DEFAULTS["show_startup_splash"])
     dialog.show_record_chase_checkbox.setChecked(not app.DEFAULTS["show_record_chase"])
+    dialog.show_session_timer_checkbox.setChecked(not app.DEFAULTS["show_session_timer"])
 
     dialog.playback_reset_button.click()
 
@@ -255,6 +273,7 @@ def test_playback_reset_button_resets_fields(app, dialog):
     assert dialog.settings_fields["vid_loudness"]["widget"].value() == pytest.approx(app.DEFAULTS["vid_loudness"])
     assert dialog.show_startup_splash_checkbox.isChecked() == app.DEFAULTS["show_startup_splash"]
     assert dialog.show_record_chase_checkbox.isChecked() == app.DEFAULTS["show_record_chase"]
+    assert dialog.show_session_timer_checkbox.isChecked() == app.DEFAULTS["show_session_timer"]
 
 
 def test_beat_reset_button_resets_fields(app, dialog):
