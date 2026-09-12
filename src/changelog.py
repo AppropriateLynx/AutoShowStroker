@@ -178,6 +178,21 @@ CHANGELOG = {
         "</ul>"
         "However long you think you've lasted, now you'll actually know."
     ),
+    "0.8.0": (
+        "The Strokemeter stopped just blinking at you - now it shows you what's coming."
+        "<ul>"
+        "<li>A whole new animated Strokemeter: beats glide in from the right and land on the "
+        "hit line at the exact moment you hear them, so you feel every one approaching before "
+        "it takes you</li>"
+        "<li>A rhythm's silent steps read as the gaps between notes, so you can see the shape "
+        "of what's being done to you instead of guessing at it</li>"
+        "<li>Every change of pattern announces itself with a sweep of light across the track</li>"
+        "<li>Your session history and custom patterns moved out of the Windows registry into "
+        "proper files in your AppData folder - they carry themselves over on first launch, "
+        "nothing is lost, and your history is no longer capped at 200 sessions</li>"
+        "</ul>"
+        "Watch them come at you now. See how long you keep up."
+    ),
 }
 
 
