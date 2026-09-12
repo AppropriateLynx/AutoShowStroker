@@ -375,3 +375,96 @@ def test_recalc_beat_emits_pattern_name(handler, qtbot):
         handler.recalc_beat()
     _freq, pattern_name = blocker.args
     assert pattern_name == "Standard Beat"
+
+
+# --- beat lookahead (drives the animated note highway) ---
+
+
+def _arm(handler, pattern, freq=1.0, position=0, remaining_ms=100):
+    """Puts the handler in a deterministic 'mid-session' state for lookahead tests."""
+    handler.current_beat_pattern = pattern
+    handler.current_beat_pattern_name = "Test"
+    handler.cur_freq = freq
+    handler.current_beat_position = position
+    handler._pattern_audible_count = sum(1 for v in pattern if v > 0)
+    handler._pattern_inv_sum = sum(1 / abs(v) for v in pattern)
+    handler.beat_meter_timer.start(remaining_ms)
+
+
+def test_upcoming_beats_empty_when_timer_inactive(handler):
+    _arm(handler, [1])
+    handler.beat_meter_timer.stop()
+    assert handler.upcoming_beats(2.0) == []
+
+
+def test_upcoming_beats_empty_before_any_pattern_selected(handler):
+    assert handler.upcoming_beats(2.0) == []
+
+
+def test_upcoming_beats_empty_when_freq_is_zero(handler):
+    _arm(handler, [1], freq=0)
+    assert handler.upcoming_beats(2.0) == []
+
+
+def test_upcoming_beats_first_entry_tracks_remaining_time(handler):
+    _arm(handler, [1], freq=1.0, remaining_ms=250)
+    upcoming = handler.upcoming_beats(2.0)
+    assert upcoming
+    assert upcoming[0][0] == pytest.approx(0.25, abs=0.05)
+
+
+def test_upcoming_beats_spacing_matches_frequency(handler):
+    # Standard Beat at 1 Hz: one audible step per second.
+    _arm(handler, [1], freq=1.0, remaining_ms=0)
+    upcoming = handler.upcoming_beats(3.5)
+    times = [t for t, _audible, _weight in upcoming]
+    assert len(times) == 4  # 0.0, 1.0, 2.0, 3.0
+    for earlier, later in zip(times, times[1:], strict=False):  # pairwise: last has no successor
+        assert later - earlier == pytest.approx(1.0, abs=0.01)
+
+
+def test_upcoming_beats_heavier_weight_is_a_shorter_step(handler):
+    # Weight 2 lasts half as long as weight 1 - BeatHandler's inverse-duration encoding.
+    _arm(handler, [1, 2], freq=1.0, position=0, remaining_ms=0)
+    times = [t for t, _a, _w in handler.upcoming_beats(3.0)]
+    first_gap = times[1] - times[0]  # follows the weight-1 step
+    second_gap = times[2] - times[1]  # follows the weight-2 step
+    assert second_gap == pytest.approx(first_gap / 2, abs=0.01)
+
+
+def test_upcoming_beats_audibility_follows_current_position(handler):
+    # Audibility of the note landing at t is pattern[current_beat_position], and the
+    # interval after it comes from that same index (BeatHandler's existing off-by-one).
+    _arm(handler, [1, -1, 1], position=1, remaining_ms=0)
+    audible = [a for _t, a, _w in handler.upcoming_beats(5.0)]
+    assert audible[0] is False  # pattern[1] == -1
+    assert audible[1] is True   # pattern[2] == 1
+    assert audible[2] is True   # wraps to pattern[0] == 1
+
+
+def test_upcoming_beats_reports_step_weight(handler):
+    _arm(handler, [1, -3], position=0, remaining_ms=0)
+    weights = [w for _t, _a, w in handler.upcoming_beats(5.0)]
+    assert weights[0] == 1
+    assert weights[1] == 3
+
+
+def test_upcoming_beats_respects_horizon(handler):
+    _arm(handler, [1], freq=1.0, remaining_ms=0)
+    assert len(handler.upcoming_beats(1.5)) == 2  # 0.0 and 1.0 only
+    assert len(handler.upcoming_beats(0.5)) == 1
+
+
+def test_upcoming_beats_does_not_mutate_handler_state(handler):
+    _arm(handler, [1, 2, -1], position=1, remaining_ms=50)
+    before = handler.current_beat_position
+
+    handler.upcoming_beats(10.0)
+
+    assert handler.current_beat_position == before
+
+
+def test_upcoming_beats_is_capped_for_pathological_input(handler):
+    # A very high frequency over a long horizon must not produce an unbounded list.
+    _arm(handler, [4], freq=200.0, remaining_ms=0)
+    assert len(handler.upcoming_beats(1000.0)) <= BeatHandler.MAX_LOOKAHEAD_NOTES

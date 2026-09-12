@@ -5,6 +5,7 @@ import pytest
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import QDialog
 
+from src.BeatTrackWidget import BeatTrackWidget
 from src.GoonerApp import GoonerApp
 
 # --- fullscreen ---
@@ -558,28 +559,69 @@ def test_climax_blink_interval_is_fast(app):
     assert app.climax_blink_timer.interval() <= 150
 
 
-# --- beat meter (GoonerApp owns the widget, BeatHandler only emits state) ---
+# --- beat track (GoonerApp owns the widget, BeatHandler only emits state) ---
 
 
-def test_beat_meter_starts_idle(app):
-    assert app.beat_meter.text() == "Strokemeter appears here."
-    background, color = app.BEAT_METER_COLORS["idle"]
-    assert background in app.beat_meter.styleSheet()
-    assert color in app.beat_meter.styleSheet()
+def test_beat_track_starts_idle(app):
+    assert app.beat_track._kind == "idle"
+    assert app.beat_track._caption == "Strokemeter appears here."
 
 
-def test_update_beat_meter_sets_text_and_colors_per_kind(app):
-    for kind, text in [("up", "UP"), ("down", "DOWN"), ("new_beat", "New Beat! [1]"), ("pause", "Pause: 5s")]:
-        app._update_beat_meter(text, kind)
-        assert app.beat_meter.text() == text
-        background, color = app.BEAT_METER_COLORS[kind]
-        assert background in app.beat_meter.styleSheet()
-        assert color in app.beat_meter.styleSheet()
+def test_update_beat_track_sets_caption_and_kind(app):
+    for kind, text in [("new_beat", "New Beat! [1]"), ("pause", "Pause: 5s")]:
+        app._update_beat_track(text, kind)
+        assert app.beat_track._caption == text
+        assert app.beat_track._kind == kind
 
 
-def test_beat_handler_meter_updates_reach_the_gooner_app_owned_label(app):
+def test_beat_handler_meter_updates_reach_the_gooner_app_owned_widget(app):
+    app._update_beat_track("New Beat! [1]", "new_beat")
+
     app.beat_handler.toggle_blink()
-    assert app.beat_meter.text() in ("UP", "DOWN")
+
+    # The blink kinds drive the track's state but must not clobber the real caption.
+    assert app.beat_track._kind in ("up", "down")
+    assert app.beat_track._caption == "New Beat! [1]"
+
+
+def test_beat_event_flashes_the_beat_track(app):
+    app.beat_handler.beat_event.emit()
+    assert app.beat_track.is_flashing() is True
+
+
+def test_beat_change_sweeps_the_beat_track(app):
+    # recalc_beat re-seeds the whole prediction, so every note on screen jumps at once -
+    # the sweep is what covers that reset.
+    assert app.beat_track._change_progress() is None
+
+    app.beat_handler.selected_beat_patterns = ["Standard Beat"]
+    app.beat_handler.recalc_beat()
+
+    assert app.beat_track._change_progress() is not None
+
+
+def test_beat_track_animates_only_while_a_session_runs(app, tmp_path):
+    img = tmp_path / "a.png"
+    img.write_bytes(b"")
+    app.playlist = [img]
+    assert app.beat_track.frame_timer.isActive() is False
+
+    app.start()
+    assert app.beat_track.frame_timer.isActive() is True
+
+    app.stop()
+    assert app.beat_track.frame_timer.isActive() is False
+
+
+def test_beat_track_reads_upcoming_beats_from_the_handler(app):
+    app.beat_handler.selected_beat_patterns = ["Standard Beat"]
+    app.beat_handler.recalc_beat()
+    app.beat_handler.reset_beat_timer()
+
+    upcoming = app.beat_track.beat_handler.upcoming_beats(BeatTrackWidget.LEAD_TIME_SEC)
+
+    assert app.beat_track.beat_handler is app.beat_handler
+    assert upcoming
 
 
 # --- live record-chase ---

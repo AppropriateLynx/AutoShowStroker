@@ -17,6 +17,10 @@ def get_resource_path(relative_path):
 
 
 class BeatHandler(QObject):
+    # Hard cap on upcoming_beats() output - at the top of the frequency range with the
+    # shortest steps a long horizon would otherwise build a pointlessly huge list.
+    MAX_LOOKAHEAD_NOTES = 64
+
     BEAT_PATTERNS_MAP = {
         # --- Standard & Simple ---
         "Standard Beat": [1],
@@ -180,14 +184,58 @@ class BeatHandler(QObject):
                     return
                 self.recalc_beat()
         self.beat_pattern_mutex.lock()
-        if self._pattern_audible_count > 0:
-            base_step_sec = self._pattern_audible_count / (self.cur_freq * self._pattern_inv_sum)
-        else:
-            base_step_sec = 1 / self.cur_freq  # defensive fallback, no current pattern lacks a beat
+        base_step_sec = self._base_step_sec()
         beat_time_ms = int(base_step_sec * 1000 / abs(self.current_beat_pattern[self.current_beat_position]))
         self.current_beat_position = (self.current_beat_position + 1) % len(self.current_beat_pattern)
         self.beat_pattern_mutex.unlock()
         self.beat_meter_timer.start(beat_time_ms)
+
+    def _base_step_sec(self):
+        """Seconds a weight-1 step lasts at the current frequency and pattern.
+
+        Normalizes so cur_freq means real audible beats/sec regardless of pattern shape:
+        a pattern with silent steps has to run its steps faster to keep the same audible
+        rate. Single source of truth - reset_beat_timer() schedules from it and
+        upcoming_beats() predicts from it, so the two can never drift apart.
+        """
+        if self._pattern_audible_count > 0:
+            return self._pattern_audible_count / (self.cur_freq * self._pattern_inv_sum)
+        return 1 / self.cur_freq  # defensive fallback, no current pattern lacks a beat
+
+    def upcoming_beats(self, horizon_sec):
+        """Predicted steps landing within the next horizon_sec, as (seconds_from_now,
+        is_audible, weight) tuples - what the animated beat track paints each frame.
+
+        Read-only: never touches current_beat_position or the timers. Only valid until
+        the next recalc_beat()/pause, both of which are random rolls in reset_beat_timer()
+        and so genuinely unpredictable - consumers resync on beat_change_event instead.
+
+        Mirrors reset_beat_timer()'s indexing exactly: the note landing at t takes its
+        audibility from pattern[pos], and the gap to the next note from that same index.
+        """
+        remaining_ms = self.beat_meter_timer.remainingTime()
+        if remaining_ms < 0 or not self.beat_meter_timer.isActive():
+            return []  # stopped, or mid-pause (start_pause stops this timer)
+        if self.cur_freq <= 0:
+            return []
+
+        self.beat_pattern_mutex.lock()
+        try:
+            pattern = self.current_beat_pattern
+            if not pattern:
+                return []
+            base_step_sec = self._base_step_sec()
+            position = self.current_beat_position
+            upcoming = []
+            offset = remaining_ms / 1000
+            while offset <= horizon_sec and len(upcoming) < self.MAX_LOOKAHEAD_NOTES:
+                step = pattern[position]
+                upcoming.append((offset, step > 0, abs(step)))
+                offset += base_step_sec / abs(step)
+                position = (position + 1) % len(pattern)
+            return upcoming
+        finally:
+            self.beat_pattern_mutex.unlock()
 
     def is_ramp_complete(self):
         progress = self._ramp_progress()
