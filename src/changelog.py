@@ -166,6 +166,18 @@ CHANGELOG = {
         "</ul>"
         "Four new tricks in one build - go find all of them."
     ),
+    "0.7.1": (
+        "GoonerApp now keeps its own quiet count of exactly how long you've been at it."
+        "<ul>"
+        "<li>A small glowing clock ticks away in the top-left the whole session, wall-clock "
+        "time, pauses included</li>"
+        "<li>A new \"Show session timer\" toggle in Settings &gt; Playback hides it if you'd "
+        "rather not watch the numbers climb</li>"
+        "<li>A new Guide tab, \"On-Screen Display\", finally explains everything glowing on "
+        "your screen - the timer and the record-chase badge alike</li>"
+        "</ul>"
+        "However long you think you've lasted, now you'll actually know."
+    ),
 }
 
 
