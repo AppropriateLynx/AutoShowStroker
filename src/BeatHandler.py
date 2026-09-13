@@ -151,7 +151,13 @@ class BeatHandler(QObject):
         self.cur_beat_start_time = 0
 
         self.sound_effect = None
-        self.beat_loudness = 1.0
+        self.beat_loudness = self.DEFAULTS["beat_loudness"]
+        if self.settings:
+            # Read here rather than in the settings block above: init_beat_sound() below
+            # applies it, so it has to be resolved before the QSoundEffect is built.
+            self.beat_loudness = float(
+                self.settings.value("BeatHandler/beat_loudness", self.beat_loudness)
+            )
         self.is_muted = False
 
         if beat_file is None:

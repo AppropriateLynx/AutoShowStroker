@@ -1,14 +1,18 @@
 """User *data* storage, as opposed to user *settings*.
 
-Settings (the sliders, toggles, selected language, last-used folders) stay in `QSettings`
-- small scalar config values are exactly what it is for, and a per-user `HKCU` key is the
-normal, Qt-sanctioned mechanism for them.
+Settings (the sliders, toggles, selected language) stay in `QSettings` - small scalar
+config values are exactly what it is for, and a per-user `HKCU` key is the normal,
+Qt-sanctioned mechanism for them.
 
-Data (session history, custom beat patterns, custom phrase file references) is different:
-it is user-authored and it accumulates. Stuffed into single registry string values it had
-to be artificially capped to keep the registry from growing without limit. It lives in
-plain JSON files under QStandardPaths' AppDataLocation instead - inspectable, trivially
-backed up, and uncapped by the storage mechanism.
+Data (session history, custom beat patterns, custom phrase file references, the last-used
+media folders) is different: it is user-authored and it accumulates. Stuffed into single
+registry string values it had to be artificially capped to keep the registry from growing
+without limit. It lives in plain JSON files under QStandardPaths' AppLocalDataLocation
+instead - inspectable, trivially backed up, and uncapped by the storage mechanism.
+
+The media folder paths belong here for a second reason: they point straight into the
+user's collection, and a portable .exe has no uninstaller to clean HKCU afterwards. Data
+the user might want gone has to live somewhere they can actually delete.
 
 Existing installs are migrated lazily: the first load of a given key copies it out of
 QSettings into a file and only then drops the registry value.
@@ -16,6 +20,7 @@ QSettings into a file and only then drops the registry value.
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 from PyQt6.QtCore import QStandardPaths
@@ -41,8 +46,22 @@ class UserDataStore:
 
     def __init__(self, base_dir=None):
         if base_dir is None:
-            base_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
-        self.base_dir = Path(base_dir)
+            # AppLocalDataLocation, not AppDataLocation: the latter is the *Roaming* profile
+            # on Windows, so with folder redirection, a domain profile or OneDrive's Known
+            # Folder Move, session history and the paths in custom_phrase_files.json get
+            # copied off the machine at logoff. For an app that promises to stay local,
+            # that is the wrong default.
+            self.base_dir = Path(
+                QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
+            )
+            self._legacy_base_dir = Path(
+                QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+            )
+        else:
+            self.base_dir = Path(base_dir)
+            # An injected store is a test store: it has no legacy location, and must never
+            # go looking for one in the developer's real AppData.
+            self._legacy_base_dir = None
 
     def path_for(self, name: str) -> Path:
         return self.base_dir / f"{name}.json"
@@ -57,14 +76,26 @@ class UserDataStore:
                 return migrated
         return default
 
-    def save(self, name: str, payload) -> None:
+    def save(self, name: str, payload) -> bool:
         """Writes atomically - a crash mid-write can never leave a half-written data file
-        (which, unlike a settings value, would be actual lost user history)."""
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        (which, unlike a settings value, would be actual lost user history).
+
+        Returns whether the write landed. It never raises: the main caller is the
+        session_ended signal chain, and an OSError there (full disk, an antivirus lock on
+        the .tmp file, a %APPDATA% the user can't write) used to abort the process before
+        the statistics dialog was ever reached - losing the session *and* the recap, to
+        report a problem that only cost the session.
+        """
         path = self.path_for(name)
         tmp_path = path.with_suffix(".json.tmp")
-        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp_path, path)
+        try:
+            self.base_dir.mkdir(parents=True, exist_ok=True)
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(tmp_path, path)
+        except OSError as error:
+            print(f"Could not save {name}: {error}")
+            return False
+        return True
 
     def prune_legacy_registry_keys(self, settings) -> None:
         """Drops registry keys belonging to removed features. Idempotent - removing an
@@ -74,6 +105,35 @@ class UserDataStore:
         for key in LEGACY_DEAD_KEYS:
             settings.remove(key)
         settings.sync()
+
+    def migrate_legacy_location(self) -> None:
+        """Moves data files out of the old Roaming directory. Idempotent, so it can run on
+        every launch - explicit rather than done in __init__ so that merely constructing a
+        store (in a test, say) never touches the filesystem, same as prune_legacy_registry_keys.
+        """
+        old_dir = self._legacy_base_dir
+        if old_dir is None or old_dir == self.base_dir or not old_dir.is_dir():
+            return
+
+        moved = 0
+        for path in sorted(old_dir.glob("*.json")):
+            target = self.base_dir / path.name
+            if target.exists():
+                continue  # a local file is the newer one - never clobber it
+            try:
+                self.base_dir.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(path), str(target))
+                moved += 1
+            except OSError as error:
+                print(f"Could not move {path.name} out of the roaming profile: {error}")
+                return
+
+        if moved:
+            print(f"Moved {moved} data file(s) out of {old_dir}.")
+        try:
+            old_dir.rmdir()  # only succeeds once it is genuinely empty
+        except OSError:
+            pass
 
     # --- internals ---
 
@@ -104,7 +164,8 @@ class UserDataStore:
             # something we merely failed to read would destroy it for good.
             return None
 
-        self.save(name, payload)
+        if not self.save(name, payload):
+            return payload  # write failed - the registry copy is still the only one
         if self._read(self.path_for(name), default) != payload:
             return payload  # write didn't verify - keep the registry copy as the fallback
 

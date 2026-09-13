@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QSettings, QStandardPaths
 
 from src.user_data import LEGACY_DEAD_KEYS, UserDataStore
 

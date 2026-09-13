@@ -64,9 +64,17 @@ class CalloutHandler(QObject):
         self.cur_freq = 0
 
         if settings is not None:
-            self.active_callout = bool(self.settings.value('CalloutHandler/active_callout', type=bool))
-            self.set_lang(str(self.settings.value("CalloutHandler/selected_lang")))
-            self.talking_chance = float(self.settings.value("CalloutHandler/talking_chance", type=float))
+            # Pass the current value as the default for each: QSettings.value() with a
+            # type= but no default returns a default-constructed value for a missing key,
+            # so a fresh profile used to load talking_chance as 0.0 - gating every ambient
+            # callout behind a 0% chance - and selected_lang as the literal string "None".
+            self.active_callout = bool(
+                self.settings.value("CalloutHandler/active_callout", self.active_callout, type=bool)
+            )
+            self.set_lang(str(self.settings.value("CalloutHandler/selected_lang", self.lang)))
+            self.talking_chance = float(
+                self.settings.value("CalloutHandler/talking_chance", self.talking_chance)
+            )
 
         # Which phrase files the user added is their own data, so it lives in a JSON file
         # rather than the registry (see src/user_data.py).

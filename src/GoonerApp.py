@@ -63,6 +63,7 @@ class GoonerApp(QMainWindow):
 
         self.settings = settings if settings is not None else QSettings("GoonerCock", "GoonerApp")
         self.data_store = data_store if data_store is not None else UserDataStore()
+        self.data_store.migrate_legacy_location()
         self.data_store.prune_legacy_registry_keys(self.settings)
 
         self.setWindowTitle("Auto Hero Generation")
@@ -305,7 +306,9 @@ class GoonerApp(QMainWindow):
 
         self.create_menu_bar()
 
-        self.vid_loudness = 1.0
+        self.vid_loudness = self.DEFAULTS["vid_loudness"]
+        if self.settings:
+            self.vid_loudness = float(self.settings.value("GoonerApp/vid_loudness", self.vid_loudness))
 
         self.is_running = False
         self._was_maximized_before_fullscreen = False

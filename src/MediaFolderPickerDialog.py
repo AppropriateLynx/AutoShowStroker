@@ -1,4 +1,3 @@
-import json
 import random
 import time
 from pathlib import Path
@@ -150,14 +149,17 @@ class MediaFolderPickerDialog(QDialog):
         self._rescan_and_refresh()
 
     def _read_persisted_folders(self):
-        settings = getattr(self.main_app, "settings", None)
-        if settings is None:
+        """Absolute paths into the user's collection - data, not config, so they live in
+        the JSON store where the user can actually get at (and delete) them, not in HKCU
+        where a portable .exe leaves them behind forever. Migrates on first read."""
+        data_store = getattr(self.main_app, "data_store", None)
+        if data_store is None:
             return []
-        raw = settings.value("GoonerApp/last_selected_folders", "[]")
-        try:
-            return json.loads(raw)
-        except (TypeError, ValueError):
-            return []
+        folders = data_store.load(
+            "last_selected_folders", [], getattr(self.main_app, "settings", None),
+            "GoonerApp/last_selected_folders",
+        )
+        return folders if isinstance(folders, list) else []
 
     def _update_remove_button_enabled(self):
         self.btn_remove_folder.setEnabled(bool(self.folder_list.selectedItems()))
@@ -618,9 +620,9 @@ class MediaFolderPickerDialog(QDialog):
 
     def _on_start(self):
         self.selected_files = [f for files in self._per_folder_files.values() for f in files]
-        settings = getattr(self.main_app, "settings", None)
-        if settings is not None:
-            settings.setValue("GoonerApp/last_selected_folders", json.dumps(self.folders))
+        data_store = getattr(self.main_app, "data_store", None)
+        if data_store is not None:
+            data_store.save("last_selected_folders", self.folders)
         self.accept()
 
     def done(self, result):
