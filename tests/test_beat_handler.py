@@ -485,3 +485,133 @@ def test_upcoming_beats_is_capped_for_pathological_input(handler):
     # A very high frequency over a long horizon must not produce an unbounded list.
     _arm(handler, [4], freq=200.0, remaining_ms=0)
     assert len(handler.upcoming_beats(1000.0)) <= BeatHandler.MAX_LOOKAHEAD_NOTES
+
+
+# --- P0 crash paths: an unusable selection, inverted bounds, a corrupt pattern file ---
+
+
+def _mutex_is_free(handler):
+    """True if beat_pattern_mutex is not currently held.
+
+    A non-recursive QMutex left locked by a raising method would block the next
+    BeatTrackWidget.paintEvent -> upcoming_beats() on the same thread, i.e. freeze the GUI.
+    """
+    if handler.beat_pattern_mutex.tryLock():
+        handler.beat_pattern_mutex.unlock()
+        return True
+    return False
+
+
+def test_recalc_beat_falls_back_when_nothing_is_selected(handler):
+    handler.selected_beat_patterns = []
+    handler.recalc_beat()
+    assert handler.current_beat_pattern_name in BeatHandler.BEAT_PATTERNS_MAP
+
+
+def test_recalc_beat_skips_selected_patterns_that_no_longer_exist(handler):
+    handler.selected_beat_patterns = ["Ghost Pattern", "Standard Beat"]
+    for _ in range(20):
+        handler.recalc_beat()
+        assert handler.current_beat_pattern_name == "Standard Beat"
+
+
+def test_recalc_beat_falls_back_when_every_selected_pattern_is_gone(handler):
+    handler.selected_beat_patterns = ["Ghost Pattern"]
+    handler.recalc_beat()
+    assert handler.current_beat_pattern_name in BeatHandler.BEAT_PATTERNS_MAP
+
+
+def test_recalc_beat_treats_a_single_stored_string_as_one_name(handler):
+    # A one-element QStringList can come back from QSettings as a bare str.
+    handler.selected_beat_patterns = "Standard Beat"
+    handler.recalc_beat()
+    assert handler.current_beat_pattern_name == "Standard Beat"
+
+
+def test_start_beat_survives_an_empty_selection(handler):
+    handler.selected_beat_patterns = []
+    handler.start_beat()
+    assert handler.beat_meter_timer.isActive()
+
+
+def test_start_pause_survives_inverted_pause_bounds(handler):
+    handler.min_pause_dur = 30
+    handler.max_pause_dur = 5
+    handler.start_pause()
+    assert 5 <= handler.cur_pause_dur <= 30
+
+
+def test_recalc_beat_releases_the_mutex_when_it_raises(handler, monkeypatch):
+    def boom(_seq):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("src.BeatHandler.random.choice", boom)
+    with pytest.raises(RuntimeError):
+        handler.recalc_beat()
+    assert _mutex_is_free(handler)
+
+
+def test_reset_beat_timer_releases_the_mutex_when_it_raises(handler, monkeypatch):
+    handler.recalc_beat()
+
+    def boom():
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(handler, "_base_step_sec", boom)
+    with pytest.raises(RuntimeError):
+        handler.reset_beat_timer()
+    assert _mutex_is_free(handler)
+
+
+def test_beat_releases_the_mutex_when_it_raises(handler):
+    handler.current_beat_pattern = None
+    with pytest.raises(TypeError):
+        handler.beat()
+    assert _mutex_is_free(handler)
+
+
+@pytest.mark.parametrize(
+    "bad_steps",
+    [
+        [1, 0, 2],       # a zero step divides by zero in _base_step_sec
+        [1, "x"],        # non-numeric
+        [1, None],
+        [],              # empty pattern indexes out of range
+        [-1, -2],        # no audible step at all
+        [1, 9],          # weight out of the 1..4 range the editor enforces
+        5,               # not a list
+        "nope",
+        {"a": 1},
+    ],
+)
+def test_invalid_custom_patterns_are_dropped_on_load(tmp_path, bad_steps):
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+    store.save("custom_patterns", {"Bad": bad_steps, "Good": [1, -1]})
+
+    handler = BeatHandler(data_store=store)
+
+    assert "Bad" not in handler.available_beat_patterns
+    assert handler.available_beat_patterns["Good"] == [1, -1]
+    handler.stop()
+
+
+def test_non_dict_custom_patterns_file_is_ignored(tmp_path):
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+    store.save("custom_patterns", ["not", "a", "dict"])
+
+    handler = BeatHandler(data_store=store)
+
+    assert handler.available_beat_patterns == BeatHandler.BEAT_PATTERNS_MAP
+    handler.stop()
+
+
+def test_start_beat_survives_a_corrupt_custom_patterns_file(tmp_path):
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+    store.save("custom_patterns", {"Broken": [1, 0]})
+    handler = BeatHandler(data_store=store)
+    handler.selected_beat_patterns = ["Broken"]
+
+    handler.start_beat()
+
+    assert handler.current_beat_pattern_name in BeatHandler.BEAT_PATTERNS_MAP
+    handler.stop()

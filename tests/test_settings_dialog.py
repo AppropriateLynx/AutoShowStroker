@@ -339,3 +339,71 @@ def test_reset_buttons_do_not_persist_until_save(app, dialog):
     dialog.playback_reset_button.click()
 
     assert app.min_dur == original
+
+
+# --- P0: settings that would crash the beat engine must not be saveable ---
+
+
+@pytest.fixture
+def rejected(dialog, monkeypatch):
+    """Captures the validation message and whether the dialog closed."""
+    seen = {}
+    monkeypatch.setattr(dialog, "_show_validation_error", lambda msg: seen.setdefault("msg", msg))
+    monkeypatch.setattr(dialog, "accept", lambda: seen.setdefault("accepted", True))
+    return seen
+
+
+def test_accept_settings_rejects_an_empty_rhythm_selection(app, dialog, rejected):
+    before = list(app.beat_handler.selected_beat_patterns)
+    for checkbox in dialog.beat_checkboxes.values():
+        checkbox.setChecked(False)
+
+    dialog.accept_settings()
+
+    assert "msg" in rejected
+    assert "accepted" not in rejected
+    assert app.beat_handler.selected_beat_patterns == before
+
+
+def test_accept_settings_rejects_inverted_pause_bounds(app, dialog, rejected):
+    dialog.settings_fields["min_pause_dur"]["widget"].setValue(30)
+    dialog.settings_fields["max_pause_dur"]["widget"].setValue(5)
+
+    dialog.accept_settings()
+
+    assert "msg" in rejected
+    assert "accepted" not in rejected
+    assert app.beat_handler.min_pause_dur != 30
+
+
+@pytest.mark.parametrize(
+    ("min_name", "max_name"),
+    [
+        ("min_dur", "max_dur"),
+        ("min_beat_freq", "max_beat_freq"),
+        ("min_beat_dur", "max_beat_dur"),
+        ("min_pause_dur", "max_pause_dur"),
+        ("min_ramp_duration", "max_ramp_duration"),
+        ("min_fake_climax_delay", "max_fake_climax_delay"),
+    ],
+)
+def test_accept_settings_rejects_every_inverted_min_max_pair(dialog, rejected, min_name, max_name):
+    max_widget = dialog.settings_fields[max_name]["widget"]
+    max_widget.setValue(max_widget.minimum())
+    min_widget = dialog.settings_fields[min_name]["widget"]
+    min_widget.setValue(min_widget.maximum())
+
+    dialog.accept_settings()
+
+    assert "accepted" not in rejected
+
+
+def test_accept_settings_allows_min_equal_to_max(app, dialog, rejected):
+    dialog.settings_fields["min_pause_dur"]["widget"].setValue(7)
+    dialog.settings_fields["max_pause_dur"]["widget"].setValue(7)
+
+    dialog.accept_settings()
+
+    assert "msg" not in rejected
+    assert app.beat_handler.min_pause_dur == 7
+    assert app.beat_handler.max_pause_dur == 7
