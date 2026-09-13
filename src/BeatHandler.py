@@ -185,10 +185,12 @@ class BeatHandler(QObject):
                     return
                 self.recalc_beat()
         self.beat_pattern_mutex.lock()
-        base_step_sec = self._base_step_sec()
-        beat_time_ms = int(base_step_sec * 1000 / abs(self.current_beat_pattern[self.current_beat_position]))
-        self.current_beat_position = (self.current_beat_position + 1) % len(self.current_beat_pattern)
-        self.beat_pattern_mutex.unlock()
+        try:
+            base_step_sec = self._base_step_sec()
+            beat_time_ms = int(base_step_sec * 1000 / abs(self.current_beat_pattern[self.current_beat_position]))
+            self.current_beat_position = (self.current_beat_position + 1) % len(self.current_beat_pattern)
+        finally:
+            self.beat_pattern_mutex.unlock()
         self.beat_meter_timer.start(beat_time_ms)
 
     def _base_step_sec(self):
@@ -257,20 +259,41 @@ class BeatHandler(QObject):
         window_min = self.min_beat_freq + progress * (corridor - width)
         return window_min, window_min + width
 
+    def _usable_pattern_names(self):
+        """Selected pattern names that actually have a definition - never empty.
+
+        recalc_beat() has to pick *something*: an empty or stale selection used to raise
+        IndexError/KeyError out of a Qt slot, which aborts the process. Three ways to get
+        there, all reachable without touching the code: unticking every rhythm in Settings,
+        deleting the last selected custom pattern in the editor, and a custom_patterns.json
+        that no longer defines a name BeatHandler/selected_beat_patterns still lists.
+
+        Read-only on purpose - a name whose definition is temporarily missing stays selected
+        and starts working again on its own once the pattern is back.
+        """
+        selected = self.selected_beat_patterns
+        if isinstance(selected, str):
+            # QSettings can hand a one-element QStringList back as a bare str.
+            selected = [selected]
+        elif not isinstance(selected, list):
+            selected = list(selected)
+        usable = [name for name in selected if name in self.available_beat_patterns]
+        return usable or list(self.BEAT_PATTERNS_MAP.keys())
+
     def recalc_beat(self):
         window_min, window_max = self._current_freq_range()
         self.cur_freq = random.uniform(window_min, window_max)
         self.cur_beat_start_time = time.time()
         self.target_beat_dur = random.uniform(self.min_beat_dur, self.max_beat_dur)
         self.beat_pattern_mutex.lock()
-        self.current_beat_position = 0
-        if not isinstance(self.selected_beat_patterns, list):
-            self.selected_beat_patterns = list(self.selected_beat_patterns)
-        self.current_beat_pattern_name = random.choice(self.selected_beat_patterns)
-        self.current_beat_pattern = self.available_beat_patterns[self.current_beat_pattern_name]
-        self._pattern_audible_count = sum(1 for v in self.current_beat_pattern if v > 0)
-        self._pattern_inv_sum = sum(1 / abs(v) for v in self.current_beat_pattern)
-        self.beat_pattern_mutex.unlock()
+        try:
+            self.current_beat_position = 0
+            self.current_beat_pattern_name = random.choice(self._usable_pattern_names())
+            self.current_beat_pattern = self.available_beat_patterns[self.current_beat_pattern_name]
+            self._pattern_audible_count = sum(1 for v in self.current_beat_pattern if v > 0)
+            self._pattern_inv_sum = sum(1 / abs(v) for v in self.current_beat_pattern)
+        finally:
+            self.beat_pattern_mutex.unlock()
 
         # Mark a new beat or speed with a different color for one beat:
         self.beat_meter_update_event.emit(f"New Beat! {self.current_beat_pattern}", "new_beat")
@@ -302,8 +325,10 @@ class BeatHandler(QObject):
 
     def beat(self):
         self.beat_pattern_mutex.lock()
-        play_beat = self.current_beat_pattern[self.current_beat_position] > 0
-        self.beat_pattern_mutex.unlock()
+        try:
+            play_beat = self.current_beat_pattern[self.current_beat_position] > 0
+        finally:
+            self.beat_pattern_mutex.unlock()
 
         if play_beat:
             self.play_beat_sound()
@@ -319,7 +344,11 @@ class BeatHandler(QObject):
 
     def start_pause(self):
         self.beat_meter_timer.stop()
-        self.cur_pause_dur = random.randint(self.min_pause_dur, self.max_pause_dur)
+        # sorted() because randint - unlike the uniform() calls everywhere else - raises on an
+        # inverted range. SettingsDialog refuses to save min above max, but a registry written
+        # by an older build still can, and that must not kill a running session.
+        low, high = sorted((self.min_pause_dur, self.max_pause_dur))
+        self.cur_pause_dur = random.randint(low, high)
         self.beat_meter_pause_timer.start(1000)
         self.beat_meter_update_event.emit(f"Pause: {self.cur_pause_dur} seconds left.", "pause")
         self.beat_paused_event.emit()
@@ -388,9 +417,42 @@ class BeatHandler(QObject):
     def _load_custom_patterns(self) -> dict:
         if not self.data_store:
             return {}
-        return self.data_store.load(
-            "custom_patterns", {}, self.settings, "BeatHandler/custom_patterns"
+        return self._sanitize_custom_patterns(
+            self.data_store.load("custom_patterns", {}, self.settings, "BeatHandler/custom_patterns")
         )
+
+    @classmethod
+    def _sanitize_custom_patterns(cls, raw) -> dict:
+        """Keep only entries add_or_update_custom_pattern would have accepted.
+
+        UserDataStore guarantees the file parses, not that it holds what we expect - and
+        src/user_data.py deliberately advertises these files as inspectable and hand-editable.
+        Unchecked, a zero step divides by zero, an empty list indexes out of range and a
+        non-numeric step raises TypeError, all inside recalc_beat()'s locked region.
+
+        Bad entries are dropped rather than repaired: a pattern we can't read is not a pattern
+        we can guess at, and dropping it keeps the rest of the file usable.
+        """
+        if not isinstance(raw, dict):
+            print(f"Ignoring custom patterns: expected an object, got {type(raw).__name__}.")
+            return {}
+
+        clean = {}
+        for name, steps in raw.items():
+            if not isinstance(name, str) or not isinstance(steps, list):
+                print(f"Skipping custom pattern {name!r}: not a list of steps.")
+                continue
+            # bool is an int subclass - exclude it so True/False can't pose as weights.
+            if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in steps):
+                print(f"Skipping custom pattern {name!r}: every step must be a number.")
+                continue
+            try:
+                cls._validate_pattern_steps(steps)
+            except ValueError as error:
+                print(f"Skipping custom pattern {name!r}: {error}")
+                continue
+            clean[name] = steps
+        return clean
 
     def _save_custom_patterns(self):
         if self.data_store:
