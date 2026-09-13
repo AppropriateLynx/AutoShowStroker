@@ -407,3 +407,16 @@ def test_accept_settings_allows_min_equal_to_max(app, dialog, rejected):
     assert "msg" not in rejected
     assert app.beat_handler.min_pause_dur == 7
     assert app.beat_handler.max_pause_dur == 7
+
+
+def test_settings_are_persisted_under_the_owner_group_constant(app, dialog):
+    """The key used to come from __class__.__name__, with every read side hardcoding the
+    same string separately - which is how two settings ended up written but never read."""
+    dialog.settings_fields["min_pause_dur"]["widget"].setValue(9)
+    dialog.settings_fields["max_pause_dur"]["widget"].setValue(11)
+
+    dialog.accept_settings()
+
+    assert app.settings.value(f"{app.beat_handler.SETTINGS_GROUP}/min_pause_dur") is not None
+    assert app.settings.value("BeatHandler/min_pause_dur") is not None
+    assert app.settings.value("GoonerApp/min_dur") is not None

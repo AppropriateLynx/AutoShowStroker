@@ -358,3 +358,44 @@ def test_stored_talking_chance_still_wins_over_the_default(qapp, tmp_path):
 
     # An explicit 0.0 is a real choice and must survive - only a *missing* key defaults.
     assert handler.talking_chance == 0.0
+
+
+# --- P3: resource resolution, and set_lang's guard ---
+
+
+def test_callout_dir_resolves_from_the_project_root_not_the_cwd(qapp, monkeypatch, tmp_path):
+    """CLAUDE.md requires get_project_root() for every res/ read. The old module-level
+    get_resource_path used os.path.abspath, i.e. the current working directory - launching
+    from anywhere but the repo root killed startup outright."""
+    from src.utils import get_project_root
+
+    monkeypatch.chdir(tmp_path)
+
+    handler = CalloutHandler()
+
+    assert handler.callout_dir == get_project_root() / "res" / "callouts"
+    assert handler.available_languages  # the shipped files are still found
+
+
+def test_missing_callout_dir_disables_callouts_without_crashing(qapp, tmp_path):
+    """Used to be an `assert`, which killed startup with no window and no message - and
+    vanished entirely under python -O, silently booting into the same dead state."""
+    handler = CalloutHandler(callout_dir=tmp_path / "does-not-exist")
+
+    assert handler.available_languages == []
+    assert handler.callout_data == {}
+    handler.active_callout = True
+    handler.talking_chance = 1.0
+    handler.select_and_output_sentence("session_started")
+
+
+def test_set_lang_falls_back_when_the_configured_language_has_no_file(qapp, tmp_path):
+    """set_lang guarded on self.lang (the old value) instead of lang (the new one), so the
+    fallback in _load_available_languages could never fire for the case it was written for."""
+    (tmp_path / "fr.json").write_text('{"session_started": ["salut"]}', encoding="utf-8")
+
+    handler = CalloutHandler(callout_dir=tmp_path)
+
+    # "en" is the default but has no file here - the handler must land on what exists.
+    assert handler.lang == "fr"
+    assert handler.set_lang("de") is None or handler.lang == "fr"

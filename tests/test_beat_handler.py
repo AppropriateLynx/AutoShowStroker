@@ -649,3 +649,25 @@ def test_beat_timer_is_a_precise_timer(handler):
     from PyQt6.QtCore import Qt
 
     assert handler.beat_meter_timer.timerType() == Qt.TimerType.PreciseTimer
+
+
+def test_beat_sound_resolves_from_the_project_root_not_the_cwd(qapp, monkeypatch, tmp_path):
+    from pathlib import Path as _Path
+
+    from src.utils import get_project_root
+
+    monkeypatch.chdir(tmp_path)
+    captured = {}
+    monkeypatch.setattr(BeatHandler, "init_beat_sound", lambda self, path: captured.setdefault("path", path))
+
+    handler = BeatHandler()
+
+    expected = get_project_root() / "res" / "mixkit-cool-interface-click-tone-2568.wav"
+    assert _Path(captured["path"]) == expected
+    handler.stop()
+
+
+def test_settings_group_is_an_explicit_constant():
+    """SettingsDialog used to derive the QSettings key from __class__.__name__, so renaming
+    the class silently orphaned every user's saved values."""
+    assert BeatHandler.SETTINGS_GROUP == "BeatHandler"

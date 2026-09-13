@@ -1111,3 +1111,147 @@ def test_importing_gooner_app_does_not_pull_in_pyqtgraph():
     )
 
     assert result.stdout.strip() == "False", result.stderr
+
+
+# --- P3: session lifecycle and dialog lifetimes ---
+
+
+def test_stop_stops_video_playback(app, monkeypatch, tmp_path):
+    """The player used to keep running behind the statistics dialog, and its EndOfMedia
+    then restarted the whole slideshow with no session behind it."""
+    app.media_player = MagicMock()
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    # load_media() stops the player on every slide, so only calls after this point count.
+    app.media_player.stop.reset_mock()
+
+    app.stop()
+
+    app.media_player.stop.assert_called_once()
+
+
+def test_stop_stops_a_running_gif(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    stopped = []
+    app.current_movie = type("FakeMovie", (), {"stop": lambda self: stopped.append(True)})()
+
+    app.stop()
+
+    assert stopped == [True]
+
+
+def test_end_of_media_is_ignored_once_the_session_stopped(app, monkeypatch, tmp_path):
+    advanced = []
+    monkeypatch.setattr(app, "show_next", lambda: advanced.append(True))
+    app.video_start_time = 0
+
+    app.is_running = False
+    app.video_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)
+
+    assert advanced == []
+
+
+def test_an_unplayable_video_advances_instead_of_stalling(app, monkeypatch, tmp_path):
+    """No EndOfMedia ever arrives for a codec the backend can't open, and the autoplay
+    timer is stopped for videos - so the session used to sit on a black frame forever."""
+    app.playlist = [tmp_path / "a.mp4", tmp_path / "b.png"]
+    app.start()
+    # What the video branch leaves behind: no autoplay timer, waiting on EndOfMedia only.
+    app.auto_play_timer.stop()
+
+    app.video_status_changed(QMediaPlayer.MediaStatus.InvalidMedia)
+
+    assert app.auto_play_timer.isActive()
+
+
+def test_a_media_error_advances_instead_of_stalling(app, tmp_path):
+    app.playlist = [tmp_path / "a.mp4", tmp_path / "b.png"]
+    app.start()
+    app.auto_play_timer.stop()
+
+    app._on_media_error(QMediaPlayer.Error.ResourceError, "boom")
+
+    assert app.auto_play_timer.isActive()
+
+
+def test_a_media_error_outside_a_session_is_ignored(app):
+    app.is_running = False
+
+    app._on_media_error(QMediaPlayer.Error.ResourceError, "boom")
+
+    assert not app.auto_play_timer.isActive()
+
+
+def test_starting_a_new_session_cancels_a_pending_denied_stop(app, tmp_path):
+    """The 5s stop armed by a denied outcome used to be an uncancellable singleShot, so it
+    could land on a session started after the old one had already been stopped."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app._on_climax_outcome("denied")
+    assert app._denied_stop_timer.isActive()
+
+    app.stop()
+    app.start()
+
+    assert not app._denied_stop_timer.isActive()
+
+
+def test_denied_outcome_arms_the_stop_timer(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app._on_climax_outcome("denied")
+
+    assert app._denied_stop_timer.isActive()
+    assert app._denied_stop_timer.isSingleShot()
+
+
+def test_other_outcomes_do_not_arm_the_stop_timer(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app._on_climax_outcome("ruined")
+
+    assert not app._denied_stop_timer.isActive()
+
+
+def _pending_dialogs(app, dialog_type):
+    from PyQt6.QtCore import QEvent
+    from PyQt6.QtWidgets import QApplication
+
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    return app.findChildren(dialog_type)
+
+
+def test_reopening_settings_does_not_accumulate_dialogs(app):
+    from src.SettingsDialog import SettingsDialog as _SettingsDialog
+
+    for _ in range(3):
+        app.open_settings()
+
+    assert _pending_dialogs(app, _SettingsDialog) == []
+
+
+def test_reopening_the_guide_does_not_accumulate_dialogs(app):
+    from src.HelpDialog import HelpDialog as _HelpDialog
+
+    for _ in range(3):
+        app.show_help_dialog()
+
+    assert _pending_dialogs(app, _HelpDialog) == []
+
+
+def test_the_folder_picker_is_released_after_use(app, monkeypatch, tmp_path):
+    """This one holds the whole recursive file list of every folder - potentially tens of
+    thousands of Path objects - so leaking one per open actually costs memory."""
+    from src.MediaFolderPickerDialog import MediaFolderPickerDialog as _Picker
+
+    for _ in range(3):
+        app.open_folder()
+
+    assert _pending_dialogs(app, _Picker) == []
+
+
+def test_settings_keys_come_from_an_explicit_group_constant(app):
+    assert GoonerApp.SETTINGS_GROUP == "GoonerApp"
