@@ -193,6 +193,20 @@ CHANGELOG = {
         "</ul>"
         "Watch them come at you now. See how long you keep up."
     ),
+    "0.8.1": (
+        "No more safewords for the app - it takes whatever you do to it and keeps going."
+        "<ul>"
+        "<li>Unticking every last rhythm no longer kills the app mid-session - and it won't "
+        "let you leave yourself with nothing to stroke to in the first place</li>"
+        "<li>Setting a pause minimum above its maximum used to end things very abruptly. "
+        "Settings now tells you off instead, for every min/max pair</li>"
+        "<li>A hand-edited or damaged custom pattern file gets its bad entries quietly "
+        "skipped rather than taking the whole session down with it</li>"
+        "<li>And when something does go wrong deep in the rhythm engine, the Strokemeter "
+        "no longer seizes up on you</li>"
+        "</ul>"
+        "Go on. Try to break it."
+    ),
 }
 
 
