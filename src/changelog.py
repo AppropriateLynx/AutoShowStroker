@@ -224,6 +224,22 @@ CHANGELOG = {
         "</ul>"
         "Everything moves itself over on first launch. Nothing lost - unless you ask for it."
     ),
+    "0.8.3": (
+        "Less waiting, more edging. Everything between you and the next picture got quicker."
+        "<ul>"
+        "<li>Picking your folders no longer locks up for seconds while it previews your "
+        "clips - it takes the frames it can get and moves on instead of making you wait</li>"
+        "<li>Scanning a big collection is several times faster, so it stops keeping you "
+        "waiting before it starts keeping you waiting</li>"
+        "<li>Large photos land noticeably sooner, and the Strokemeter no longer stutters "
+        "when a heavy one does</li>"
+        "<li>The startup screen now loads the app behind itself instead of before itself, "
+        "so you get to your folders sooner</li>"
+        "<li>And the beat keeps stricter time - no more sloppy milliseconds where you were "
+        "promised none</li>"
+        "</ul>"
+        "Nothing left in your way. Go on."
+    ),
 }
 
 
