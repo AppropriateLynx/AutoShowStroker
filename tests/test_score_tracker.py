@@ -459,3 +459,18 @@ def test_record_chase_status_ignores_average_beat_speed_active(monkeypatch):
 
     best_values = {"average_beat_speed_active": 0.5, "total_num_beat": 1000}
     assert tracker.record_chase_status(best_values) is None
+
+
+def test_clear_history_empties_memory_and_the_data_store(tmp_path):
+    from src.user_data import UserDataStore
+
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+    tracker = ScoreTracker(data_store=store)
+    tracker.history = [{"total_dur_sec": 5}]
+    store.save("session_history", tracker.history)
+
+    tracker.clear_history()
+
+    assert tracker.get_history() == []
+    assert tracker.get_all_time_bests() == ScoreTracker._compute_bests(tracker, [])
+    assert not store.path_for("session_history").exists()

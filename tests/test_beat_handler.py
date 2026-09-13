@@ -626,3 +626,18 @@ def test_beat_loudness_is_restored_from_settings(tmp_path):
 
     assert handler.beat_loudness == 0.3
     handler.stop()
+
+
+def test_clear_custom_patterns_removes_them_but_keeps_the_builtins(tmp_path):
+    store = UserDataStore(base_dir=tmp_path / "appdata")
+    handler = BeatHandler(data_store=store)
+    handler.add_or_update_custom_pattern("Mine", [1, -1])
+
+    handler.clear_custom_patterns()
+
+    assert handler.custom_beat_patterns == {}
+    assert "Mine" not in handler.available_beat_patterns
+    assert "Mine" not in handler.selected_beat_patterns
+    assert "Standard Beat" in handler.available_beat_patterns
+    assert not store.path_for("custom_patterns").exists()
+    handler.stop()

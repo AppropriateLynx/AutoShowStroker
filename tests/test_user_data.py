@@ -321,3 +321,37 @@ def test_roaming_migration_is_a_noop_for_an_injected_store(tmp_path):
     store.migrate_legacy_location()
 
     assert store.base_dir == tmp_path / "injected"
+
+
+# --- deleting data on the user's request ---
+
+
+def test_delete_removes_the_file(store):
+    store.save("history", [1])
+    assert store.delete("history") is True
+    assert not store.path_for("history").exists()
+
+
+def test_delete_is_a_noop_when_there_is_nothing_to_remove(store):
+    assert store.delete("history") is False
+
+
+def test_delete_also_removes_corrupt_and_temp_siblings(store):
+    store.save("history", [1])
+    path = store.path_for("history")
+    path.with_suffix(".json.corrupt").write_text("[]", encoding="utf-8")
+    path.with_suffix(".json.tmp").write_text("[]", encoding="utf-8")
+
+    store.delete("history")
+
+    assert not path.with_suffix(".json.corrupt").exists()
+    assert not path.with_suffix(".json.tmp").exists()
+
+
+def test_delete_leaves_other_files_alone(store):
+    store.save("history", [1])
+    store.save("patterns", {"a": [1]})
+
+    store.delete("history")
+
+    assert store.path_for("patterns").exists()
