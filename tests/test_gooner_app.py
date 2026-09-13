@@ -859,9 +859,9 @@ def test_show_startup_splash_defaults_to_true(app):
     assert app.show_startup_splash is True
 
 
-def test_show_startup_splash_respects_saved_setting(qtbot, qsettings):
+def test_show_startup_splash_respects_saved_setting(qtbot, qsettings, data_store):
     qsettings.setValue("GoonerApp/show_startup_splash", False)
-    window = GoonerApp(settings=qsettings)
+    window = GoonerApp(settings=qsettings, data_store=data_store)
     qtbot.addWidget(window)
 
     assert window.show_startup_splash is False
@@ -1076,3 +1076,16 @@ def test_check_failed_signal_shows_dialog(app, monkeypatch):
     app.update_checker.check_failed.emit("Host not found")
 
     assert captured.get("msg") == "Host not found"
+
+
+def test_vid_loudness_is_restored_from_settings(qtbot, qsettings, data_store):
+    qsettings.setValue("GoonerApp/vid_loudness", 0.25)
+
+    window = GoonerApp(settings=qsettings, data_store=data_store)
+    qtbot.addWidget(window)
+
+    assert window.vid_loudness == 0.25
+
+
+def test_vid_loudness_defaults_when_never_saved(app):
+    assert app.vid_loudness == GoonerApp.DEFAULTS["vid_loudness"]

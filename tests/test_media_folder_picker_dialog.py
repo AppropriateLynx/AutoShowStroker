@@ -126,18 +126,30 @@ def test_on_start_sets_selected_files_as_union_of_all_folders(app, qtbot, tmp_pa
     assert dialog.result() == QDialog.DialogCode.Accepted
 
 
-def test_on_start_persists_folders_to_settings(app, qtbot, tmp_path):
+def test_on_start_persists_folders_to_the_data_store(app, qtbot, tmp_path):
     folder_a = _make_folder_with_files(tmp_path, "a", 1)
 
     dialog = MediaFolderPickerDialog(parent=app, initial_folders=[folder_a])
     qtbot.addWidget(dialog)
     dialog._on_start()
 
-    persisted = json.loads(app.settings.value("GoonerApp/last_selected_folders"))
-    assert persisted == [folder_a]
+    assert app.data_store.load("last_selected_folders", []) == [folder_a]
+    # These are absolute paths into the user's porn collection. They are user data, and
+    # they must not be left sitting in HKCU where nothing the app offers can clear them.
+    assert app.settings.value("GoonerApp/last_selected_folders") is None
 
 
 def test_reopening_dialog_prefills_persisted_folders(app, qtbot, tmp_path):
+    folder_a = _make_folder_with_files(tmp_path, "a", 1)
+    app.data_store.save("last_selected_folders", [folder_a])
+
+    dialog = MediaFolderPickerDialog(parent=app)
+    qtbot.addWidget(dialog)
+
+    assert dialog.folders == [folder_a]
+
+
+def test_persisted_folders_migrate_out_of_the_registry(app, qtbot, tmp_path):
     folder_a = _make_folder_with_files(tmp_path, "a", 1)
     app.settings.setValue("GoonerApp/last_selected_folders", json.dumps([folder_a]))
 
@@ -145,6 +157,8 @@ def test_reopening_dialog_prefills_persisted_folders(app, qtbot, tmp_path):
     qtbot.addWidget(dialog)
 
     assert dialog.folders == [folder_a]
+    assert app.data_store.load("last_selected_folders", []) == [folder_a]
+    assert app.settings.value("GoonerApp/last_selected_folders") is None
 
 
 def test_cancel_does_not_persist_folders(app, qtbot, tmp_path):
@@ -154,6 +168,7 @@ def test_cancel_does_not_persist_folders(app, qtbot, tmp_path):
     qtbot.addWidget(dialog)
     dialog.reject()
 
+    assert app.data_store.load("last_selected_folders", None) is None
     assert app.settings.value("GoonerApp/last_selected_folders") is None
 
 

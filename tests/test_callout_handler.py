@@ -321,3 +321,40 @@ def test_custom_phrase_files_migrate_out_of_settings(qapp, callout_dir, monkeypa
     assert handler.callout_data["en"]["session_started"] == ["en session_started phrase", "legacy phrase"]
     assert store.path_for("custom_phrase_files").exists()
     assert settings.value("CalloutHandler/custom_phrase_files") is None
+
+
+# --- a fresh install must not silently disable callouts ---
+
+
+def test_talking_chance_falls_back_to_the_default_on_a_fresh_profile(qapp, tmp_path):
+    from PyQt6.QtCore import QSettings
+
+    settings = QSettings(str(tmp_path / "fresh.ini"), QSettings.Format.IniFormat)
+
+    handler = CalloutHandler(settings)
+
+    # QSettings.value(key, type=float) returns 0.0 for a missing key, which used to leave
+    # every ambient callout gated behind a 0% chance until the user noticed the spinbox.
+    assert handler.talking_chance == CalloutHandler.DEFAULTS["talking_chance"]
+
+
+def test_language_falls_back_to_the_default_on_a_fresh_profile(qapp, tmp_path):
+    from PyQt6.QtCore import QSettings
+
+    settings = QSettings(str(tmp_path / "fresh.ini"), QSettings.Format.IniFormat)
+
+    handler = CalloutHandler(settings)
+
+    assert handler.lang == CalloutHandler.DEFAULTS["lang"]
+
+
+def test_stored_talking_chance_still_wins_over_the_default(qapp, tmp_path):
+    from PyQt6.QtCore import QSettings
+
+    settings = QSettings(str(tmp_path / "stored.ini"), QSettings.Format.IniFormat)
+    settings.setValue("CalloutHandler/talking_chance", 0.0)
+
+    handler = CalloutHandler(settings)
+
+    # An explicit 0.0 is a real choice and must survive - only a *missing* key defaults.
+    assert handler.talking_chance == 0.0

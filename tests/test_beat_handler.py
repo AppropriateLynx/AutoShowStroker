@@ -615,3 +615,14 @@ def test_start_beat_survives_a_corrupt_custom_patterns_file(tmp_path):
 
     assert handler.current_beat_pattern_name in BeatHandler.BEAT_PATTERNS_MAP
     handler.stop()
+
+
+def test_beat_loudness_is_restored_from_settings(tmp_path):
+    ini = tmp_path / "settings.ini"
+    settings = QSettings(str(ini), QSettings.Format.IniFormat)
+    settings.setValue("BeatHandler/beat_loudness", 0.3)
+
+    handler = BeatHandler(settings=settings)
+
+    assert handler.beat_loudness == 0.3
+    handler.stop()
