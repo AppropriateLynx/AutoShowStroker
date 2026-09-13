@@ -4,6 +4,8 @@ A specialized, interactive PyQt6 multimedia application designed to transform yo
 
 **100% local and private.** Your media, session history, and settings never leave your machine — no account, no login, no telemetry, no cloud calls of any kind. The one optional exception: Help > Check for Updates pings GitHub.com when you explicitly ask it to, and only then.
 
+Local still means written somewhere, so: your data (session history, custom patterns, custom phrase files, remembered media folders) lives as plain JSON in `%LOCALAPPDATA%\GoonerCock\GoonerApp`, and your settings in `HKEY_CURRENT_USER\Software\GoonerCock\GoonerApp`. GoonerApp is portable, so deleting the `.exe` leaves both behind — **Help > Privacy & Data** shows the exact paths, opens the data folder, and deletes any of it per category.
+
 ## ✨ Features
 
 * **Playlist Functionality:** Select any local folder. The application recursively searches for all supported media formats (`.mp4`, `.gif`, `.jpeg`, `.jpg`, `.png`).

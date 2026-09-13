@@ -106,6 +106,24 @@ class UserDataStore:
             settings.remove(key)
         settings.sync()
 
+    def delete(self, name: str) -> bool:
+        """Removes a data file at the user's request. Returns whether anything was there.
+
+        Takes the .corrupt and .tmp siblings with it: both hold the same content, so
+        leaving one behind would make the app's "delete my data" claim untrue.
+        """
+        path = self.path_for(name)
+        removed = False
+        for candidate in (path, path.with_suffix(".json.corrupt"), path.with_suffix(".json.tmp")):
+            try:
+                candidate.unlink()
+                removed = True
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                print(f"Could not delete {candidate.name}: {error}")
+        return removed
+
     def migrate_legacy_location(self) -> None:
         """Moves data files out of the old Roaming directory. Idempotent, so it can run on
         every launch - explicit rather than done in __init__ so that merely constructing a

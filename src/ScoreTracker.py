@@ -191,6 +191,13 @@ class ScoreTracker:
         metric, current, best, _ = best_match
         return metric, current, best
 
+    def clear_history(self):
+        """Forgets every recorded session. In-memory too, or the next session end would
+        write the old list straight back out."""
+        self.history = []
+        if self.data_store:
+            self.data_store.delete("session_history")
+
     def get_history(self) -> list:
         return list(self.history)
 

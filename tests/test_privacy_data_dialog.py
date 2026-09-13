@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from src.PrivacyDataDialog import PrivacyDataDialog
@@ -42,7 +44,8 @@ def test_open_data_folder_opens_the_store_directory(app, dialog, monkeypatch):
 
     dialog.btn_open_folder.click()
 
-    assert str(app.data_store.base_dir) in opened["url"].toLocalFile()
+    # QUrl.toLocalFile() normalises to forward slashes on Windows - compare as paths.
+    assert Path(opened["url"].toLocalFile()) == app.data_store.base_dir
 
 
 # --- counts ---

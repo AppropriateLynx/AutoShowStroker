@@ -29,6 +29,7 @@ from src.ClimaxHandler import ClimaxHandler
 from src.HelpDialog import HelpDialog
 from src.LongTermStatisticsDialog import LongTermStatisticsDialog
 from src.MediaFolderPickerDialog import MediaFolderPickerDialog
+from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
 from src.SettingsDialog import SettingsDialog
 from src.StatisticsDialog import StatisticsDialog
@@ -458,6 +459,10 @@ class GoonerApp(QMainWindow):
         guide_action.triggered.connect(self.show_help_dialog)
         help_menu.addAction(guide_action)
 
+        privacy_data_action = QAction("Privacy && Data...", self)
+        privacy_data_action.triggered.connect(self.show_privacy_data_dialog)
+        help_menu.addAction(privacy_data_action)
+
         help_menu.addSeparator()
         check_updates_action = QAction("Check for Updates...", self)
         check_updates_action.triggered.connect(self.check_for_updates)
@@ -490,6 +495,10 @@ class GoonerApp(QMainWindow):
 
     def show_help_dialog(self):
         dialog = HelpDialog(parent=self)
+        dialog.exec()
+
+    def show_privacy_data_dialog(self):
+        dialog = PrivacyDataDialog(self, parent=self)
         dialog.exec()
 
     def open_discord_invite(self):

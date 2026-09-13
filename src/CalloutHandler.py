@@ -161,6 +161,14 @@ class CalloutHandler(QObject):
         self._apply_stored_custom_files()  # reapply whatever custom files remain
         self._save_custom_phrase_files()
 
+    def clear_custom_phrase_files(self):
+        """Forgets every added phrase file, including the phrases already merged in - a
+        reload back to the shipped-only state, same as unload_custom_file does."""
+        self.custom_phrase_files = []
+        self._load_available_languages()
+        if self.data_store:
+            self.data_store.delete("custom_phrase_files")
+
     def _save_custom_phrase_files(self):
         if not self.data_store:
             return

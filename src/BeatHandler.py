@@ -420,6 +420,19 @@ class BeatHandler(QObject):
             self.selected_beat_patterns.remove(name)
         self._save_custom_patterns()
 
+    def clear_custom_patterns(self):
+        """Forgets every user-authored pattern. The built-ins are untouched - this is a
+        data deletion, not a rhythm reset."""
+        self.custom_beat_patterns = {}
+        self.available_beat_patterns = dict(self.BEAT_PATTERNS_MAP)
+        self.selected_beat_patterns = [
+            name for name in self._usable_pattern_names() if name in self.BEAT_PATTERNS_MAP
+        ]
+        if self.data_store:
+            self.data_store.delete("custom_patterns")
+        if self.settings:
+            self.settings.setValue("BeatHandler/selected_beat_patterns", self.selected_beat_patterns)
+
     def _load_custom_patterns(self) -> dict:
         if not self.data_store:
             return {}
