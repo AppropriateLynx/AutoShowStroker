@@ -820,7 +820,9 @@ def test_statistics_menu_has_long_term_statistics_action(app, monkeypatch):
         def exec(self):
             pass
 
-    monkeypatch.setattr("src.GoonerApp.LongTermStatisticsDialog", FakeDialog)
+    # Imported lazily inside show_long_term_statistics (keeps pyqtgraph out of startup),
+    # so the patch has to land on the source module, not on a GoonerApp attribute.
+    monkeypatch.setattr("src.LongTermStatisticsDialog.LongTermStatisticsDialog", FakeDialog)
 
     menu_bar = app.menuBar()
     stats_menu = next(m for m in menu_bar.findChildren(QMenu) if m.title() == "Statistics")
@@ -841,7 +843,9 @@ def test_show_long_term_statistics_passes_history_and_bests(app, monkeypatch):
         def exec(self):
             pass
 
-    monkeypatch.setattr("src.GoonerApp.LongTermStatisticsDialog", FakeDialog)
+    # Imported lazily inside show_long_term_statistics (keeps pyqtgraph out of startup),
+    # so the patch has to land on the source module, not on a GoonerApp attribute.
+    monkeypatch.setattr("src.LongTermStatisticsDialog.LongTermStatisticsDialog", FakeDialog)
 
     app.show_long_term_statistics()
 
@@ -1107,20 +1111,3 @@ def test_importing_gooner_app_does_not_pull_in_pyqtgraph():
     )
 
     assert result.stdout.strip() == "False", result.stderr
-
-
-def test_long_term_statistics_still_opens(app, monkeypatch):
-    opened = {}
-
-    class FakeDialog:
-        def __init__(self, history, bests, parent=None):
-            opened["history"] = history
-
-        def exec(self):
-            return None
-
-    monkeypatch.setattr("src.LongTermStatisticsDialog.LongTermStatisticsDialog", FakeDialog)
-
-    app.show_long_term_statistics()
-
-    assert "history" in opened

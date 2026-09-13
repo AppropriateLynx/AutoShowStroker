@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import QSettings, Qt, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QMovie, QPixmap
+from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QMovie
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import (
@@ -27,7 +27,6 @@ from src.BeatTrackWidget import BeatTrackWidget
 from src.CalloutHandler import CalloutHandler
 from src.ClimaxHandler import ClimaxHandler
 from src.HelpDialog import HelpDialog
-from src.LongTermStatisticsDialog import LongTermStatisticsDialog
 from src.MediaFolderPickerDialog import MediaFolderPickerDialog
 from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
@@ -35,7 +34,7 @@ from src.SettingsDialog import SettingsDialog
 from src.StatisticsDialog import StatisticsDialog
 from src.UpdateChecker import UpdateChecker
 from src.user_data import UserDataStore
-from src.utils import format_clock, get_current_version, get_project_root
+from src.utils import format_clock, get_current_version, get_project_root, load_scaled_pixmap
 from src.WhatsNewDialog import WhatsNewDialog
 
 
@@ -646,11 +645,7 @@ class GoonerApp(QMainWindow):
 
         elif kind == "image":
             self.media_stack.setCurrentWidget(self.image_label)
-            pixmap = QPixmap(file_path)
-            scaled_pixmap = pixmap.scaled(self.image_label.size(),
-                                          Qt.AspectRatioMode.KeepAspectRatio,
-                                          Qt.TransformationMode.SmoothTransformation)
-            self.image_label.setPixmap(scaled_pixmap)
+            self.image_label.setPixmap(load_scaled_pixmap(file_path, self.image_label.size()))
             self.recalc_autoplay_timer()
 
     # Neue Methode zur GoonerApp-Klasse hinzufügen
@@ -793,6 +788,12 @@ class GoonerApp(QMainWindow):
         dialog.exec()
 
     def show_long_term_statistics(self):
+        # Imported here, not at module scope: LongTermStatisticsDialog pulls in pyqtgraph and
+        # numpy, ~0.5s warm and ~1.6s cold (the realistic case for a --onefile build, which
+        # extracts to a temp dir on every run). That was roughly half of cold startup, spent
+        # on a chart library for a screen most sessions never open.
+        from src.LongTermStatisticsDialog import LongTermStatisticsDialog
+
         dialog = LongTermStatisticsDialog(
             self.score_tracker.get_history(),
             self.score_tracker.get_all_time_bests(),

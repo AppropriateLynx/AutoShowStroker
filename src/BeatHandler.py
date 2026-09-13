@@ -4,7 +4,7 @@ import sys
 import time
 from pathlib import Path
 
-from PyQt6.QtCore import QMutex, QObject, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import QMutex, QObject, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QSoundEffect
 
 
@@ -145,6 +145,10 @@ class BeatHandler(QObject):
         self.custom_beat_patterns = self._load_custom_patterns()
 
         self.beat_meter_timer = QTimer()
+        # Qt defaults to CoarseTimer (5% tolerance, and on Windows it rides the ~15.6ms
+        # system tick). At the top of the frequency range that is ~16ms of jitter on a
+        # 200ms interval - audible slop on the one signal whose whole job is to be exact.
+        self.beat_meter_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self.beat_meter_timer.timeout.connect(self.beat)
         self.cur_freq = 0
         self.target_beat_dur = 0

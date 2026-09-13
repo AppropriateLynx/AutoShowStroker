@@ -807,12 +807,23 @@ def test_video_grab_is_skipped_once_the_build_budget_is_spent(app, qtbot, tmp_pa
     assert time.monotonic() - started < 0.5
 
 
-def test_a_rebuild_starts_a_fresh_video_budget(app, qtbot, tmp_path):
+def test_each_rebuild_starts_with_a_fresh_video_budget(app, qtbot, tmp_path, monkeypatch):
+    """The budget is armed per grid build, so a spent one never carries over and starves
+    the next build of its thumbnails."""
     folder = _make_folder_with_files(tmp_path, "a", 2)
     dialog = MediaFolderPickerDialog(parent=app, initial_folders=[folder])
     qtbot.addWidget(dialog)
+
+    observed = []
+    original = dialog._make_thumbnail_cell
+    monkeypatch.setattr(
+        dialog, "_make_thumbnail_cell",
+        lambda path: (observed.append(dialog._video_budget_remaining()), original(path))[1],
+    )
     dialog._video_budget_deadline = time.monotonic() - 1.0
 
     dialog._refresh_thumbnails()
 
-    assert dialog._video_budget_deadline > time.monotonic()
+    assert observed and all(remaining > 0 for remaining in observed)
+    # Released again afterwards, so a grab outside a rebuild gets the full budget.
+    assert dialog._video_budget_deadline is None

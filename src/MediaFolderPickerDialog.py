@@ -2,7 +2,7 @@ import random
 import time
 from pathlib import Path
 
-from PyQt6.QtCore import QSize, Qt, QTimer, QUrl
+from PyQt6.QtCore import QEventLoop, QSize, Qt, QTimer, QUrl
 from PyQt6.QtGui import QMovie, QPixmap
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PyQt6.QtMultimediaWidgets import QVideoWidget
@@ -55,6 +55,14 @@ BUSY_INDICATOR_DELAY_MS = 250
 VIDEO_METADATA_WAIT_TIMEOUT_S = 1.0
 VIDEO_FRAME_WAIT_TIMEOUT_S = 1.0
 VIDEO_FRAME_GRAB_ATTEMPTS = 3
+# Total wall-clock a single grid build may spend decoding video frames, across all videos.
+# The per-video timeouts alone allow MAX_VIDEO_THUMBNAILS x (metadata + attempts) = 16s of
+# frozen window; a codec the Media Foundation backend can't open hits that every time and
+# produces nothing to show for it. Videos past the budget get the static filename cell.
+VIDEO_GRAB_BUDGET_S = 3.0
+# Poll step inside _wait_for's nested event loop. Fine-grained enough not to add latency,
+# coarse enough that waiting costs ~100 wakeups/sec instead of a busy spin.
+WAIT_POLL_INTERVAL_MS = 10
 VIDEO_BLACK_FRAME_BRIGHTNESS_THRESHOLD = 20
 
 
@@ -72,13 +80,19 @@ class MediaFolderPickerDialog(QDialog):
         self._current_thumbnails: list[Path] = []
         self._thumbnail_cells: list[QWidget] = []
         self._last_grid_count = 0
-        # _grab_video_frame blocks for up to several seconds pumping app.processEvents(),
+        # _grab_video_frame blocks for up to VIDEO_GRAB_BUDGET_S inside a nested event loop,
         # which lets a pending resize-debounce timeout (or a button click) get dispatched
         # *while* a rebuild is still mid-flight, mutating these same lists reentrantly -
         # this guards _refresh_thumbnails/_adjust_thumbnail_count/_rebuild_cells_in_place
         # against running inside one another.
         self._is_rebuilding = False
         self._busy_indicators_shown = False
+        # setEnabled(False) on the buttons does not disable the native X or Alt+F4, so a
+        # close can still land mid-rebuild via the event pumping above. Everything that
+        # loops or waits checks this, otherwise cells appended after done() cleared the
+        # list never reach _discard_cell and keep decoding after the dialog is gone.
+        self._is_closing = False
+        self._video_budget_deadline = None
 
         self._resize_timer = QTimer(self)
         self._resize_timer.setSingleShot(True)
@@ -261,7 +275,14 @@ class MediaFolderPickerDialog(QDialog):
             self._last_grid_count = count
 
             for path in self._sample_thumbnails(self._per_folder_files, count, MAX_VIDEO_THUMBNAILS):
+                if self._is_closing:
+                    break
                 self._add_thumbnail_cell(path)
+            if self._is_closing:
+                # done() already cleared the list; anything appended before we noticed still
+                # owns a live QMovie/QMediaPlayer, so tear those down rather than orphan them.
+                self._discard_pending_cells()
+                return
             self._reflow_grid_layout(columns)
         finally:
             self._end_rebuild()
@@ -287,6 +308,8 @@ class MediaFolderPickerDialog(QDialog):
                 current_video_count = sum(1 for p in self._current_thumbnails if self._is_video(p))
                 video_budget = max(0, MAX_VIDEO_THUMBNAILS - current_video_count)
                 for path in self._sample_thumbnails(remaining, additional, video_budget):
+                    if self._is_closing:
+                        break
                     self._add_thumbnail_cell(path)
             elif target_count < current_count:
                 for _ in range(current_count - target_count):
@@ -294,9 +317,19 @@ class MediaFolderPickerDialog(QDialog):
                     widget = self._thumbnail_cells.pop()
                     self._discard_cell(widget)
 
+            if self._is_closing:
+                self._discard_pending_cells()
+                return
             self._reflow_grid_layout(columns)
         finally:
             self._end_rebuild()
+
+    def _discard_pending_cells(self):
+        """Tears down cells that were built after done() already emptied the list."""
+        for widget in self._thumbnail_cells:
+            self._discard_cell(widget)
+        self._thumbnail_cells = []
+        self._current_thumbnails = []
 
     def _add_thumbnail_cell(self, path):
         cell = self._make_thumbnail_cell(path)
@@ -363,9 +396,10 @@ class MediaFolderPickerDialog(QDialog):
         BUSY_INDICATOR_DELAY_MS via _show_busy_indicators, not shown here. A plain-image
         rebuild finishes in tens of ms with no event-loop pumping in between, so an
         immediate cursor/disable would flicker on and off for every dialog open even when
-        nothing is actually slow - only _grab_video_frame's processEvents() spin-wait runs
-        long enough to let this delay timer's tick actually land."""
+        nothing is actually slow - only _grab_video_frame's nested wait loop runs long
+        enough to let this delay timer's tick actually land."""
         self._is_rebuilding = True
+        self._video_budget_deadline = time.monotonic() + VIDEO_GRAB_BUDGET_S
         self._busy_delay_timer.start(BUSY_INDICATOR_DELAY_MS)
 
     def _show_busy_indicators(self):
@@ -382,6 +416,9 @@ class MediaFolderPickerDialog(QDialog):
             QApplication.restoreOverrideCursor()
             self._busy_indicators_shown = False
         self._is_rebuilding = False
+        self._video_budget_deadline = None
+        if self._is_closing:
+            return  # nothing to re-enable on a dialog that is already on its way out
         self.btn_add_folder.setEnabled(True)
         self.btn_cancel.setEnabled(True)
         self._update_remove_button_enabled()
@@ -456,12 +493,45 @@ class MediaFolderPickerDialog(QDialog):
         return label
 
     def _wait_for(self, predicate, timeout_s):
-        """Spins the event loop until `predicate()` is true or `timeout_s` elapses."""
-        app = QApplication.instance()
-        deadline = time.monotonic() + timeout_s
-        while not predicate() and time.monotonic() < deadline:
-            app.processEvents()
+        """Runs a nested event loop until `predicate()` is true or `timeout_s` elapses.
+
+        This used to be `while not predicate(): app.processEvents()`, which returns
+        immediately on an empty queue and so pegged a core at 100% for the entire wait -
+        millions of iterations spent waiting on an I/O-bound decoder callback. A real
+        QEventLoop blocks instead, and a short poll timer keeps the generic predicate API.
+        """
+        if self._is_closing:
+            return predicate()
+        if predicate():
+            return True
+
+        loop = QEventLoop()
+        poll = QTimer(self)
+        poll.setInterval(WAIT_POLL_INTERVAL_MS)
+        poll.timeout.connect(lambda: (predicate() or self._is_closing) and loop.quit())
+        timeout = QTimer(self)
+        timeout.setSingleShot(True)
+        timeout.timeout.connect(loop.quit)
+
+        poll.start()
+        timeout.start(max(0, int(timeout_s * 1000)))
+        try:
+            loop.exec()
+        finally:
+            poll.stop()
+            timeout.stop()
         return predicate()
+
+    def _video_budget_remaining(self):
+        """Seconds left in this grid build's total video-decoding budget.
+
+        Per-video timeouts alone allowed 4 videos x 4s = 16s of frozen window. The budget
+        is what actually bounds it: once it is gone, the remaining videos fall back to the
+        static filename cell rather than each adding seconds of their own.
+        """
+        if self._video_budget_deadline is None:
+            return VIDEO_GRAB_BUDGET_S
+        return self._video_budget_deadline - time.monotonic()
 
     @staticmethod
     def _average_brightness(image):
@@ -490,12 +560,20 @@ class MediaFolderPickerDialog(QDialog):
         The QVideoFrame must be converted to a QImage immediately inside the
         videoFrameChanged callback - doing it later (even a moment after the signal fires)
         reliably yields a null image."""
+        if self._is_closing or self._video_budget_remaining() <= 0:
+            return None
+
         player = QMediaPlayer()
         sink = QVideoSink()
         player.setVideoSink(sink)
         holder = {}
 
         def on_frame(frame):
+            # The player keeps decoding while we wait, so this fires ~30x/sec. Only the
+            # first frame per attempt is ever used, and toImage() materialises a full-size
+            # QImage each time - skipping the rest saves ~1GB of churn on a 4s grab.
+            if "image" in holder:
+                return
             if frame.isValid():
                 image = frame.toImage()
                 if not image.isNull():
@@ -509,11 +587,16 @@ class MediaFolderPickerDialog(QDialog):
             player.setSource(QUrl.fromLocalFile(str(path)))
             player.play()
 
-            self._wait_for(lambda: player.duration() > 0, VIDEO_METADATA_WAIT_TIMEOUT_S)
+            self._wait_for(
+                lambda: player.duration() > 0,
+                min(VIDEO_METADATA_WAIT_TIMEOUT_S, self._video_budget_remaining()),
+            )
             duration_ms = player.duration()
 
             attempts = VIDEO_FRAME_GRAB_ATTEMPTS if duration_ms > 0 else 1
             for _ in range(attempts):
+                if self._is_closing or self._video_budget_remaining() <= 0:
+                    break
                 holder.pop("image", None)
                 if duration_ms > 0:
                     margin = duration_ms * 0.1
@@ -521,7 +604,10 @@ class MediaFolderPickerDialog(QDialog):
                     target_ms = int(random.uniform(low, high)) if high > low else int(duration_ms / 2)
                     player.setPosition(target_ms)
 
-                self._wait_for(lambda: "image" in holder, VIDEO_FRAME_WAIT_TIMEOUT_S)
+                self._wait_for(
+                    lambda: "image" in holder,
+                    min(VIDEO_FRAME_WAIT_TIMEOUT_S, self._video_budget_remaining()),
+                )
                 image = holder.get("image")
                 if image is None:
                     continue
@@ -628,7 +714,13 @@ class MediaFolderPickerDialog(QDialog):
     def done(self, result):
         """accept(), reject(), and the native window-close button all funnel through this -
         without stopping cells here, any live GIF/video cell just keeps decoding/looping in
-        the background indefinitely after the dialog closes."""
+        the background indefinitely after the dialog closes.
+
+        Sets _is_closing first: this can be reached from inside a rebuild (the nested wait
+        loop dispatches the close), and the loops out there have to stop appending cells
+        before we clear the list, or the ones added afterwards leak exactly as above.
+        """
+        self._is_closing = True
         for widget in self._thumbnail_cells:
             self._discard_cell(widget)
         self._thumbnail_cells = []
