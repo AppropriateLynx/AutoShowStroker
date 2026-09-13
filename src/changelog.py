@@ -194,8 +194,7 @@ CHANGELOG = {
         "Watch them come at you now. See how long you keep up."
     ),
     "0.8.1": (
-        "No more safewords for the app - it takes whatever you do to it, and now it keeps "
-        "your secrets properly too."
+        "No more safewords for the app - it takes whatever you do to it and keeps going."
         "<ul>"
         "<li>Unticking every last rhythm no longer kills the app mid-session - and it won't "
         "let you leave yourself with nothing to stroke to in the first place</li>"
@@ -203,18 +202,27 @@ CHANGELOG = {
         "Settings now tells you off instead, for every min/max pair</li>"
         "<li>A hand-edited or damaged custom pattern file gets its bad entries quietly "
         "skipped rather than taking the whole session down with it</li>"
+        "<li>And when something does go wrong deep in the rhythm engine, the Strokemeter "
+        "no longer seizes up on you</li>"
+        "</ul>"
+        "Go on. Try to break it."
+    ),
+    "0.8.2": (
+        "Whatever you get up to in here is nobody's business but yours - so now you can "
+        "see every trace of it, and wipe any of it."
+        "<ul>"
         "<li>New under Help &gt; Privacy &amp; Data: exactly where everything about you is "
         "kept, a button straight to the folder, and deletion by category - wipe the "
-        "folders you've been using without losing what you've achieved in them</li>"
+        "folders you've been using without losing what you achieved in them</li>"
         "<li>The folders you pick no longer linger in the Windows registry, where nothing "
-        "could reach them. They live with the rest of your data now, deletable</li>"
-        "<li>Your data also moved off the roaming part of your profile, so a work laptop "
+        "could reach them. They sit with the rest of your data now, deletable</li>"
+        "<li>Your data also moved off the roaming half of your profile, so a work laptop "
         "can't quietly copy your history somewhere you'd rather it didn't</li>"
         "<li>Turning the beat or video volume down finally survives a restart</li>"
-        "<li>And on a fresh install the callouts actually talk to you now, instead of "
-        "silently ignoring you until you found the right dial</li>"
+        "<li>And on a fresh install the callouts actually talk to you, instead of silently "
+        "ignoring you until you found the right dial</li>"
         "</ul>"
-        "Everything moves itself over on first launch. Nothing lost - unless you ask."
+        "Everything moves itself over on first launch. Nothing lost - unless you ask for it."
     ),
 }
 
