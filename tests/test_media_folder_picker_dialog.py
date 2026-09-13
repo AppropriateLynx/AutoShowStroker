@@ -1,7 +1,9 @@
 import json
 import shutil
+import time
+from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import QApplication, QDialog, QFileDialog, QLabel
 
@@ -737,3 +739,80 @@ def test_rescan_invalidates_cache_for_a_folder_that_disappeared(app, qtbot, tmp_
     dialog._rescan_and_refresh()
 
     assert dialog._per_folder_files[folder_a] == []
+
+
+# --- P2: the video thumbnail grab must not freeze the window ---
+
+
+def test_closing_mid_rebuild_leaves_no_live_cells(app, qtbot, tmp_path, monkeypatch):
+    """_grab_video_frame pumps the event loop, so the native close button can be dispatched
+    while a rebuild is still appending cells - those never reach _discard_cell and keep
+    decoding after the dialog is gone."""
+    folder = _make_folder_with_files(tmp_path, "a", 10)
+    dialog = MediaFolderPickerDialog(parent=app, initial_folders=[folder])
+    qtbot.addWidget(dialog)
+
+    original = dialog._make_thumbnail_cell
+    made = []
+
+    def closing_make(path):
+        made.append(path)
+        if len(made) == 2:
+            dialog.done(QDialog.DialogCode.Rejected)
+        return original(path)
+
+    monkeypatch.setattr(dialog, "_make_thumbnail_cell", closing_make)
+
+    dialog._refresh_thumbnails()
+
+    assert dialog._thumbnail_cells == []
+
+
+def test_wait_for_gives_up_immediately_once_the_dialog_is_closing(app, qtbot, tmp_path):
+    dialog = MediaFolderPickerDialog(parent=app)
+    qtbot.addWidget(dialog)
+    dialog._is_closing = True
+
+    started = time.monotonic()
+    result = dialog._wait_for(lambda: False, 5.0)
+
+    assert result is False
+    assert time.monotonic() - started < 0.5
+
+
+def test_wait_for_returns_as_soon_as_the_predicate_holds(app, qtbot):
+    dialog = MediaFolderPickerDialog(parent=app)
+    qtbot.addWidget(dialog)
+    flag = {"ready": False}
+    QTimer.singleShot(20, lambda: flag.__setitem__("ready", True))
+
+    started = time.monotonic()
+    result = dialog._wait_for(lambda: flag["ready"], 5.0)
+
+    assert result is True
+    # Event-driven, so it returns on the timer rather than padding out the timeout.
+    assert time.monotonic() - started < 1.0
+
+
+def test_video_grab_is_skipped_once_the_build_budget_is_spent(app, qtbot, tmp_path):
+    folder = _make_folder_with_videos(tmp_path, "vids", 1)
+    dialog = MediaFolderPickerDialog(parent=app)
+    qtbot.addWidget(dialog)
+    dialog._video_budget_deadline = time.monotonic() - 1.0
+
+    started = time.monotonic()
+    result = dialog._grab_video_frame(Path(folder) / "clip0.mp4")
+
+    assert result is None
+    assert time.monotonic() - started < 0.5
+
+
+def test_a_rebuild_starts_a_fresh_video_budget(app, qtbot, tmp_path):
+    folder = _make_folder_with_files(tmp_path, "a", 2)
+    dialog = MediaFolderPickerDialog(parent=app, initial_folders=[folder])
+    qtbot.addWidget(dialog)
+    dialog._video_budget_deadline = time.monotonic() - 1.0
+
+    dialog._refresh_thumbnails()
+
+    assert dialog._video_budget_deadline > time.monotonic()

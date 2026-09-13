@@ -1,3 +1,5 @@
+import os
+import sys
 import time
 from unittest.mock import MagicMock
 
@@ -1089,3 +1091,36 @@ def test_vid_loudness_is_restored_from_settings(qtbot, qsettings, data_store):
 
 def test_vid_loudness_defaults_when_never_saved(app):
     assert app.vid_loudness == GoonerApp.DEFAULTS["vid_loudness"]
+
+
+def test_importing_gooner_app_does_not_pull_in_pyqtgraph():
+    """pyqtgraph + numpy cost ~0.5s warm and ~1.6s cold, for a dialog most sessions never
+    open. Run in a subprocess so an earlier test's import can't mask a regression."""
+    import subprocess
+
+    from src.utils import get_project_root
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import sys; import src.GoonerApp; print('pyqtgraph' in sys.modules)"],
+        capture_output=True, text=True, cwd=str(get_project_root()),
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+    )
+
+    assert result.stdout.strip() == "False", result.stderr
+
+
+def test_long_term_statistics_still_opens(app, monkeypatch):
+    opened = {}
+
+    class FakeDialog:
+        def __init__(self, history, bests, parent=None):
+            opened["history"] = history
+
+        def exec(self):
+            return None
+
+    monkeypatch.setattr("src.LongTermStatisticsDialog.LongTermStatisticsDialog", FakeDialog)
+
+    app.show_long_term_statistics()
+
+    assert "history" in opened

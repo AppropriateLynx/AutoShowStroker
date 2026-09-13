@@ -641,3 +641,11 @@ def test_clear_custom_patterns_removes_them_but_keeps_the_builtins(tmp_path):
     assert "Standard Beat" in handler.available_beat_patterns
     assert not store.path_for("custom_patterns").exists()
     handler.stop()
+
+
+def test_beat_timer_is_a_precise_timer(handler):
+    """Qt's default CoarseTimer has a 5% tolerance and rides the ~15.6ms Windows tick -
+    at 5 beats/sec that is ~8% jitter on the one signal that has to be rhythmically exact."""
+    from PyQt6.QtCore import Qt
+
+    assert handler.beat_meter_timer.timerType() == Qt.TimerType.PreciseTimer

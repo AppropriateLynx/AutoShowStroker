@@ -38,3 +38,23 @@ def test_fade_sequence_finishes_and_closes(qtbot):
     with qtbot.waitSignal(splash.finished, timeout=2000):
         splash.show()
     assert splash.isVisible() is False
+
+
+def test_emits_fade_in_finished_before_the_hold(qtbot):
+    """main.py builds the main window on this signal, so the expensive construction
+    overlaps the splash's own hold instead of running before it is ever shown."""
+    splash = make_splash(qtbot)
+    with qtbot.waitSignal(splash.fade_in_finished, timeout=2000):
+        splash.show()
+
+
+def test_fade_in_finished_comes_before_finished(qtbot):
+    splash = make_splash(qtbot)
+    order = []
+    splash.fade_in_finished.connect(lambda: order.append("fade_in"))
+    splash.finished.connect(lambda: order.append("finished"))
+
+    with qtbot.waitSignal(splash.finished, timeout=2000):
+        splash.show()
+
+    assert order == ["fade_in", "finished"]
