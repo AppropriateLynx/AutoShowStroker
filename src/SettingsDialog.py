@@ -449,16 +449,23 @@ class SettingsDialog(QDialog):
 
         # A language may ship only some tones. CalloutHandler already skips what the
         # current language lacks, but silently - the box would stay ticked while a
-        # different tone speaks. The selection is global and survives a language switch
-        # on purpose, so the box stays tickable and says so instead.
+        # different tone speaks.
         self.callout_selected_lang.currentTextChanged.connect(self._mark_unavailable_tones)
         self._mark_unavailable_tones(self.callout_selected_lang.currentText())
 
     def _mark_unavailable_tones(self, lang: str):
+        """Greys out the tones the selected language has no file for.
+
+        Disabled rather than relabelled: the greyed-out state already carries the meaning,
+        where a parenthetical on half the rows is just noise. A disabled QCheckBox keeps
+        its check state and still answers isChecked(), so a ticked tone stays in the saved
+        mix - the user may well switch back to the language that has it.
+        """
         available = self.callout_handler.tones_for(lang)
         for tone, checkbox in self.tone_checkboxes.items():
-            label = self.callout_handler.tone_label(tone)
-            checkbox.setText(label if tone in available else f"{label}  (not in {lang})")
+            usable = tone in available
+            checkbox.setEnabled(usable)
+            checkbox.setToolTip("" if usable else f"No phrases for this tone in {lang} yet.")
 
     def _ticked_tones(self) -> list[str]:
         """Falls back to the default tone rather than saving an empty mix: CalloutHandler

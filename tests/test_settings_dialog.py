@@ -514,25 +514,48 @@ def test_callout_reset_button_resets_the_tone_mix(app, dialog):
 # --- a language may ship only some tones ---
 
 
-def test_a_tone_the_current_language_lacks_is_marked(app, dialog):
-    """Selection is global and survives a language switch, so an unavailable tone stays
-    tickable - but it must not look like it is speaking when it isn't."""
+def test_a_tone_the_current_language_lacks_is_greyed_out(app, dialog):
     de_tones = app.callout_handler.tones_for("de")
     missing = next(t for t in app.callout_handler.available_tones if t not in de_tones)
 
     dialog.callout_selected_lang.setCurrentText("de")
 
-    assert "not in de" in dialog.tone_checkboxes[missing].text()
-    assert CalloutHandler.DEFAULT_TONE in de_tones
-    assert "not in" not in dialog.tone_checkboxes[CalloutHandler.DEFAULT_TONE].text()
+    assert dialog.tone_checkboxes[missing].isEnabled() is False
+    assert "de" in dialog.tone_checkboxes[missing].toolTip()
+    assert dialog.tone_checkboxes[CalloutHandler.DEFAULT_TONE].isEnabled() is True
 
 
-def test_switching_language_refreshes_the_tone_marks(app, dialog):
+def test_the_label_stays_clean_when_a_tone_is_unavailable(app, dialog):
+    """The grid is read at a glance - a parenthetical on half the rows is noise where
+    the greyed-out state already says it."""
     de_tones = app.callout_handler.tones_for("de")
     missing = next(t for t in app.callout_handler.available_tones if t not in de_tones)
 
     dialog.callout_selected_lang.setCurrentText("de")
-    assert "not in de" in dialog.tone_checkboxes[missing].text()
+
+    assert dialog.tone_checkboxes[missing].text() == app.callout_handler.tone_label(missing)
+
+
+def test_switching_language_re_enables_the_tone(app, dialog):
+    de_tones = app.callout_handler.tones_for("de")
+    missing = next(t for t in app.callout_handler.available_tones if t not in de_tones)
+
+    dialog.callout_selected_lang.setCurrentText("de")
+    assert dialog.tone_checkboxes[missing].isEnabled() is False
 
     dialog.callout_selected_lang.setCurrentText("en")
-    assert dialog.tone_checkboxes[missing].text() == app.callout_handler.tone_label(missing)
+    assert dialog.tone_checkboxes[missing].isEnabled() is True
+    assert dialog.tone_checkboxes[missing].toolTip() == ""
+
+
+def test_a_ticked_tone_survives_being_greyed_out(app, dialog):
+    """Greying must not quietly drop the tone from the saved mix - the user may well
+    switch back to the language that has it."""
+    de_tones = app.callout_handler.tones_for("de")
+    missing = next(t for t in app.callout_handler.available_tones if t not in de_tones)
+    dialog.tone_checkboxes[missing].setChecked(True)
+
+    dialog.callout_selected_lang.setCurrentText("de")
+    dialog.accept_settings()
+
+    assert missing in app.callout_handler.selected_tones
