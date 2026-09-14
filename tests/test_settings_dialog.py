@@ -559,3 +559,24 @@ def test_a_ticked_tone_survives_being_greyed_out(app, dialog):
     dialog.accept_settings()
 
     assert missing in app.callout_handler.selected_tones
+
+
+def test_a_hint_explains_the_greyed_out_tones(app, dialog):
+    """Greyed out on its own only says 'no' - the user still has to be told why, and
+    once under the grid beats a parenthetical on every second row."""
+    dialog.callout_selected_lang.setCurrentText("de")
+
+    assert dialog.tone_hint.isVisible() or dialog.tone_hint.text()
+    assert "de" in dialog.tone_hint.text()
+
+
+def test_the_hint_goes_away_when_the_language_has_every_tone(app, dialog):
+    dialog.callout_selected_lang.setCurrentText("en")
+
+    assert dialog.tone_hint.text() == ""
+
+
+def test_the_save_button_shows_its_ampersand(dialog):
+    """Qt reads a single & as a mnemonic prefix and swallows it - the button read
+    'Save  Close Settings' with a hole in the middle. && is the literal one."""
+    assert dialog.button_ok.text() == "Save && Close Settings"

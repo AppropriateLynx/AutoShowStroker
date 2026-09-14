@@ -169,7 +169,8 @@ class SettingsDialog(QDialog):
 
         self.layout.addWidget(self.tabs)
 
-        self.button_ok = QPushButton("Save & Close Settings")
+        # && - a single & is a mnemonic prefix and gets swallowed, leaving "Save  Close".
+        self.button_ok = QPushButton("Save && Close Settings")
         self.button_ok.setObjectName("primary")
         self.button_ok.clicked.connect(self.accept_settings)
         self.layout.addWidget(self.button_ok)
@@ -447,6 +448,11 @@ class SettingsDialog(QDialog):
             self.tone_checkboxes[tone] = checkbox
         self._current_layout.addLayout(tone_grid)
 
+        self.tone_hint = QLabel("")
+        self.tone_hint.setWordWrap(True)
+        self.tone_hint.setStyleSheet(f"color: {theme.DISABLED_TEXT}; font-size: 11px;")
+        self._current_layout.addWidget(self.tone_hint)
+
         # A language may ship only some tones. CalloutHandler already skips what the
         # current language lacks, but silently - the box would stay ticked while a
         # different tone speaks.
@@ -462,10 +468,18 @@ class SettingsDialog(QDialog):
         mix - the user may well switch back to the language that has it.
         """
         available = self.callout_handler.tones_for(lang)
+        unavailable = []
         for tone, checkbox in self.tone_checkboxes.items():
             usable = tone in available
             checkbox.setEnabled(usable)
             checkbox.setToolTip("" if usable else f"No phrases for this tone in {lang} yet.")
+            if not usable:
+                unavailable.append(self.callout_handler.tone_label(tone))
+        # Greyed out alone only says "no". Saying why once under the grid beats a
+        # parenthetical on every second row.
+        self.tone_hint.setText(
+            "" if not unavailable else f"Greyed out: no {lang} phrases yet for {', '.join(unavailable)}."
+        )
 
     def _ticked_tones(self) -> list[str]:
         """Falls back to the default tone rather than saving an empty mix: CalloutHandler
