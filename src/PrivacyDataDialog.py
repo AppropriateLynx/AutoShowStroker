@@ -2,6 +2,7 @@ from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -37,6 +38,13 @@ class PrivacyDataDialog(QDialog):
         ("diagnostic_log", "Diagnostic log", "the opt-in log file, if you turned it on"),
         ("settings", "All settings", "every slider, toggle and the selected language"),
     )
+
+    # Plain-language names for applog.LEVELS - the stored value stays the level name.
+    LEVEL_LABELS = {
+        "INFO": "Everything (recommended)",
+        "WARNING": "Problems only",
+        "ERROR": "Errors only",
+    }
 
     def __init__(self, main_app, parent=None):
         super().__init__(parent)
@@ -75,6 +83,8 @@ class PrivacyDataDialog(QDialog):
         self.btn_open_folder.clicked.connect(self._on_open_folder)
         layout.addWidget(self.btn_open_folder)
 
+        layout.addLayout(self._build_diagnostic_log_section())
+
         delete_header = QLabel("Delete my data")
         delete_header.setStyleSheet(
             f"font-size: 14px; font-weight: bold; color: {theme.ACCENT}; margin-top: 12px;"
@@ -104,6 +114,65 @@ class PrivacyDataDialog(QDialog):
         button_row.addWidget(self.btn_close)
         layout.addLayout(button_row)
 
+        self.refresh_counts()
+
+    # --- the diagnostic log ---
+
+    def _build_diagnostic_log_section(self):
+        """The log's on/off switch and level live here rather than in Settings.
+
+        It is not a playback preference - it is the one thing in the app that *writes extra
+        data about the user*, so it belongs next to where that data is disclosed and
+        deleted. Both controls apply immediately: this dialog has no Save button, and Open
+        folder and Delete already act on click.
+        """
+        section = QVBoxLayout()
+
+        header = QLabel("Diagnostic log")
+        header.setStyleSheet(
+            f"font-size: 14px; font-weight: bold; color: {theme.ACCENT}; margin-top: 12px;"
+        )
+        section.addWidget(header)
+
+        explanation = QLabel(
+            "Off unless you switch it on. Records what the app is doing so a problem can be "
+            "traced - which also means it records when you used it. It never writes down the "
+            "folders you play from; a file that fails to load is named, nothing else is."
+        )
+        explanation.setWordWrap(True)
+        explanation.setStyleSheet(f"color: {theme.TEXT};")
+        section.addWidget(explanation)
+
+        self.diagnostic_log_checkbox = QCheckBox("Write a diagnostic log file")
+        self.diagnostic_log_checkbox.setChecked(self.main_app.diagnostic_log)
+        self.diagnostic_log_checkbox.toggled.connect(self._on_diagnostic_log_changed)
+        section.addWidget(self.diagnostic_log_checkbox)
+
+        level_row = QHBoxLayout()
+        level_row.addWidget(QLabel("Record:"))
+        self.diagnostic_log_level = QComboBox()
+        for level in applog.LEVELS:
+            self.diagnostic_log_level.addItem(self.LEVEL_LABELS[level], level)
+        saved = self.diagnostic_log_level.findData(self.main_app.diagnostic_log_level)
+        if saved != -1:
+            self.diagnostic_log_level.setCurrentIndex(saved)
+        self.diagnostic_log_level.currentIndexChanged.connect(self._on_diagnostic_log_changed)
+        level_row.addWidget(self.diagnostic_log_level)
+        level_row.addStretch()
+        section.addLayout(level_row)
+
+        self._update_level_enabled()
+        return section
+
+    def _update_level_enabled(self):
+        self.diagnostic_log_level.setEnabled(self.diagnostic_log_checkbox.isChecked())
+
+    def _on_diagnostic_log_changed(self):
+        self._update_level_enabled()
+        self.main_app.set_diagnostic_log(
+            self.diagnostic_log_checkbox.isChecked(),
+            level=self.diagnostic_log_level.currentData(),
+        )
         self.refresh_counts()
 
     # --- disclosure ---

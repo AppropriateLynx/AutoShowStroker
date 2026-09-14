@@ -6,14 +6,15 @@ no artifact at all to look at - the one message that would have explained it wen
 
 It is **off by default**, and that is a product decision, not an oversight. A log in an app
 like this is a record of when someone used it, so it only exists once they have asked for
-one (Settings > Playback > "Write a diagnostic log file"). It lives beside the other data
-files and is deletable on its own from Help > Privacy & Data.
+one. Both the switch and the level live in Help > Privacy & Data, next to where the data
+is disclosed and deleted - it is not a playback preference, it is the one thing in the app
+that writes extra data about the user.
 
 **What may go in it** (see also CLAUDE.md's Logging section):
 
 - INFO is the floor. There is deliberately no DEBUG or TRACE: this log explains a problem
   to a human, it does not trace execution, and per-beat chatter would bury the one line
-  that matters.
+  that matters. The user can raise the threshold to WARNING or ERROR (see LEVELS).
 - Never a media folder path. That reveals where the collection lives on disk, which is
   exactly what the Privacy & Data work exists to keep under the user's control.
 - A bare *filename* is allowed in a WARNING/ERROR about that specific file, because
@@ -27,6 +28,13 @@ from pathlib import Path
 
 LOGGER_NAME = "gooner"
 LOG_FILE_NAME = "gooner.log"
+
+# What the user can pick, in order. INFO is the floor - see the module docstring - so this
+# is the complete set, and the Privacy & Data dropdown is built from it rather than from a
+# second list that could drift.
+LEVELS = ("INFO", "WARNING", "ERROR")
+DEFAULT_LEVEL = "INFO"
+_LEVEL_VALUES = {name: getattr(logging, name) for name in LEVELS}
 # Small on purpose: this is a support artifact someone might paste into a Discord message,
 # not an archive. Two backups is enough to survive a restart mid-problem.
 MAX_BYTES = 512 * 1024
@@ -64,14 +72,25 @@ def log_file_paths(log_dir) -> list:
     return sorted(p for p in directory.glob(f"{LOG_FILE_NAME}*") if p.is_file())
 
 
-def configure(enabled: bool, log_dir) -> None:
+def level_value(name) -> int:
+    """The logging level for one of LEVELS, defaulting to INFO.
+
+    An allowlist rather than logging's own name lookup, so DEBUG and anything else below
+    the floor simply resolves to INFO. It never raises: the value comes from QSettings,
+    which an older build or a hand edit can put anything into, and a bad setting must not
+    decide whether the app starts.
+    """
+    return _LEVEL_VALUES.get(str(name).upper(), logging.INFO)
+
+
+def configure(enabled: bool, log_dir, level=DEFAULT_LEVEL) -> None:
     """(Re)builds the app logger's handlers. Safe to call repeatedly and at any time.
 
     Never raises: a log file that cannot be opened is a reason to run without one, not a
     reason to fail startup.
     """
     logger = logging.getLogger(LOGGER_NAME)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(level_value(level))
     # Without this, pytest's root handlers and anything a library installs would pick up
     # every line we emit.
     logger.propagate = False

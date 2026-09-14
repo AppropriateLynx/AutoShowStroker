@@ -67,6 +67,7 @@ class GoonerApp(QMainWindow):
         "show_record_chase": True,
         "show_session_timer": True,
         "diagnostic_log": False,
+        "diagnostic_log_level": applog.DEFAULT_LEVEL,
     }
 
     def __init__(self, settings: QSettings | None = None, data_store=None):
@@ -79,7 +80,10 @@ class GoonerApp(QMainWindow):
         self.diagnostic_log = bool(
             self.settings.value("GoonerApp/diagnostic_log", self.DEFAULTS["diagnostic_log"], type=bool)
         )
-        applog.configure(self.diagnostic_log, self.data_store.base_dir)
+        self.diagnostic_log_level = str(
+            self.settings.value("GoonerApp/diagnostic_log_level", self.DEFAULTS["diagnostic_log_level"])
+        )
+        applog.configure(self.diagnostic_log, self.data_store.base_dir, self.diagnostic_log_level)
         log.info("GoonerApp %s starting", get_current_version())
         self.data_store.migrate_legacy_location()
         self.data_store.prune_legacy_registry_keys(self.settings)
@@ -528,12 +532,23 @@ class GoonerApp(QMainWindow):
         dialog.exec()
         dialog.deleteLater()
 
-    def set_diagnostic_log_enabled(self, enabled: bool):
-        """Turns the opt-in diagnostic log on or off, and persists the choice."""
+    def set_diagnostic_log(self, enabled: bool, level: str | None = None):
+        """Applies and persists the opt-in diagnostic log settings.
+
+        Lives on the window rather than in the dialog because flipping either of these has
+        to reconfigure the live logger, not just write a key.
+        """
         self.diagnostic_log = bool(enabled)
+        if level is not None:
+            self.diagnostic_log_level = level
         self.settings.setValue("GoonerApp/diagnostic_log", self.diagnostic_log)
-        applog.configure(self.diagnostic_log, self.data_store.base_dir)
-        log.info("Diagnostic log %s", "enabled" if self.diagnostic_log else "disabled")
+        self.settings.setValue("GoonerApp/diagnostic_log_level", self.diagnostic_log_level)
+        applog.configure(self.diagnostic_log, self.data_store.base_dir, self.diagnostic_log_level)
+        log.info(
+            "Diagnostic log %s at level %s",
+            "enabled" if self.diagnostic_log else "disabled",
+            self.diagnostic_log_level,
+        )
 
     def show_privacy_data_dialog(self):
         dialog = PrivacyDataDialog(self, parent=self)

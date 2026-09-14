@@ -199,30 +199,30 @@ def test_the_log_is_offered_as_its_own_category(dialog):
 def test_the_log_count_reflects_the_files_on_disk(app, dialog):
     from src import applog
 
-    app.set_diagnostic_log_enabled(True)
+    app.set_diagnostic_log(True)
     applog.get_logger("src.Test").info("a line")
     dialog.refresh_counts()
 
     assert dialog.category_counts()["diagnostic_log"] == 1
-    app.set_diagnostic_log_enabled(False)
+    app.set_diagnostic_log(False)
 
 
 def test_clearing_the_log_removes_it(app, dialog):
     from src import applog
 
-    app.set_diagnostic_log_enabled(True)
+    app.set_diagnostic_log(True)
     applog.get_logger("src.Test").info("a line")
 
     dialog.clear_categories(["diagnostic_log"])
 
     assert applog.log_file_paths(app.data_store.base_dir) == []
-    app.set_diagnostic_log_enabled(False)
+    app.set_diagnostic_log(False)
 
 
 def test_clearing_the_log_leaves_logging_working(app, dialog):
     from src import applog
 
-    app.set_diagnostic_log_enabled(True)
+    app.set_diagnostic_log(True)
     applog.get_logger("src.Test").info("before")
 
     dialog.clear_categories(["diagnostic_log"])
@@ -231,4 +231,83 @@ def test_clearing_the_log_leaves_logging_working(app, dialog):
     contents = applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
     assert "after" in contents
     assert "before" not in contents
-    app.set_diagnostic_log_enabled(False)
+    app.set_diagnostic_log(False)
+
+
+# --- the log is controlled here, next to where it is disclosed and deleted ---
+
+
+def test_the_log_toggle_lives_in_this_dialog(app, dialog):
+    assert dialog.diagnostic_log_checkbox.isChecked() == app.diagnostic_log
+
+
+def test_ticking_the_toggle_starts_logging_immediately(app, dialog):
+    """No Save button in this dialog - Open folder and Delete act at once, so this does too."""
+    from src import applog
+
+    dialog.diagnostic_log_checkbox.setChecked(True)
+
+    applog.get_logger("src.Test").info("recorded right away")
+
+    assert app.diagnostic_log is True
+    assert "recorded right away" in applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
+    app.set_diagnostic_log(False)
+
+
+def test_unticking_the_toggle_stops_logging_immediately(app, dialog):
+    from src import applog
+
+    dialog.diagnostic_log_checkbox.setChecked(True)
+    dialog.diagnostic_log_checkbox.setChecked(False)
+
+    applog.get_logger("src.Test").info("must not be recorded")
+
+    assert app.diagnostic_log is False
+    # The file stays - switching off stops writing, it does not delete what was already
+    # recorded (that is what the Delete section is for).
+    contents = applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
+    assert "must not be recorded" not in contents
+
+
+def test_the_level_dropdown_offers_exactly_the_supported_levels(dialog):
+    from src import applog
+
+    items = [dialog.diagnostic_log_level.itemData(i) for i in range(dialog.diagnostic_log_level.count())]
+
+    assert tuple(items) == applog.LEVELS
+
+
+def test_the_level_dropdown_starts_on_the_saved_level(app, qtbot):
+    from src.PrivacyDataDialog import PrivacyDataDialog
+
+    app.set_diagnostic_log(app.diagnostic_log, level="ERROR")
+    reopened = PrivacyDataDialog(app, parent=app)
+    qtbot.addWidget(reopened)
+
+    assert reopened.diagnostic_log_level.currentData() == "ERROR"
+    app.set_diagnostic_log(False, level="INFO")
+
+
+def test_choosing_a_level_applies_and_persists_it(app, dialog):
+    from src import applog
+
+    dialog.diagnostic_log_checkbox.setChecked(True)
+    index = dialog.diagnostic_log_level.findData("WARNING")
+    dialog.diagnostic_log_level.setCurrentIndex(index)
+
+    applog.get_logger("src.Test").info("below the threshold")
+    applog.get_logger("src.Test").warning("at the threshold")
+
+    contents = applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
+    assert "below the threshold" not in contents
+    assert "at the threshold" in contents
+    assert app.settings.value("GoonerApp/diagnostic_log_level") == "WARNING"
+    app.set_diagnostic_log(False, level="INFO")
+
+
+def test_the_level_dropdown_is_disabled_while_logging_is_off(dialog):
+    assert dialog.diagnostic_log_checkbox.isChecked() is False
+    assert dialog.diagnostic_log_level.isEnabled() is False
+
+    dialog.diagnostic_log_checkbox.setChecked(True)
+    assert dialog.diagnostic_log_level.isEnabled() is True

@@ -1331,7 +1331,7 @@ def test_diagnostic_log_is_off_by_default(app):
 
 
 def test_enabling_the_diagnostic_log_starts_writing(app):
-    app.set_diagnostic_log_enabled(True)
+    app.set_diagnostic_log(True)
 
     applog.get_logger("src.Test").info("now recording")
 
@@ -1339,9 +1339,9 @@ def test_enabling_the_diagnostic_log_starts_writing(app):
 
 
 def test_disabling_the_diagnostic_log_stops_writing(app):
-    app.set_diagnostic_log_enabled(True)
+    app.set_diagnostic_log(True)
     applog.get_logger("src.Test").info("kept")
-    app.set_diagnostic_log_enabled(False)
+    app.set_diagnostic_log(False)
 
     applog.get_logger("src.Test").info("dropped")
 
@@ -1351,7 +1351,7 @@ def test_disabling_the_diagnostic_log_stops_writing(app):
 
 
 def test_the_diagnostic_log_setting_is_persisted(app):
-    app.set_diagnostic_log_enabled(True)
+    app.set_diagnostic_log(True)
 
     assert app.settings.value("GoonerApp/diagnostic_log", type=bool) is True
 
@@ -1363,13 +1363,13 @@ def test_a_saved_diagnostic_log_setting_is_restored(qtbot, qsettings, data_store
     qtbot.addWidget(window)
 
     assert window.diagnostic_log is True
-    window.set_diagnostic_log_enabled(False)
+    window.set_diagnostic_log(False)
 
 
 def test_media_paths_never_reach_the_log(app, monkeypatch, tmp_path):
     """The one rule this log has to keep: it may name a file that failed, never the folder
     it came from - that would put the location of the collection on disk."""
-    app.set_diagnostic_log_enabled(True)
+    app.set_diagnostic_log(True)
     secret = tmp_path / "very-private-folder"
     secret.mkdir()
     files = [secret / "clip.mp4"]
@@ -1381,3 +1381,16 @@ def test_media_paths_never_reach_the_log(app, monkeypatch, tmp_path):
 
     contents = applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
     assert "very-private-folder" not in contents
+
+
+def test_the_diagnostic_log_level_defaults_to_info(app):
+    assert app.diagnostic_log_level == applog.DEFAULT_LEVEL
+
+
+def test_a_saved_diagnostic_log_level_is_restored(qtbot, qsettings, data_store):
+    qsettings.setValue("GoonerApp/diagnostic_log_level", "ERROR")
+
+    window = GoonerApp(settings=qsettings, data_store=data_store)
+    qtbot.addWidget(window)
+
+    assert window.diagnostic_log_level == "ERROR"

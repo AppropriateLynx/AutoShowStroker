@@ -163,3 +163,65 @@ def test_app_logger_does_not_leak_into_the_root_logger(tmp_path, caplog):
     applog.configure(enabled=True, log_dir=tmp_path)
 
     assert logging.getLogger(applog.LOGGER_NAME).propagate is False
+
+
+# --- level selection ---
+
+
+def test_the_default_level_is_info(tmp_path):
+    applog.configure(enabled=True, log_dir=tmp_path)
+
+    applog.get_logger("src.Test").info("visible by default")
+
+    assert "visible by default" in applog.log_file_path(tmp_path).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("level", "info_kept", "warning_kept", "error_kept"),
+    [
+        ("INFO", True, True, True),
+        ("WARNING", False, True, True),
+        ("ERROR", False, False, True),
+    ],
+)
+def test_the_configured_level_filters_everything_below_it(
+    tmp_path, level, info_kept, warning_kept, error_kept
+):
+    applog.configure(enabled=True, log_dir=tmp_path, level=level)
+    logger = applog.get_logger("src.Test")
+
+    logger.info("an-info-line")
+    logger.warning("a-warning-line")
+    logger.error("an-error-line")
+
+    path = applog.log_file_path(tmp_path)
+    contents = path.read_text(encoding="utf-8") if path.exists() else ""
+    assert ("an-info-line" in contents) is info_kept
+    assert ("a-warning-line" in contents) is warning_kept
+    assert ("an-error-line" in contents) is error_kept
+
+
+def test_info_stays_the_floor_even_if_a_lower_level_is_asked_for(tmp_path):
+    """No DEBUG/TRACE in this app - a level below the floor is clamped, not honoured."""
+    applog.configure(enabled=True, log_dir=tmp_path, level="DEBUG")
+
+    applog.get_logger("src.Test").debug("should never appear")
+    applog.get_logger("src.Test").info("should appear")
+
+    contents = applog.log_file_path(tmp_path).read_text(encoding="utf-8")
+    assert "should never appear" not in contents
+    assert "should appear" in contents
+
+
+def test_an_unknown_level_name_falls_back_to_info(tmp_path):
+    applog.configure(enabled=True, log_dir=tmp_path, level="LOUD")
+
+    applog.get_logger("src.Test").info("still recorded")
+
+    assert "still recorded" in applog.log_file_path(tmp_path).read_text(encoding="utf-8")
+
+
+def test_selectable_levels_are_exposed_for_the_ui():
+    """The dialog builds its dropdown from this, so it cannot drift from what configure()
+    actually accepts."""
+    assert applog.LEVELS == ("INFO", "WARNING", "ERROR")
