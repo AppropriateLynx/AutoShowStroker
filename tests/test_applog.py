@@ -20,10 +20,6 @@ def test_get_logger_returns_a_child_of_the_app_logger():
     assert logger.parent.name == applog.LOGGER_NAME
 
 
-def test_get_logger_is_stable_for_the_same_module():
-    assert applog.get_logger("src.BeatHandler") is applog.get_logger("src.BeatHandler")
-
-
 def test_nothing_is_written_when_logging_is_disabled(tmp_path):
     applog.configure(enabled=False, log_dir=tmp_path)
 

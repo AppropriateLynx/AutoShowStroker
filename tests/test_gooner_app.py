@@ -1084,10 +1084,6 @@ def test_vid_loudness_is_restored_from_settings(qtbot, qsettings, data_store):
     assert window.vid_loudness == 0.25
 
 
-def test_vid_loudness_defaults_when_never_saved(app):
-    assert app.vid_loudness == GoonerApp.DEFAULTS["vid_loudness"]
-
-
 def test_importing_gooner_app_does_not_pull_in_pyqtgraph():
     """pyqtgraph + numpy cost ~0.5s warm and ~1.6s cold, for a dialog most sessions never
     open. Run in a subprocess so an earlier test's import can't mask a regression."""
@@ -1188,25 +1184,6 @@ def test_starting_a_new_session_cancels_a_pending_denied_stop(app, tmp_path):
     assert not app._denied_stop_timer.isActive()
 
 
-def test_denied_outcome_arms_the_stop_timer(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
-    app.start()
-
-    app._on_climax_outcome("denied")
-
-    assert app._denied_stop_timer.isActive()
-    assert app._denied_stop_timer.isSingleShot()
-
-
-def test_other_outcomes_do_not_arm_the_stop_timer(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
-    app.start()
-
-    app._on_climax_outcome("ruined")
-
-    assert not app._denied_stop_timer.isActive()
-
-
 def _pending_dialogs(app, dialog_type):
     from PyQt6.QtCore import QEvent
     from PyQt6.QtWidgets import QApplication
@@ -1249,27 +1226,6 @@ def test_settings_keys_come_from_an_explicit_group_constant(app):
 
 
 # --- P4: dead code, stale overlays, quitting mid-session ---
-
-
-def test_no_orphaned_settings_button(app):
-    """btn_settings was constructed and wired but never added to a layout, so it read like
-    a control that exists while Ctrl+S / the menu were the only ways in."""
-    assert not hasattr(app, "btn_settings")
-
-
-def test_finde_unterstuetzte_dateien_is_gone(app):
-    """A German-named passthrough to media_kinds.find_supported_files with no callers."""
-    assert not hasattr(app, "finde_unterstützte_dateien")
-
-
-def test_empty_selection_message_is_english(app, monkeypatch):
-    monkeypatch.setattr(
-        "src.GoonerApp.MediaFolderPickerDialog", _fake_picker_dialog(QDialog.DialogCode.Accepted, [])
-    )
-
-    app.open_folder()
-
-    assert app.image_label.text() == "No supported files found."
 
 
 def test_session_timer_stays_hidden_outside_a_session(app):

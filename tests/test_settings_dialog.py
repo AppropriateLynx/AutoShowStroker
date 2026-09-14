@@ -417,7 +417,8 @@ def test_settings_are_persisted_under_the_owner_group_constant(app, dialog):
 
     dialog.accept_settings()
 
-    assert app.settings.value(f"{app.beat_handler.SETTINGS_GROUP}/min_pause_dur") is not None
+    # The literal keys, not f"{SETTINGS_GROUP}/..." - asserting against the constant would
+    # hold no matter what the constant said, which is the thing being guarded.
     assert app.settings.value("BeatHandler/min_pause_dur") is not None
     assert app.settings.value("GoonerApp/min_dur") is not None
 

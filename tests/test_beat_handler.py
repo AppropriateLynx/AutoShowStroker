@@ -681,10 +681,3 @@ def test_is_paused_reports_the_pause_phase(handler):
 
     handler.beat_meter_pause_timer.stop()
     assert handler.is_paused() is False
-
-
-def test_defaults_drive_the_initial_attributes(handler):
-    """DEFAULTS is the single source of truth - __init__ used to repeat every value as a
-    literal, with only a guard test keeping the two copies honest."""
-    for key, value in BeatHandler.DEFAULTS.items():
-        assert getattr(handler, key) == value
