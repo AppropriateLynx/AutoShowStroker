@@ -379,16 +379,13 @@ def test_accept_settings_rejects_inverted_pause_bounds(app, dialog, rejected):
     assert app.beat_handler.min_pause_dur != 30
 
 
+# Driven from the dialog's own list rather than a copy of it: a copy is how the climax
+# delay pair went unguarded for a commit, and a pair that is never exercised is exactly
+# the one that ships inverted.
 @pytest.mark.parametrize(
     ("min_name", "max_name"),
-    [
-        ("min_dur", "max_dur"),
-        ("min_beat_freq", "max_beat_freq"),
-        ("min_beat_dur", "max_beat_dur"),
-        ("min_pause_dur", "max_pause_dur"),
-        ("min_ramp_duration", "max_ramp_duration"),
-        ("min_fake_climax_delay", "max_fake_climax_delay"),
-    ],
+    [(pair[0], pair[1]) for pair in SettingsDialog.MIN_MAX_PAIRS],
+    ids=[pair[2] for pair in SettingsDialog.MIN_MAX_PAIRS],
 )
 def test_accept_settings_rejects_every_inverted_min_max_pair(dialog, rejected, min_name, max_name):
     max_widget = dialog.settings_fields[max_name]["widget"]
