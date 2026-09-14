@@ -11,7 +11,10 @@ Follow this to add or extend phrase files for `CalloutHandler` (`src/CalloutHand
 and tone are two independent axes: the user picks exactly one language and any number of tones,
 and the handler mixes the ticked tones evenly (it draws a tone first, then a line from it).
 
-Shipped today: `en`, `de`, `fr` × `flirty`, `shy`, `dominant`, `degrading`, `hard_degrading`, `girlfriend`.
+Shipped today: `en` has `flirty`, `shy`, `bratty`, `drunk`, `girlfriend`, `nurturing`, `dominant`,
+`sadistic`, `degrading`, `hard_degrading`, `clinical`; `de` and `fr` have the first six of those
+minus `bratty`/`drunk`/`nurturing`/`sadistic`/`clinical`. **A language may ship a subset** — only
+`flirty` (the `DEFAULT_TONE`) is required everywhere, because it is the fallback.
 
 Every file holds the same schema, `{trigger_key: [phrases]}`, with all of these keys present and
 non-empty — a missing or typo'd key does not raise, the app just goes silent for that event:
@@ -49,8 +52,8 @@ non-empty — a missing or typo'd key does not raise, the app just goes silent f
 ## Adding a brand-new language
 
 1. Create `res/callouts/<code>/` using the standard two-letter language code (e.g. `es/`).
-2. Add **one file per shipped tone** — all six. The tone selection survives a language switch,
-   so a language missing a tone silently drops it from the user's mix the moment they switch.
+2. Add at least `flirty.json`; everything else is optional. A tone the language lacks is skipped at
+   draw time and marked `(not in <lang>)` in Settings, so a partial language is honest, not broken.
 3. Write in the target language rather than translating the English line for line; a callout that
    reads like a translation breaks the mood faster than a missing one would.
 4. No code changes are needed — `CalloutHandler._load_available_languages()` discovers both
@@ -59,7 +62,7 @@ non-empty — a missing or typo'd key does not raise, the app just goes silent f
 
 ## Adding a brand-new tone
 
-1. Add `<tone>.json` to **every** language folder, for the same reason as above.
+1. Add `<tone>.json` to at least one language folder. Doing every language is nicer but not required.
 2. Add the tone to `CalloutHandler.TONE_LABELS` to give it a display name and a fixed position.
    An undeclared tone still works (it is offered with a title-cased name), but the shipped set is
    curated and `tests/test_callout_language_files.py` asserts it matches `TONE_LABELS` — that
@@ -75,8 +78,8 @@ non-empty — a missing or typo'd key does not raise, the app just goes silent f
 `tests/test_callout_language_files.py` discovers every `res/callouts/*/*.json` and checks: valid
 JSON, all required trigger keys, no unknown/typo'd keys, values are lists of strings, no empty
 phrase list, no duplicate phrase inside a list, no phrase shared between two tones of one
-language, every language shipping every tone, no stray phrase file left outside a language
-folder, and that every shipped tone has a declared label.
+language, every language shipping at least the default tone, no stray phrase file left outside a
+language folder, and that every shipped tone has a declared label.
 
 ```bash
 python -m pytest tests/test_callout_language_files.py -v

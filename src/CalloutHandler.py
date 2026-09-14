@@ -35,13 +35,20 @@ class CalloutHandler(QObject):
     # labels only decide what the Settings checkboxes read and in which order they appear -
     # the tones themselves are discovered from the files, so dropping a new <tone>.json
     # into a language folder is enough to offer it (it then gets a title-cased label).
+    # Ordered soft to harsh, with the detached one last - this is the order the
+    # Settings checkboxes appear in.
     TONE_LABELS = {
         "flirty": "Flirty",
         "shy": "Shy",
+        "bratty": "Bratty",
+        "drunk": "Drunk",
+        "girlfriend": "Girlfriend Experience",
+        "nurturing": "Nurturing",
         "dominant": "Dominant",
+        "sadistic": "Sadistic",
         "degrading": "Degrading",
         "hard_degrading": "Degrading (Hard)",
-        "girlfriend": "Girlfriend Experience",
+        "clinical": "Clinical",
     }
     # What the app used to say with no tone axis at all, so it stays the default for
     # everyone who upgrades - and the fallback whenever a selection turns out to be

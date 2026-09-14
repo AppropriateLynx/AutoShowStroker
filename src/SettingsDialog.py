@@ -447,6 +447,19 @@ class SettingsDialog(QDialog):
             self.tone_checkboxes[tone] = checkbox
         self._current_layout.addLayout(tone_grid)
 
+        # A language may ship only some tones. CalloutHandler already skips what the
+        # current language lacks, but silently - the box would stay ticked while a
+        # different tone speaks. The selection is global and survives a language switch
+        # on purpose, so the box stays tickable and says so instead.
+        self.callout_selected_lang.currentTextChanged.connect(self._mark_unavailable_tones)
+        self._mark_unavailable_tones(self.callout_selected_lang.currentText())
+
+    def _mark_unavailable_tones(self, lang: str):
+        available = self.callout_handler.tones_for(lang)
+        for tone, checkbox in self.tone_checkboxes.items():
+            label = self.callout_handler.tone_label(tone)
+            checkbox.setText(label if tone in available else f"{label}  (not in {lang})")
+
     def _ticked_tones(self) -> list[str]:
         """Falls back to the default tone rather than saving an empty mix: CalloutHandler
         would fall back at draw time anyway, and this way the dialog doesn't reopen

@@ -19,12 +19,10 @@ res/callouts/
   en/
     flirty.json
     shy.json
-    dominant.json
-    degrading.json
-    hard_degrading.json
-    girlfriend.json
-  de/  ... same six
-  fr/  ... same six
+    bratty.json
+    ...
+  de/  ... a subset is fine, see below
+  fr/  ... a subset is fine, see below
 ```
 
 **Language and tone are two independent axes.** The user picks exactly one language and any
@@ -77,6 +75,11 @@ The tones that ship today:
 | Dominant     | `dominant.json` | Commanding and certain. Imperatives, no negotiation.                              |
 | Degrading    | `degrading.json`| Humiliation play: mocks the user's neediness and stamina. **Opt-in, never default.** |
 | Degrading (Hard) | `hard_degrading.json` | The same register turned up: small-penis humiliation and inadequacy throughout. **Opt-in, never default.** |
+| Bratty       | `bratty.json`   | Petulant and entitled — teases by withholding rather than commanding. |
+| Drunk        | `drunk.json`    | Loud, sloppy, uninhibited. All exclamation marks and no filter. |
+| Nurturing    | `nurturing.json`| Caring and protective, softer than Girlfriend Experience and less flirtatious. |
+| Sadistic     | `sadistic.json` | Enjoys the suffering itself rather than the obedience. **Opt-in, never default.** |
+| Clinical     | `clinical.json` | Detached and procedural, like a technician reading instructions. |
 | Girlfriend Experience | `girlfriend.json` | Warm, affectionate, present. Ranges from sweet to gently bossy, never degrading. |
 
 #### 3. How to Contribute Phrases
@@ -104,27 +107,28 @@ To add a completely new language (e.g. Spanish), create a folder named with the 
 two-letter language code and give it **one file per shipped tone**:
 
 ```
-res/callouts/es/flirty.json
-res/callouts/es/shy.json
-res/callouts/es/dominant.json
-res/callouts/es/degrading.json
-res/callouts/es/hard_degrading.json
-res/callouts/es/girlfriend.json
+res/callouts/es/flirty.json      <- required
+res/callouts/es/shy.json         <- optional
+res/callouts/es/dominant.json    <- optional
+...
 ```
 
 1. Copy the key structure from the matching English file — every Trigger Key must be present and
    non-empty, because a tone that is ticked but silent for one event looks like a bug.
 2. Write the phrases in that language rather than translating word for word. A callout that reads
    like a translation breaks the mood faster than a missing one.
-3. Ship **all** tones. The tone selection survives a language switch, so a language missing a tone
-   silently drops it from the user's mix the moment they change language.
+3. **`flirty.json` is the only required file.** A language may ship any subset of the other tones:
+   `CalloutHandler` skips a tone the current language lacks and falls back to the default, and the
+   Settings dialog marks such a tone `(not in <lang>)` so the gap is visible rather than silent.
+   `flirty` is required precisely because it is what that fallback lands on.
 4. No code changes are needed — `CalloutHandler` discovers languages and tones from the folder
    layout at startup, and the Settings dialog builds its controls from what it finds.
 
 ### Adding a New Tone
 
-Adding a tone works the same way in the other direction: one `<tone>.json` in **every** language
-folder. A tone nobody declared a label for still works and is offered with a title-cased name
+Adding a tone works the same way in the other direction, except you do not have to do every
+language at once — one `<tone>.json` in a single language folder already makes the tone appear.
+A tone nobody declared a label for still works and is offered with a title-cased name
 (`bratty.json` → "Bratty"); adding it to `CalloutHandler.TONE_LABELS` gives it a proper display
 name and a fixed position in the list.
 
@@ -144,8 +148,8 @@ python -m pytest tests/test_callout_language_files.py -v
 
 It walks every `res/callouts/*/*.json` and verifies: valid JSON, all required Trigger Keys, no
 unknown/typo'd keys, every value a list of strings, no empty phrase lists, no duplicate phrases
-within a list, no phrase shared between two tones of the same language, every language shipping
-every tone, and no stray phrase file outside a language folder. It does **not** check that your writing reads well — for that, still run the app
+within a list, no phrase shared between two tones of the same language, every language shipping at
+least the default tone, and no stray phrase file outside a language folder. It does **not** check that your writing reads well — for that, still run the app
 (`python main.py`), pick your language and tone in Settings, and play through a session.
 
 ---

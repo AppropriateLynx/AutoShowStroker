@@ -509,3 +509,30 @@ def test_callout_reset_button_resets_the_tone_mix(app, dialog):
 
     for tone, checkbox in dialog.tone_checkboxes.items():
         assert checkbox.isChecked() == (tone in CalloutHandler.DEFAULTS["selected_tones"])
+
+
+# --- a language may ship only some tones ---
+
+
+def test_a_tone_the_current_language_lacks_is_marked(app, dialog):
+    """Selection is global and survives a language switch, so an unavailable tone stays
+    tickable - but it must not look like it is speaking when it isn't."""
+    de_tones = app.callout_handler.tones_for("de")
+    missing = next(t for t in app.callout_handler.available_tones if t not in de_tones)
+
+    dialog.callout_selected_lang.setCurrentText("de")
+
+    assert "not in de" in dialog.tone_checkboxes[missing].text()
+    assert CalloutHandler.DEFAULT_TONE in de_tones
+    assert "not in" not in dialog.tone_checkboxes[CalloutHandler.DEFAULT_TONE].text()
+
+
+def test_switching_language_refreshes_the_tone_marks(app, dialog):
+    de_tones = app.callout_handler.tones_for("de")
+    missing = next(t for t in app.callout_handler.available_tones if t not in de_tones)
+
+    dialog.callout_selected_lang.setCurrentText("de")
+    assert "not in de" in dialog.tone_checkboxes[missing].text()
+
+    dialog.callout_selected_lang.setCurrentText("en")
+    assert dialog.tone_checkboxes[missing].text() == app.callout_handler.tone_label(missing)

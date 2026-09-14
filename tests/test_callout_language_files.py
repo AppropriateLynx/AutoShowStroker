@@ -75,13 +75,14 @@ def test_phrase_file_has_no_duplicate_phrases(path):
         assert not duplicates, f"{_file_id(path)}:{key} repeats: {duplicates}"
 
 
-def test_every_language_ships_every_tone():
-    """Tone is picked once and survives a language switch, so a language missing a tone
-    would silently drop it from the mix the moment the user changes language."""
-    per_language = {path.name: sorted(child.stem for child in path.glob("*.json")) for path in LANGUAGE_DIRS}
-    expected = sorted(set().union(*per_language.values()))
-    mismatched = {lang: tones for lang, tones in per_language.items() if tones != expected}
-    assert not mismatched, f"Expected every language to ship {expected}, but: {mismatched}"
+def test_every_language_ships_the_default_tone():
+    """A language may ship a subset of the tones - a contributor adding one tone in one
+    language should not have to write two more languages first, and CalloutHandler skips
+    what the current language lacks. The default tone is the exception: it is what an
+    otherwise unusable selection falls back to, so a language without it has nothing to
+    fall back on."""
+    missing = [path.name for path in LANGUAGE_DIRS if not (path / f"{CalloutHandler.DEFAULT_TONE}.json").exists()]
+    assert not missing, f"These languages are missing the default tone {CalloutHandler.DEFAULT_TONE!r}: {missing}"
 
 
 def test_every_shipped_tone_has_a_declared_label():

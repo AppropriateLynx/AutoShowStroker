@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "Rhythm parameters adjusted. Maintain stroke consistency.",
+    "New tempo detected. Adapt hand movement accordingly.",
+    "Beat frequency changed. Continue stimulation without interruption.",
+    "Pattern shift registered. Synchronise stroke rate.",
+    "Tempo modification in effect. Proceed.",
+    "New rhythm active. Maintain current pressure and speed.",
+    "Beat change confirmed. Adjust stroke timing.",
+    "Frequency altered. Continue without deviation.",
+    "Rhythm updated. Hand movement must match.",
+    "New parameters set. Proceed with stimulation."
+  ],
+  "beat_change_faster": [
+    "Increasing stroke rate. Higher frequency required.",
+    "Accelerate. Match new tempo precisely.",
+    "Speed increased. Maintain form.",
+    "Faster stroke cadence now mandatory.",
+    "Elevate pace. Do not lag.",
+    "Higher frequency. Adjust immediately.",
+    "Accelerate stimulation. Confirm compliance.",
+    "Increased rate. Continue.",
+    "Faster. Precision required.",
+    "Elevate stroke speed. Now."
+  ],
+  "beat_change_slower": [
+    "Decreasing stroke rate. Reduce frequency.",
+    "Slower cadence required. Comply.",
+    "Lower tempo. Maintain control.",
+    "Reduce speed. Prolonged stimulation preferred.",
+    "Slower strokes. Precision over urgency.",
+    "Decrease rate. Continue.",
+    "Lower frequency. Steady pressure.",
+    "Slow. Controlled movement only.",
+    "Reduced tempo. Maintain form.",
+    "Slower. Confirm adaptation."
+  ],
+  "pause_start": [
+    "Cease stimulation. Hands away.",
+    "Pause initiated. No contact permitted.",
+    "Stop. Release the shaft immediately.",
+    "Stimulation suspended. Remain still.",
+    "Hands off. Observation period begins.",
+    "Cease all movement. Now.",
+    "Pause. No touching.",
+    "Stop stroking. Await further instruction.",
+    "Contact terminated. Hold position.",
+    "Hands removed. Remain stationary."
+  ],
+  "pause_end": [
+    "Resume stimulation. Begin now.",
+    "Contact permitted. Continue previous cadence.",
+    "Hands on. Proceed.",
+    "Stimulation reauthorised. Stroke.",
+    "Resume. Maintain form.",
+    "Continue. Immediate compliance expected.",
+    "Touch restored. Proceed carefully.",
+    "Resume stroking. Match prior rhythm.",
+    "Hands on. Begin.",
+    "Stimulation continues. Now."
+  ],
+  "media_skipped": [
+    "Media rejected. Continue stimulation regardless.",
+    "Skipped. Stroke rate remains unchanged.",
+    "Content discarded. Maintain hand movement.",
+    "Next item. Stimulation continues.",
+    "Rejected. No pause authorised.",
+    "Skipped. Proceed.",
+    "Media changed. Keep stroking.",
+    "Next. Cadence uninterrupted.",
+    "Discarded. Continue.",
+    "Skipped. Hand remains active."
+  ],
+  "media_repeated": [
+    "Media repeated. Maintain current stroke parameters.",
+    "Replay confirmed. Continue stimulation.",
+    "Content looping. No change to cadence.",
+    "Repeated. Stroke as before.",
+    "Replay active. Proceed.",
+    "Same media. Maintain form.",
+    "Looping. Continue.",
+    "Repeated. Cadence steady.",
+    "Replay. No deviation.",
+    "Same content. Keep stroking."
+  ],
+  "session_started": [
+    "Session initiated. Place hand on shaft.",
+    "Begin stimulation. Now.",
+    "Parameters set. Commence.",
+    "Session active. Stroke.",
+    "Start. Maintain consistent pressure.",
+    "Begin. Hand on. Proceed.",
+    "Session start confirmed. Stimulate.",
+    "Commence. Match initial tempo.",
+    "Active. Begin stroking.",
+    "Start now. Compliance expected."
+  ],
+  "climax_real": [
+    "Orgasm authorised. Release.",
+    "Climax permitted. Proceed to ejaculation.",
+    "Finish. Now.",
+    "Release authorised. Cum.",
+    "Orgasm window open. Complete.",
+    "Ejaculate. Immediate."
+  ],
+  "climax_ruined": [
+    "Cease contact. Orgasm interrupted.",
+    "Hands off. Ruined climax in progress.",
+    "Stop. Allow partial release only.",
+    "Contact terminated. Waste the load.",
+    "Ruin confirmed. No full orgasm.",
+    "Hands away. Partial ejaculation only."
+  ],
+  "climax_denied": [
+    "Orgasm denied. Hands off.",
+    "No release authorised. Cease stimulation.",
+    "Denied. Remain unsatisfied.",
+    "Climax prohibited. End contact.",
+    "No orgasm. Session conclusion without release.",
+    "Denied. Leave the shaft alone."
+  ],
+  "fake_climax_reveal": [
+    "False signal. Continue stimulation.",
+    "Not authorised. Resume.",
+    "Test only. Proceed.",
+    "Invalid climax cue. Keep stroking.",
+    "False. Maintain cadence.",
+    "Not real. Continue."
+  ]
+}
