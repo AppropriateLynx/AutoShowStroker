@@ -15,9 +15,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src import theme
+from src import applog, theme
 from src.CustomPhraseFilesDialog import CustomPhraseFilesDialog
 from src.PatternEditorDialog import PatternEditorDialog
+
+log = applog.get_logger(__name__)
 
 
 class SettingsDialog(QDialog):
@@ -54,12 +56,21 @@ class SettingsDialog(QDialog):
         self.show_session_timer_checkbox = QCheckBox("Show session timer")
         self.show_session_timer_checkbox.setChecked(self.main_app.show_session_timer)
         self._current_layout.addWidget(self.show_session_timer_checkbox)
+        self.diagnostic_log_checkbox = QCheckBox("Write a diagnostic log file")
+        self.diagnostic_log_checkbox.setToolTip(
+            "Off by default. Records what the app is doing so a problem can be diagnosed - "
+            "never the folders you use. Stored with your other data and deletable on its own "
+            "under Help > Privacy & Data."
+        )
+        self.diagnostic_log_checkbox.setChecked(self.main_app.diagnostic_log)
+        self._current_layout.addWidget(self.diagnostic_log_checkbox)
         self.playback_reset_button = self.add_reset_button(
             ["min_dur", "max_dur", "video_min_dur", "beat_loudness", "vid_loudness"],
             checkbox_defaults=[
                 (self.show_startup_splash_checkbox, self.main_app.DEFAULTS["show_startup_splash"]),
                 (self.show_record_chase_checkbox, self.main_app.DEFAULTS["show_record_chase"]),
                 (self.show_session_timer_checkbox, self.main_app.DEFAULTS["show_session_timer"]),
+                (self.diagnostic_log_checkbox, self.main_app.DEFAULTS["diagnostic_log"]),
             ],
         )
         self._current_layout.addStretch()
@@ -281,6 +292,7 @@ class SettingsDialog(QDialog):
         # live handlers, so a half-applied invalid set would take effect even after a refusal.
         error = self._validation_error()
         if error:
+            log.info("Settings rejected: %s", error)
             self._show_validation_error(error)
             return
 
@@ -310,6 +322,10 @@ class SettingsDialog(QDialog):
         settings.setValue("GoonerApp/show_session_timer", self.show_session_timer_checkbox.isChecked())
         self.main_app.show_session_timer = self.show_session_timer_checkbox.isChecked()
         self.main_app._update_session_timer()
+
+        # Goes through the app rather than writing the key here: flipping this has to
+        # reconfigure the live logger, not just persist a flag.
+        self.main_app.set_diagnostic_log_enabled(self.diagnostic_log_checkbox.isChecked())
 
         new_selected_patterns = []
         for name, checkbox in self.beat_checkboxes.items():
@@ -344,6 +360,7 @@ class SettingsDialog(QDialog):
         # the moment the pause ends anyway.
         if self.main_app.is_running and not self.beat_handler.is_paused():
             self.beat_handler.recalc_beat()
+        log.info("Settings saved (%d active rhythms)", len(new_selected_patterns))
         self.accept()
 
     def add_beat_selection(self):

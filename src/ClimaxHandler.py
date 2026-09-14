@@ -11,8 +11,8 @@ class ClimaxHandler(QObject):
     status_changed_event = pyqtSignal(str)  # "cum" | "ruined" | "denied" | "neutral" - for UI display
     fake_climax_triggered_event = pyqtSignal()
 
-    # Keep in sync with the literal defaults set in __init__ below - single source of truth
-    # for the SettingsDialog "Reset to defaults" buttons.
+    # Single source of truth: __init__ applies these directly, and the SettingsDialog
+    # "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
         "climax_active": True,
         "climax_chance": 0.15,

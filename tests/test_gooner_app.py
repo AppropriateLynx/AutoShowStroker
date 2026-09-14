@@ -7,6 +7,7 @@ import pytest
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import QDialog
 
+from src import applog
 from src.BeatTrackWidget import BeatTrackWidget
 from src.GoonerApp import GoonerApp
 
@@ -1361,3 +1362,66 @@ def test_update_consent_text_mentions_the_user_agent(app):
     text = app._update_check_consent_text()
 
     assert "User-Agent" in text
+
+
+# --- diagnostic logging (opt-in) ---
+
+
+def test_diagnostic_log_is_off_by_default(app):
+    """Opt-in on purpose: a log in an app like this is a usage trace, so it only exists
+    when the user has asked for one."""
+    assert app.diagnostic_log is False
+    assert applog.log_file_paths(app.data_store.base_dir) == []
+
+
+def test_enabling_the_diagnostic_log_starts_writing(app):
+    app.set_diagnostic_log_enabled(True)
+
+    applog.get_logger("src.Test").info("now recording")
+
+    assert "now recording" in applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
+
+
+def test_disabling_the_diagnostic_log_stops_writing(app):
+    app.set_diagnostic_log_enabled(True)
+    applog.get_logger("src.Test").info("kept")
+    app.set_diagnostic_log_enabled(False)
+
+    applog.get_logger("src.Test").info("dropped")
+
+    contents = applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
+    assert "kept" in contents
+    assert "dropped" not in contents
+
+
+def test_the_diagnostic_log_setting_is_persisted(app):
+    app.set_diagnostic_log_enabled(True)
+
+    assert app.settings.value("GoonerApp/diagnostic_log", type=bool) is True
+
+
+def test_a_saved_diagnostic_log_setting_is_restored(qtbot, qsettings, data_store):
+    qsettings.setValue("GoonerApp/diagnostic_log", True)
+
+    window = GoonerApp(settings=qsettings, data_store=data_store)
+    qtbot.addWidget(window)
+
+    assert window.diagnostic_log is True
+    window.set_diagnostic_log_enabled(False)
+
+
+def test_media_paths_never_reach_the_log(app, monkeypatch, tmp_path):
+    """The one rule this log has to keep: it may name a file that failed, never the folder
+    it came from - that would put the location of the collection on disk."""
+    app.set_diagnostic_log_enabled(True)
+    secret = tmp_path / "very-private-folder"
+    secret.mkdir()
+    files = [secret / "clip.mp4"]
+    monkeypatch.setattr(
+        "src.GoonerApp.MediaFolderPickerDialog", _fake_picker_dialog(QDialog.DialogCode.Accepted, files)
+    )
+
+    app.open_folder()
+
+    contents = applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
+    assert "very-private-folder" not in contents

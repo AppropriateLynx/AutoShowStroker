@@ -10,7 +10,9 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from src import theme
+from src import applog, theme
+
+log = applog.get_logger(__name__)
 
 
 class PrivacyDataDialog(QDialog):
@@ -26,12 +28,13 @@ class PrivacyDataDialog(QDialog):
     """
 
     # key -> (label, description). The key doubles as the data-store file name for the
-    # four data categories; "settings" is the QSettings group instead.
+    # JSON categories; "diagnostic_log" and "settings" are handled specially.
     CATEGORIES = (
         ("session_history", "Session history", "every recorded session and your personal records"),
         ("custom_patterns", "Custom rhythm patterns", "the patterns you built in the pattern editor"),
         ("custom_phrase_files", "Custom phrase files", "the callout files you added"),
         ("last_selected_folders", "Last used media folders", "the folder paths the picker remembers"),
+        ("diagnostic_log", "Diagnostic log", "the opt-in log file, if you turned it on"),
         ("settings", "All settings", "every slider, toggle and the selected language"),
     )
 
@@ -121,7 +124,7 @@ class PrivacyDataDialog(QDialog):
         try:
             base_dir.mkdir(parents=True, exist_ok=True)
         except OSError as error:
-            print(f"Could not create the data folder: {error}")
+            log.error("Could not create the data folder: %s", error)
             return
         self._open_url(QUrl.fromLocalFile(str(base_dir)))
 
@@ -134,6 +137,9 @@ class PrivacyDataDialog(QDialog):
             "custom_patterns": len(self.main_app.beat_handler.custom_beat_patterns),
             "custom_phrase_files": len(self.main_app.callout_handler.custom_phrase_files),
             "last_selected_folders": len(store.load("last_selected_folders", [])),
+            # Files, not lines: rotated backups count too, and reading them to count lines
+            # just to label a checkbox would be silly.
+            "diagnostic_log": len(applog.log_file_paths(store.base_dir)),
             "settings": len(self.main_app.settings.allKeys()),
         }
 
@@ -171,6 +177,7 @@ class PrivacyDataDialog(QDialog):
         The in-memory reset is the part that matters: dropping session_history.json while
         ScoreTracker still holds the list would just write it back at the next session end.
         """
+        log.info("Clearing user data: %s", ", ".join(keys))
         for key in keys:
             if key == "session_history":
                 self.main_app.score_tracker.clear_history()
@@ -180,6 +187,8 @@ class PrivacyDataDialog(QDialog):
                 self.main_app.callout_handler.clear_custom_phrase_files()
             elif key == "last_selected_folders":
                 self.main_app.data_store.delete("last_selected_folders")
+            elif key == "diagnostic_log":
+                applog.delete_log_files(self.main_app.data_store.base_dir)
             elif key == "settings":
                 self.main_app.settings.clear()
                 self.main_app.settings.sync()

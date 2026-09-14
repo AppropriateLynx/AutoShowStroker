@@ -4,7 +4,10 @@ import time
 from PyQt6.QtCore import QMutex, QObject, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QSoundEffect
 
+from src.applog import get_logger
 from src.utils import get_project_root
+
+log = get_logger(__name__)
 
 
 class BeatHandler(QObject):
@@ -405,6 +408,7 @@ class BeatHandler(QObject):
             raise ValueError(f"'{name}' collides with a built-in pattern name.")
         self._validate_pattern_steps(steps)
 
+        log.info("Custom pattern %r saved with %d steps", name, len(steps))
         self.custom_beat_patterns[name] = list(steps)
         self.available_beat_patterns = {**self.BEAT_PATTERNS_MAP, **self.custom_beat_patterns}
         if name not in self.selected_beat_patterns:
@@ -412,6 +416,7 @@ class BeatHandler(QObject):
         self._save_custom_patterns()
 
     def delete_custom_pattern(self, name):
+        log.info("Custom pattern %r deleted", name)
         self.custom_beat_patterns.pop(name, None)
         self.available_beat_patterns = {**self.BEAT_PATTERNS_MAP, **self.custom_beat_patterns}
         if name in self.selected_beat_patterns:
@@ -421,6 +426,7 @@ class BeatHandler(QObject):
     def clear_custom_patterns(self):
         """Forgets every user-authored pattern. The built-ins are untouched - this is a
         data deletion, not a rhythm reset."""
+        log.info("Clearing %d custom pattern(s)", len(self.custom_beat_patterns))
         self.custom_beat_patterns = {}
         self.available_beat_patterns = dict(self.BEAT_PATTERNS_MAP)
         self.selected_beat_patterns = [
@@ -451,22 +457,22 @@ class BeatHandler(QObject):
         we can guess at, and dropping it keeps the rest of the file usable.
         """
         if not isinstance(raw, dict):
-            print(f"Ignoring custom patterns: expected an object, got {type(raw).__name__}.")
+            log.warning("Ignoring custom patterns: expected an object, got %s", type(raw).__name__)
             return {}
 
         clean = {}
         for name, steps in raw.items():
             if not isinstance(name, str) or not isinstance(steps, list):
-                print(f"Skipping custom pattern {name!r}: not a list of steps.")
+                log.warning("Skipping custom pattern %r: not a list of steps", name)
                 continue
             # bool is an int subclass - exclude it so True/False can't pose as weights.
             if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in steps):
-                print(f"Skipping custom pattern {name!r}: every step must be a number.")
+                log.warning("Skipping custom pattern %r: every step must be a number", name)
                 continue
             try:
                 cls._validate_pattern_steps(steps)
             except ValueError as error:
-                print(f"Skipping custom pattern {name!r}: {error}")
+                log.warning("Skipping custom pattern %r: %s", name, error)
                 continue
             clean[name] = steps
         return clean

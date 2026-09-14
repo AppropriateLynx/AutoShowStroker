@@ -459,3 +459,17 @@ def test_saving_during_a_running_beat_still_recalculates(app, dialog, tmp_path, 
     dialog.accept_settings()
 
     assert called.get("called") is True
+
+
+def test_diagnostic_log_checkbox_initialized_from_app(app, dialog):
+    assert dialog.diagnostic_log_checkbox.isChecked() == app.diagnostic_log
+
+
+def test_accept_settings_applies_the_diagnostic_log_toggle(app, dialog):
+    dialog.diagnostic_log_checkbox.setChecked(True)
+
+    dialog.accept_settings()
+
+    assert app.diagnostic_log is True
+    assert app.settings.value("GoonerApp/diagnostic_log", type=bool) is True
+    app.set_diagnostic_log_enabled(False)

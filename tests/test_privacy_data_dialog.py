@@ -187,3 +187,48 @@ def test_deleting_also_removes_quarantined_and_temp_leftovers(app, dialog):
     assert not path.exists()
     assert not path.with_suffix(".json.corrupt").exists()
     assert not path.with_suffix(".json.tmp").exists()
+
+
+# --- the diagnostic log is user data too ---
+
+
+def test_the_log_is_offered_as_its_own_category(dialog):
+    assert "diagnostic_log" in dialog.checkboxes
+
+
+def test_the_log_count_reflects_the_files_on_disk(app, dialog):
+    from src import applog
+
+    app.set_diagnostic_log_enabled(True)
+    applog.get_logger("src.Test").info("a line")
+    dialog.refresh_counts()
+
+    assert dialog.category_counts()["diagnostic_log"] == 1
+    app.set_diagnostic_log_enabled(False)
+
+
+def test_clearing_the_log_removes_it(app, dialog):
+    from src import applog
+
+    app.set_diagnostic_log_enabled(True)
+    applog.get_logger("src.Test").info("a line")
+
+    dialog.clear_categories(["diagnostic_log"])
+
+    assert applog.log_file_paths(app.data_store.base_dir) == []
+    app.set_diagnostic_log_enabled(False)
+
+
+def test_clearing_the_log_leaves_logging_working(app, dialog):
+    from src import applog
+
+    app.set_diagnostic_log_enabled(True)
+    applog.get_logger("src.Test").info("before")
+
+    dialog.clear_categories(["diagnostic_log"])
+    applog.get_logger("src.Test").info("after")
+
+    contents = applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
+    assert "after" in contents
+    assert "before" not in contents
+    app.set_diagnostic_log_enabled(False)

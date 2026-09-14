@@ -25,6 +25,10 @@ from pathlib import Path
 
 from PyQt6.QtCore import QStandardPaths
 
+from src.applog import get_logger
+
+log = get_logger(__name__)
+
 # Registry keys no production code reads any more. Removed once, on the next launch.
 # TTSHandler/* is left over from the text-to-speech feature that was reverted (Windows 11
 # Natural voices turned out to be Narrator-exclusive); GoonerApp/loudness was superseded
@@ -93,7 +97,7 @@ class UserDataStore:
             tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
             os.replace(tmp_path, path)
         except OSError as error:
-            print(f"Could not save {name}: {error}")
+            log.error("Could not save %s: %s", name, error)
             return False
         return True
 
@@ -121,7 +125,7 @@ class UserDataStore:
             except FileNotFoundError:
                 pass
             except OSError as error:
-                print(f"Could not delete {candidate.name}: {error}")
+                log.warning("Could not delete %s: %s", candidate.name, error)
         return removed
 
     def migrate_legacy_location(self) -> None:
@@ -143,11 +147,11 @@ class UserDataStore:
                 shutil.move(str(path), str(target))
                 moved += 1
             except OSError as error:
-                print(f"Could not move {path.name} out of the roaming profile: {error}")
+                log.warning("Could not move %s out of the roaming profile: %s", path.name, error)
                 return
 
         if moved:
-            print(f"Moved {moved} data file(s) out of {old_dir}.")
+            log.info("Moved %d data file(s) out of %s", moved, old_dir)
         try:
             old_dir.rmdir()  # only succeeds once it is genuinely empty
         except OSError:

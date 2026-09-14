@@ -159,6 +159,13 @@ HELP_TOPICS = [
         "those. Open <b>Help &gt; Privacy &amp; Data</b> to see the exact paths on this "
         "machine, open the data folder, or delete any of it - per category, so you can "
         "wipe the remembered folder paths without losing your stats.</p>"
+        "<h3>The diagnostic log</h3>"
+        "<p>There is also an optional log file, <b>off by default</b>. Turn it on under "
+        "Settings &gt; Playback &gt; \"Write a diagnostic log file\" only if something is "
+        "misbehaving and you want to see why - it records what the app is doing, which "
+        "means it also records <i>when</i> you used it. It never contains the folders you "
+        "play from; a file that failed to load is named, nothing else is. It sits with "
+        "your other data and can be deleted on its own from Privacy &amp; Data.</p>"
         "<h3>What that means going forward</h3>"
         "<p>Any future feature that would need the internet stays held to the same bar: "
         "strictly opt-in and clearly disclosed here - never on by default, never silent.</p>",

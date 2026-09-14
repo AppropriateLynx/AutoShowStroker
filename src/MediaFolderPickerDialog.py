@@ -25,7 +25,10 @@ from PyQt6.QtWidgets import (
 )
 
 from src import media_kinds, theme
+from src.applog import get_logger
 from src.thumbnail_sampling import compute_thumbnail_grid, sample_thumbnails_with_video_cap
+
+log = get_logger(__name__)
 
 THUMBNAIL_CELL_SIZE = (140, 140)
 GRID_SPACING = 8
@@ -463,7 +466,7 @@ class MediaFolderPickerDialog(QDialog):
                 size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
             )
         except Exception as error:
-            print(f"Could not build a thumbnail for {Path(path).name}: {error}")
+            log.warning("Could not build a thumbnail for %s: %s", Path(path).name, error)
             return None
 
     def _make_gif_cell(self, path) -> QWidget:
@@ -490,7 +493,7 @@ class MediaFolderPickerDialog(QDialog):
             movie.start()
             label._movie = movie  # keep alive - see _discard_cell
         except Exception as error:
-            print(f"Could not animate {Path(path).name}: {error}")
+            log.warning("Could not animate %s: %s", Path(path).name, error)
             label.setText(Path(path).name)
         return label
 
@@ -626,7 +629,7 @@ class MediaFolderPickerDialog(QDialog):
             # Broad on purpose - this wraps a nested event loop, so a slot dispatched while
             # we wait can surface here too. Logged rather than swallowed: a real bug used to
             # be indistinguishable from "this file has no thumbnail".
-            print(f"Could not grab a frame from {Path(path).name}: {error!r}")
+            log.warning("Could not grab a frame from %s: %r", Path(path).name, error)
             return None
         finally:
             player.stop()

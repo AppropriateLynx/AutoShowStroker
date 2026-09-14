@@ -4,7 +4,10 @@ from pathlib import Path
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
+from src.applog import get_logger
 from src.utils import get_project_root
+
+log = get_logger(__name__)
 
 TRIGGER_KEYS = [
     "beat_change_general",
@@ -28,8 +31,8 @@ class CalloutHandler(QObject):
     new_tease_event = pyqtSignal(str)
     hide_tease_event = pyqtSignal()
 
-    # Keep in sync with the literal defaults set in __init__ below - single source of truth
-    # for the SettingsDialog "Reset to defaults" button.
+    # Single source of truth: __init__ reads these as its fallbacks, and the
+    # SettingsDialog "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
         "active_callout": False,
         "talking_chance": 0.5,
@@ -91,7 +94,7 @@ class CalloutHandler(QObject):
             # stripped entirely under python -O, silently booting into this same state
             # instead. Degrading here matches how an *empty* callout dir already behaved,
             # and how user_data.py treats unreadable data: never stop the app from starting.
-            print(f"No callout directory at {self.callout_dir} - callouts are disabled.")
+            log.error("No callout directory at %s - callouts are disabled", self.callout_dir)
             return
 
         for json_file in self.callout_dir.glob("*.json"):
@@ -103,7 +106,7 @@ class CalloutHandler(QObject):
                 with open(json_file, encoding='utf-8') as f:
                     self.callout_data[lang_code] = json.load(f)
             except Exception as e:
-                print(f"Error loading the callout file {json_file}: {e}")
+                log.warning("Could not load the callout file %s: %s", json_file.name, e)
 
         if self.available_languages and (
             self.lang not in self.callout_data or self.lang not in self.available_languages
@@ -120,7 +123,7 @@ class CalloutHandler(QObject):
         if lang in self.callout_data and lang in self.available_languages:
             self.lang = lang
         else:
-            print(f"Tried setting {lang}. That language is not available.")
+            log.warning("Language %r is not available", lang)
 
     def _read_custom_file(self, path: str) -> dict:
         try:
@@ -152,7 +155,7 @@ class CalloutHandler(QObject):
             try:
                 self._merge_phrases(entry["lang"], self._read_custom_file(entry["path"]))
             except ValueError as e:
-                print(f"Skipping custom callout file: {e}")
+                log.warning("Skipping a custom callout file: %s", e)
 
     def load_custom_file(self, path: str, lang: str):
         if lang not in self.available_languages:
@@ -223,7 +226,7 @@ class CalloutHandler(QObject):
             self.is_teasing = True
             self.tease_active_timer.start(self.tease_time)
         except (KeyError, IndexError):
-            print(f"Category {category} is empty or not present.")
+            log.warning("No %r phrases available for language %r", category, self.lang)
 
     def force_output_sentence(self, category):
         """Emits a phrase from `category` unconditionally, skipping the active_callout/
@@ -233,7 +236,7 @@ class CalloutHandler(QObject):
         try:
             tease = random.choice(self.callout_data[self.lang][category])
         except (KeyError, IndexError):
-            print(f"Category {category} is empty or not present.")
+            log.warning("No %r phrases available for language %r", category, self.lang)
             return
         self.new_tease_event.emit(tease)
         self.is_teasing = True

@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src import changelog, media_kinds, theme
+from src import applog, changelog, media_kinds, theme
 from src.BeatHandler import BeatHandler
 from src.BeatTrackWidget import BeatTrackWidget
 from src.CalloutHandler import CalloutHandler
@@ -43,6 +43,8 @@ DENIED_STOP_DELAY_MS = 5000
 # entirely unplayable playlist cycles visibly instead of spinning.
 MEDIA_ERROR_ADVANCE_MS = 1000
 
+log = applog.get_logger(__name__)
+
 
 class GoonerApp(QMainWindow):
     SETTINGS_GROUP = "GoonerApp"  # see BeatHandler.SETTINGS_GROUP
@@ -54,8 +56,8 @@ class GoonerApp(QMainWindow):
     media_repeated_event = pyqtSignal()
     media_skipped_event = pyqtSignal()
 
-    # Keep in sync with the literal defaults set in __init__ below - single source of truth
-    # for the SettingsDialog "Reset to defaults" button.
+    # Single source of truth: __init__ reads these as its fallbacks, and the
+    # SettingsDialog "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
         "min_dur": 0.5,
         "max_dur": 4.0,
@@ -64,6 +66,7 @@ class GoonerApp(QMainWindow):
         "show_startup_splash": True,
         "show_record_chase": True,
         "show_session_timer": True,
+        "diagnostic_log": False,
     }
 
     def __init__(self, settings: QSettings | None = None, data_store=None):
@@ -71,6 +74,13 @@ class GoonerApp(QMainWindow):
 
         self.settings = settings if settings is not None else QSettings("GoonerCock", "GoonerApp")
         self.data_store = data_store if data_store is not None else UserDataStore()
+        # Configured before anything else runs, so the very first warnings (a failed
+        # migration, a missing callout directory) land in the log rather than being lost.
+        self.diagnostic_log = bool(
+            self.settings.value("GoonerApp/diagnostic_log", self.DEFAULTS["diagnostic_log"], type=bool)
+        )
+        applog.configure(self.diagnostic_log, self.data_store.base_dir)
+        log.info("GoonerApp %s starting", get_current_version())
         self.data_store.migrate_legacy_location()
         self.data_store.prune_legacy_registry_keys(self.settings)
 
@@ -87,7 +97,7 @@ class GoonerApp(QMainWindow):
         if icon_path.exists():
             self.setWindowIcon(QIcon(str_icon_path))
         else:
-            print(f"Icon not found at: {str_icon_path}")
+            log.warning("Window icon not found at %s", str_icon_path)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -518,6 +528,13 @@ class GoonerApp(QMainWindow):
         dialog.exec()
         dialog.deleteLater()
 
+    def set_diagnostic_log_enabled(self, enabled: bool):
+        """Turns the opt-in diagnostic log on or off, and persists the choice."""
+        self.diagnostic_log = bool(enabled)
+        self.settings.setValue("GoonerApp/diagnostic_log", self.diagnostic_log)
+        applog.configure(self.diagnostic_log, self.data_store.base_dir)
+        log.info("Diagnostic log %s", "enabled" if self.diagnostic_log else "disabled")
+
     def show_privacy_data_dialog(self):
         dialog = PrivacyDataDialog(self, parent=self)
         dialog.exec()
@@ -581,7 +598,7 @@ class GoonerApp(QMainWindow):
         """
         url = QUrl(url_string)
         if url.scheme() not in ("http", "https"):
-            print(f"Refusing to open a non-web URL: {url_string!r}")
+            log.warning("Refusing to open a non-web URL: %r", url_string)
             return
         QDesktopServices.openUrl(url)
 
@@ -639,7 +656,7 @@ class GoonerApp(QMainWindow):
         arrow key. Advancing on a timer rather than calling show_next() directly bounds the
         damage to one file a second if the whole playlist turns out to be unplayable.
         """
-        print(f"Skipping unplayable media: {reason}")
+        log.warning("Skipping unplayable media: %s", reason)
         self.auto_play_timer.start(MEDIA_ERROR_ADVANCE_MS)
 
     def next_img_timer(self):
@@ -659,6 +676,8 @@ class GoonerApp(QMainWindow):
         dialog.deleteLater()
         if accepted:
             self._update_climax_status_label("neutral")
+            # Counts only - never the folder paths. See applog's module docstring.
+            log.info("Playlist loaded: %d files", len(files))
             if files:
                 random.shuffle(files)
                 self.playlist = files
@@ -763,6 +782,11 @@ class GoonerApp(QMainWindow):
         self.btn_prev.setEnabled(False)
         self.btn_stop.setEnabled(False)
         self._freeze_climax_blink()
+        log.info(
+            "Session ended after %s (statistics shown: %s)",
+            format_clock(self.score_tracker.live_metrics().get("total_dur_sec", 0)),
+            show_statistics,
+        )
         self.session_ended_event.emit()
         if show_statistics:
             self.show_statistics()
@@ -777,6 +801,7 @@ class GoonerApp(QMainWindow):
             # running session. _start_session_timer/_start_record_chase both now check it,
             # and would have hidden their overlays the moment they were meant to appear.
             self.is_running = True
+            log.info("Session started")
             self.session_started_event.emit()
             self.btn_next.setEnabled(True)
             self.btn_prev.setEnabled(True)
@@ -787,6 +812,7 @@ class GoonerApp(QMainWindow):
         self.recalc_autoplay_timer()
 
     def _on_climax_outcome(self, outcome):
+        log.info("Climax outcome: %s", outcome)
         if outcome == "denied":
             self._denied_stop_timer.start(DENIED_STOP_DELAY_MS)
 

@@ -1,0 +1,169 @@
+import logging
+
+import pytest
+
+from src import applog
+
+
+@pytest.fixture(autouse=True)
+def _reset_logging():
+    """Handlers live on a module-level logger, so a test that leaves one attached would
+    keep writing into the previous test's tmp_path."""
+    yield
+    applog.configure(enabled=False, log_dir=None)
+
+
+def test_get_logger_returns_a_child_of_the_app_logger():
+    logger = applog.get_logger("src.BeatHandler")
+
+    assert logger.name == "gooner.BeatHandler"
+    assert logger.parent.name == applog.LOGGER_NAME
+
+
+def test_get_logger_is_stable_for_the_same_module():
+    assert applog.get_logger("src.BeatHandler") is applog.get_logger("src.BeatHandler")
+
+
+def test_nothing_is_written_when_logging_is_disabled(tmp_path):
+    applog.configure(enabled=False, log_dir=tmp_path)
+
+    applog.get_logger("src.Test").error("something went wrong")
+
+    assert applog.log_file_paths(tmp_path) == []
+
+
+def test_enabling_writes_to_a_file(tmp_path):
+    applog.configure(enabled=True, log_dir=tmp_path)
+
+    applog.get_logger("src.Test").info("hello from the test")
+
+    contents = applog.log_file_path(tmp_path).read_text(encoding="utf-8")
+    assert "hello from the test" in contents
+    assert "INFO" in contents
+
+
+@pytest.mark.parametrize(
+    ("level", "expected"),
+    [("info", True), ("warning", True), ("error", True), ("critical", True), ("debug", False)],
+)
+def test_info_is_the_lowest_level_that_gets_through(tmp_path, level, expected):
+    """Deliberately no DEBUG/TRACE: the log exists to explain a user's problem, not to
+    trace execution, and a chatty log in an app like this is a liability."""
+    applog.configure(enabled=True, log_dir=tmp_path)
+
+    getattr(applog.get_logger("src.Test"), level)("marker-%s", level)
+
+    path = applog.log_file_path(tmp_path)
+    # A filtered-out message writes nothing at all - the handler opens the file lazily.
+    contents = path.read_text(encoding="utf-8") if path.exists() else ""
+    assert (f"marker-{level}" in contents) is expected
+
+
+def test_the_level_name_is_recorded(tmp_path):
+    applog.configure(enabled=True, log_dir=tmp_path)
+
+    applog.get_logger("src.Test").warning("careful")
+
+    assert "WARNING" in applog.log_file_path(tmp_path).read_text(encoding="utf-8")
+
+
+def test_exception_details_are_captured(tmp_path):
+    applog.configure(enabled=True, log_dir=tmp_path)
+
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        applog.get_logger("src.Test").exception("while doing a thing")
+
+    contents = applog.log_file_path(tmp_path).read_text(encoding="utf-8")
+    assert "while doing a thing" in contents
+    assert "ValueError: boom" in contents
+
+
+def test_disabling_again_stops_writing(tmp_path):
+    applog.configure(enabled=True, log_dir=tmp_path)
+    applog.get_logger("src.Test").info("first")
+
+    applog.configure(enabled=False, log_dir=tmp_path)
+    applog.get_logger("src.Test").info("second")
+
+    contents = applog.log_file_path(tmp_path).read_text(encoding="utf-8")
+    assert "first" in contents
+    assert "second" not in contents
+
+
+def test_reconfiguring_does_not_stack_handlers(tmp_path):
+    for _ in range(3):
+        applog.configure(enabled=True, log_dir=tmp_path)
+
+    applog.get_logger("src.Test").info("once please")
+
+    contents = applog.log_file_path(tmp_path).read_text(encoding="utf-8")
+    assert contents.count("once please") == 1
+
+
+def test_configure_survives_an_unwritable_directory(tmp_path):
+    """A log that cannot be opened must never stop the app from starting."""
+    blocker = tmp_path / "logs"
+    blocker.write_text("I am a file, not a directory", encoding="utf-8")
+
+    applog.configure(enabled=True, log_dir=blocker)
+
+    applog.get_logger("src.Test").info("still alive")
+
+
+def test_log_file_paths_lists_rotated_backups(tmp_path):
+    applog.configure(enabled=True, log_dir=tmp_path)
+    applog.get_logger("src.Test").info("current")
+    (tmp_path / f"{applog.LOG_FILE_NAME}.1").write_text("older", encoding="utf-8")
+
+    names = sorted(p.name for p in applog.log_file_paths(tmp_path))
+
+    assert names == [applog.LOG_FILE_NAME, f"{applog.LOG_FILE_NAME}.1"]
+
+
+def test_delete_log_files_removes_them_while_logging_is_active(tmp_path):
+    """Windows keeps the file locked while the handler holds it open, so deleting has to
+    close the handler first - this is the whole reason delete lives in this module."""
+    applog.configure(enabled=True, log_dir=tmp_path)
+    applog.get_logger("src.Test").info("to be deleted")
+    (tmp_path / f"{applog.LOG_FILE_NAME}.1").write_text("older", encoding="utf-8")
+
+    assert applog.delete_log_files(tmp_path) is True
+    assert applog.log_file_paths(tmp_path) == []
+
+
+def test_logging_still_works_after_a_delete(tmp_path):
+    applog.configure(enabled=True, log_dir=tmp_path)
+    applog.get_logger("src.Test").info("before")
+    applog.delete_log_files(tmp_path)
+
+    applog.get_logger("src.Test").info("after")
+
+    assert "after" in applog.log_file_path(tmp_path).read_text(encoding="utf-8")
+
+
+def test_delete_reports_false_when_there_was_nothing(tmp_path):
+    applog.configure(enabled=False, log_dir=tmp_path)
+
+    assert applog.delete_log_files(tmp_path) is False
+
+
+def test_rotation_is_bounded(tmp_path):
+    applog.configure(enabled=True, log_dir=tmp_path)
+    logger = applog.get_logger("src.Test")
+
+    for i in range(4000):
+        logger.info("padding line %s with enough text to push the file over the limit", i)
+
+    paths = applog.log_file_paths(tmp_path)
+    assert len(paths) <= applog.BACKUP_COUNT + 1
+    assert all(p.stat().st_size <= applog.MAX_BYTES * 2 for p in paths)
+
+
+def test_app_logger_does_not_leak_into_the_root_logger(tmp_path, caplog):
+    """propagate=False - otherwise pytest's own root handlers (and anything a library
+    installs) would pick up every line."""
+    applog.configure(enabled=True, log_dir=tmp_path)
+
+    assert logging.getLogger(applog.LOGGER_NAME).propagate is False
