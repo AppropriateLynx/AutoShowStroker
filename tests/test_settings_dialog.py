@@ -123,19 +123,21 @@ def test_accept_settings_updates_callout_handler(app, dialog):
     assert app.callout_handler.lang == other_lang
 
 
-def test_accept_settings_recalculates_beat_when_running(app, dialog, monkeypatch):
+def test_accept_settings_replans_when_running(app, dialog, monkeypatch):
     app.is_running = True
     called = {}
-    monkeypatch.setattr(app.beat_handler, "recalc_beat", lambda: called.setdefault("called", True))
+    monkeypatch.setattr(app.beat_handler, "replan_from_next_segment", lambda: called.setdefault("called", True))
 
     dialog.accept_settings()
 
     assert called.get("called") is True
 
 
-def test_accept_settings_does_not_recalculate_beat_when_stopped(app, dialog, monkeypatch):
+def test_accept_settings_does_not_replan_when_stopped(app, dialog, monkeypatch):
     app.is_running = False
-    monkeypatch.setattr(app.beat_handler, "recalc_beat", lambda: pytest.fail("should not recalc"))
+    monkeypatch.setattr(
+        app.beat_handler, "replan_from_next_segment", lambda: pytest.fail("should not replan")
+    )
 
     dialog.accept_settings()
 
@@ -210,7 +212,7 @@ def test_climax_fields_initialized_from_climax_handler(app, dialog):
     assert dialog.ruined_orgasm_active_checkbox.isChecked() == app.climax_handler.ruined_orgasm_active
     assert dialog.denied_orgasm_active_checkbox.isChecked() == app.climax_handler.denied_orgasm_active
     assert dialog.fake_climax_active_checkbox.isChecked() == app.climax_handler.fake_climax_active
-    assert dialog.settings_fields["climax_chance"]["object"] is app.climax_handler
+    assert dialog.settings_fields["min_climax_delay"]["object"] is app.climax_handler
     assert dialog.settings_fields["ruined_orgasm_chance"]["object"] is app.climax_handler
     assert dialog.settings_fields["denied_orgasm_chance"]["object"] is app.climax_handler
     assert dialog.settings_fields["fake_climax_chance"]["object"] is app.climax_handler
@@ -241,11 +243,11 @@ def test_accept_settings_updates_climax_toggles(app, dialog):
 
 
 def test_accept_settings_applies_climax_spinbox_values(app, dialog):
-    dialog.settings_fields["climax_chance"]["widget"].setValue(0.42)
+    dialog.settings_fields["min_climax_delay"]["widget"].setValue(90.0)
 
     dialog.accept_settings()
 
-    assert app.climax_handler.climax_chance == pytest.approx(0.42)
+    assert app.climax_handler.min_climax_delay == pytest.approx(90.0)
 
 
 # --- reset to defaults ---
@@ -298,7 +300,7 @@ def test_beat_reset_button_resets_fields(app, dialog):
 
 
 def test_climax_reset_button_resets_fields(app, dialog):
-    dialog.settings_fields["climax_chance"]["widget"].setValue(0.99)
+    dialog.settings_fields["min_climax_delay"]["widget"].setValue(990.0)
     dialog.climax_active_checkbox.setChecked(False)
     dialog.ruined_orgasm_active_checkbox.setChecked(True)
     dialog.denied_orgasm_active_checkbox.setChecked(True)
@@ -307,8 +309,8 @@ def test_climax_reset_button_resets_fields(app, dialog):
     dialog.climax_reset_button.click()
 
     climax_defaults = app.climax_handler.DEFAULTS
-    assert dialog.settings_fields["climax_chance"]["widget"].value() == pytest.approx(
-        climax_defaults["climax_chance"]
+    assert dialog.settings_fields["min_climax_delay"]["widget"].value() == pytest.approx(
+        climax_defaults["min_climax_delay"]
     )
     assert dialog.climax_active_checkbox.isChecked() == climax_defaults["climax_active"]
     assert dialog.ruined_orgasm_active_checkbox.isChecked() == climax_defaults["ruined_orgasm_active"]
@@ -437,30 +439,38 @@ def test_every_spinbox_can_actually_reach_its_own_step(dialog):
         assert rounded == step, f"{var_name}: step {step} is finer than {widget.decimals()} decimals"
 
 
-def test_saving_during_a_pause_does_not_force_a_new_beat(app, dialog, tmp_path):
-    """recalc_beat() mid-pause announced a new beat over the pause caption and rolled the
-    climax dice, then threw the pattern away when the pause ended anyway."""
+def test_saving_leaves_the_running_segment_alone(app, dialog, tmp_path):
+    """Cutting the beat the user is currently following out from under them, just to prove
+    the save landed, is worse than letting it play out."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    running = app.beat_handler.current_segment
+
+    dialog.accept_settings()
+
+    assert app.beat_handler.current_segment is running
+
+
+def test_saving_applies_the_new_values_to_everything_still_queued(app, dialog, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    dialog.settings_fields["min_beat_dur"]["widget"].setValue(30.0)
+    dialog.settings_fields["max_beat_dur"]["widget"].setValue(30.0)
+
+    dialog.accept_settings()
+
+    assert all(s.duration_sec == 30.0 for s in app.beat_handler.planned_segments if s.kind == "beat")
+
+
+def test_saving_during_a_pause_lets_the_pause_finish(app, dialog, tmp_path):
     app.playlist = [tmp_path / "a.png"]
     app.start()
     app.beat_handler.start_pause()
     assert app.beat_handler.is_paused()
-    before = app.beat_handler.current_beat_pattern_name
 
     dialog.accept_settings()
 
-    assert app.beat_handler.current_beat_pattern_name == before
     assert app.beat_handler.is_paused()
-
-
-def test_saving_during_a_running_beat_still_recalculates(app, dialog, tmp_path, monkeypatch):
-    app.playlist = [tmp_path / "a.png"]
-    app.start()
-    called = {}
-    monkeypatch.setattr(app.beat_handler, "recalc_beat", lambda: called.setdefault("called", True))
-
-    dialog.accept_settings()
-
-    assert called.get("called") is True
 
 
 # --- callout tones (second axis next to language) ---

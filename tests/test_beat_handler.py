@@ -3,7 +3,7 @@ import json
 import pytest
 from PyQt6.QtCore import QSettings
 
-from src.BeatHandler import BeatHandler
+from src.BeatHandler import BeatHandler, Segment
 from src.user_data import UserDataStore
 
 
@@ -56,22 +56,22 @@ def test_set_muted_mutes_and_unmutes_sound_effect(handler):
     assert handler.sound_effect.muted is False
 
 
-def test_recalc_beat_only_picks_from_selected_patterns(handler):
+def test_beat_segment_only_picks_from_selected_patterns(handler):
     handler.selected_beat_patterns = ["Standard Beat"]
-    handler.recalc_beat()
+    handler.start_beat()
     assert handler.current_beat_pattern == BeatHandler.BEAT_PATTERNS_MAP["Standard Beat"]
 
 
-def test_recalc_beat_frequency_within_bounds(handler):
+def test_beat_segment_frequency_within_bounds(handler):
     handler.min_beat_freq = 1.0
     handler.max_beat_freq = 1.0
-    handler.recalc_beat()
+    handler.start_beat()
     assert handler.cur_freq == 1.0
 
 
-def test_recalc_beat_emits_beat_change_event(handler, qtbot):
+def test_beat_segment_emits_beat_change_event(handler, qtbot):
     with qtbot.waitSignal(handler.beat_change_event, timeout=1000) as blocker:
-        handler.recalc_beat()
+        handler.start_beat()
     freq, _pattern_str = blocker.args
     assert freq == handler.cur_freq
 
@@ -98,7 +98,7 @@ def test_pause_loop_resumes_and_resets_frequency(handler, qtbot):
     handler.cur_pause_dur = 1
     with qtbot.waitSignal(handler.beat_resumed_event, timeout=1000):
         handler.pause_loop()
-    assert handler.cur_freq != 0  # reset_beat_timer immediately recalculates a new beat
+    assert handler.cur_freq != 0  # the next planned segment goes on the air right away
 
 
 def test_toggle_blink_alternates_state(handler, qtbot):
@@ -120,9 +120,9 @@ def test_stop_emits_idle_beat_meter_reset(handler, qtbot):
     assert blocker.args == ["Strokemeter appears here.", "idle"]
 
 
-def test_recalc_beat_emits_new_beat_meter_update(handler, qtbot):
+def test_beat_segment_emits_new_beat_meter_update(handler, qtbot):
     with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
-        handler.recalc_beat()
+        handler.start_beat()
     text, kind = blocker.args
     assert text == f"New Beat! {handler.current_beat_pattern}"
     assert kind == "new_beat"
@@ -269,21 +269,19 @@ def test_is_ramp_complete_true_regardless_of_ramping_active_toggle(handler, monk
 # --- BPM normalization (cur_freq == real audible beats/sec, independent of pattern shape) ---
 
 
-def test_reset_beat_timer_interval_matches_freq_for_standard_beat(handler):
+def test_beat_interval_matches_freq_for_standard_beat(handler):
     handler.selected_beat_patterns = ["Standard Beat"]  # [1]
     handler.min_beat_freq = 2.0
     handler.max_beat_freq = 2.0
-    handler.recalc_beat()
-    handler.reset_beat_timer()
+    handler.start_beat()
     assert handler.beat_meter_timer.interval() == int(1000 / 2.0)
 
 
-def test_reset_beat_timer_interval_normalizes_audible_rate_for_sparse_pattern(handler):
+def test_beat_interval_normalizes_audible_rate_for_sparse_pattern(handler):
     handler.selected_beat_patterns = ["Slow Pulse"]  # [1, 1, -1, -1, -1, -1, -1, -1]
     handler.min_beat_freq = 2.0
     handler.max_beat_freq = 2.0
-    handler.recalc_beat()
-    handler.reset_beat_timer()
+    handler.start_beat()
 
     audible_count = 2
     inv_sum = 8  # all eight steps have abs value 1
@@ -386,10 +384,10 @@ def test_add_custom_pattern_rejects_empty_name(handler):
         handler.add_or_update_custom_pattern("", [1, -1])
 
 
-def test_recalc_beat_emits_pattern_name(handler, qtbot):
+def test_beat_segment_emits_pattern_name(handler, qtbot):
     handler.selected_beat_patterns = ["Standard Beat"]
     with qtbot.waitSignal(handler.beat_change_event, timeout=1000) as blocker:
-        handler.recalc_beat()
+        handler.start_beat()
     _freq, pattern_name = blocker.args
     assert pattern_name == "Standard Beat"
 
@@ -502,29 +500,29 @@ def _mutex_is_free(handler):
     return False
 
 
-def test_recalc_beat_falls_back_when_nothing_is_selected(handler):
+def test_beat_segment_falls_back_when_nothing_is_selected(handler):
     handler.selected_beat_patterns = []
-    handler.recalc_beat()
+    handler.start_beat()
     assert handler.current_beat_pattern_name in BeatHandler.BEAT_PATTERNS_MAP
 
 
-def test_recalc_beat_skips_selected_patterns_that_no_longer_exist(handler):
+def test_beat_segment_skips_selected_patterns_that_no_longer_exist(handler):
     handler.selected_beat_patterns = ["Ghost Pattern", "Standard Beat"]
-    for _ in range(20):
-        handler.recalc_beat()
-        assert handler.current_beat_pattern_name == "Standard Beat"
+    handler.start_beat()
+    planned = [handler.current_segment, *handler.planned_segments]
+    assert {s.pattern_name for s in planned if s.kind != "pause"} == {"Standard Beat"}
 
 
-def test_recalc_beat_falls_back_when_every_selected_pattern_is_gone(handler):
+def test_beat_segment_falls_back_when_every_selected_pattern_is_gone(handler):
     handler.selected_beat_patterns = ["Ghost Pattern"]
-    handler.recalc_beat()
+    handler.start_beat()
     assert handler.current_beat_pattern_name in BeatHandler.BEAT_PATTERNS_MAP
 
 
-def test_recalc_beat_treats_a_single_stored_string_as_one_name(handler):
+def test_beat_segment_treats_a_single_stored_string_as_one_name(handler):
     # A one-element QStringList can come back from QSettings as a bare str.
     handler.selected_beat_patterns = "Standard Beat"
-    handler.recalc_beat()
+    handler.start_beat()
     assert handler.current_beat_pattern_name == "Standard Beat"
 
 
@@ -541,18 +539,19 @@ def test_start_pause_survives_inverted_pause_bounds(handler):
     assert 5 <= handler.cur_pause_dur <= 30
 
 
-def test_recalc_beat_releases_the_mutex_when_it_raises(handler, monkeypatch):
-    def boom(_seq):
-        raise RuntimeError("boom")
+def test_applying_a_beat_segment_releases_the_mutex_when_it_raises(handler):
+    class Exploding(dict):
+        def get(self, *_args):
+            raise RuntimeError("boom")
 
-    monkeypatch.setattr("src.BeatHandler.random.choice", boom)
+    handler.available_beat_patterns = Exploding()
     with pytest.raises(RuntimeError):
-        handler.recalc_beat()
+        handler._apply_beat_segment(Segment("beat", 10.0, 1.0, "Standard Beat", 0))
     assert _mutex_is_free(handler)
 
 
 def test_reset_beat_timer_releases_the_mutex_when_it_raises(handler, monkeypatch):
-    handler.recalc_beat()
+    handler.start_beat()
 
     def boom():
         raise RuntimeError("boom")

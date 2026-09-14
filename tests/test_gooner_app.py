@@ -583,12 +583,12 @@ def test_beat_event_flashes_the_beat_track(app):
 
 
 def test_beat_change_sweeps_the_beat_track(app):
-    # recalc_beat re-seeds the whole prediction, so every note on screen jumps at once -
-    # the sweep is what covers that reset.
+    # A new segment re-seeds the whole prediction, so every note on screen jumps at
+    # once - the sweep is what covers that reset.
     assert app.beat_track._change_progress() is None
 
     app.beat_handler.selected_beat_patterns = ["Standard Beat"]
-    app.beat_handler.recalc_beat()
+    app.beat_handler.start_beat()
 
     assert app.beat_track._change_progress() is not None
 
@@ -608,8 +608,7 @@ def test_beat_track_animates_only_while_a_session_runs(app, tmp_path):
 
 def test_beat_track_reads_upcoming_beats_from_the_handler(app):
     app.beat_handler.selected_beat_patterns = ["Standard Beat"]
-    app.beat_handler.recalc_beat()
-    app.beat_handler.reset_beat_timer()
+    app.beat_handler.start_beat()
 
     upcoming = app.beat_track.beat_handler.upcoming_beats(BeatTrackWidget.LEAD_TIME_SEC)
 

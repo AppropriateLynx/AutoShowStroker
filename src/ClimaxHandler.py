@@ -1,9 +1,22 @@
 import random
+import time
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 
 class ClimaxHandler(QObject):
+    """Decides when the session peaks, and how, before it gets there.
+
+    Nothing here is rolled at the moment it happens any more. The climax is placed onto a
+    wall-clock time the moment the session is planned, and its outcome is resolved in the
+    same breath - which is what lets BeatHandler shape a fast run-in towards it (see
+    set_finale_at). Fake climaxes are pinned to planned segment boundaries a few segments
+    ahead.
+
+    BeatHandler is told "be fast across this moment", never "the orgasm is here": it has
+    no idea what a climax is, and this class is the only one that does.
+    """
+
     SETTINGS_GROUP = "ClimaxHandler"  # see BeatHandler.SETTINGS_GROUP
 
 
@@ -15,7 +28,11 @@ class ClimaxHandler(QObject):
     # "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
         "climax_active": True,
-        "climax_chance": 0.15,
+        # Seconds after the difficulty ramp completes. A range rather than a single value:
+        # once the ramp runs out the frequency window stops moving, so a fixed delay would
+        # make every session's hardest stretch exactly the same length.
+        "min_climax_delay": 120.0,
+        "max_climax_delay": 300.0,
         "ruined_orgasm_active": False,
         "ruined_orgasm_chance": 0.5,
         "denied_orgasm_active": False,
@@ -43,7 +60,12 @@ class ClimaxHandler(QObject):
             self.climax_active = bool(
                 self.settings.value("ClimaxHandler/climax_active", self.climax_active, type=bool)
             )
-            self.climax_chance = float(self.settings.value("ClimaxHandler/climax_chance", self.climax_chance))
+            self.min_climax_delay = float(
+                self.settings.value("ClimaxHandler/min_climax_delay", self.min_climax_delay)
+            )
+            self.max_climax_delay = float(
+                self.settings.value("ClimaxHandler/max_climax_delay", self.max_climax_delay)
+            )
             self.ruined_orgasm_active = bool(
                 self.settings.value("ClimaxHandler/ruined_orgasm_active", self.ruined_orgasm_active, type=bool)
             )
@@ -71,25 +93,107 @@ class ClimaxHandler(QObject):
 
         self.climax_triggered = False
         self._fake_climax_pending = False
+        # When the climax is due, what it will be, and which planned segment boundaries
+        # carry a fake one. All three are decided ahead of the moment they matter.
+        self.finale_at = None
+        self.outcome = None
+        self._planned_fakes = set()
 
         self._fake_climax_timer = QTimer()
         self._fake_climax_timer.setSingleShot(True)
         self._fake_climax_timer.timeout.connect(self._reveal_fake_climax)
 
+        # The climax runs off its own clock rather than off a segment boundary: segments
+        # end at the first beat tick past their planned end, so hanging the climax on one
+        # would let it drift later and later over a long session.
+        self._climax_timer = QTimer()
+        self._climax_timer.setSingleShot(True)
+        self._climax_timer.timeout.connect(self._on_climax_due)
+
+    @property
+    def planned_fake_boundaries(self):
+        """Segment indices still carrying an unfired fake climax.
+
+        Deliberately not read by anything that paints: a fake only works while it is
+        indistinguishable from the real thing.
+        """
+        return set(self._planned_fakes)
+
     def session_started(self):
         self.climax_triggered = False
         self._fake_climax_pending = False
+        self.finale_at = None
+        self.outcome = None
+        self._planned_fakes = set()
         self._fake_climax_timer.stop()
+        self._climax_timer.stop()
 
-    def on_beat_change(self, _freq, _pattern_str):
+    def on_session_planned(self, ramp_complete_at):
+        """Places this session's climax, the moment BeatHandler has planned the ramp."""
+        if not self.climax_active:
+            self.finale_at = None
+            self.outcome = None
+            self._climax_timer.stop()
+            self.beat_handler.set_finale_at(None)
+            return
+        low, high = sorted((self.min_climax_delay, self.max_climax_delay))
+        self.finale_at = ramp_complete_at + random.uniform(low, high)
+        self.outcome = self._resolve_outcome()
+        self._arm_climax_timer()
+        self.beat_handler.set_finale_at(self.finale_at)
+
+    def _arm_climax_timer(self):
+        self._climax_timer.start(max(0, int((self.finale_at - time.time()) * 1000)))
+
+    def on_plan_extended(self, segments):
+        """Rolls the fake climaxes for boundaries that have just been planned."""
+        if not self.fake_climax_active:
+            return
+        for segment in segments:
+            # Never on the finale: a fake at the exact moment the real one is due would
+            # put the "only joking" reveal on top of the real announcement.
+            if segment.kind == "finale":
+                continue
+            if random.uniform(0, 1) < self.fake_climax_chance:
+                self._planned_fakes.add(segment.index)
+
+    def on_segment_started(self, index):
+        if index not in self._planned_fakes:
+            return
+        self._planned_fakes.discard(index)
         if self.climax_triggered or self._fake_climax_pending:
             return
-        if self.fake_climax_active and random.uniform(0, 1) < self.fake_climax_chance:
-            self._trigger_fake_climax()
+        self._trigger_fake_climax()
+
+    def _on_climax_due(self):
+        if self.climax_triggered:
             return
-        if self.climax_active and self.beat_handler.is_ramp_complete():
-            if random.uniform(0, 1) < self.climax_chance:
-                self._trigger_real_climax()
+        # A fake still waiting to be revealed would otherwise say "only joking" seconds
+        # after the real thing.
+        self._fake_climax_timer.stop()
+        self._fake_climax_pending = False
+        self._trigger_real_climax()
+
+    def settings_changed(self):
+        """Re-derives what is still undecided after a mid-session settings save.
+
+        The climax time is deliberately kept: re-drawing it would turn "open Settings and
+        save" into a lever for a different climax. The outcome is re-resolved, because
+        switching ruined/denied on mid-session has to actually do something.
+        """
+        if self.climax_triggered:
+            return
+        if not self.climax_active:
+            self.finale_at = None
+            self.outcome = None
+            self._climax_timer.stop()
+            self.beat_handler.set_finale_at(None)
+            return
+        if self.finale_at is None:
+            # Switched on mid-session: place one relative to the ramp already running.
+            self.on_session_planned(self.beat_handler.session_start_time + self.beat_handler.ramp_target_duration)
+            return
+        self.outcome = self._resolve_outcome()
 
     def _trigger_fake_climax(self):
         self._fake_climax_pending = True
@@ -108,7 +212,7 @@ class ClimaxHandler(QObject):
 
     def _trigger_real_climax(self):
         self.climax_triggered = True
-        outcome = self._resolve_outcome()
+        outcome = self.outcome or self._resolve_outcome()
         category = {"real": "climax_real", "ruined": "climax_ruined", "denied": "climax_denied"}[outcome]
         status = {"real": "cum", "ruined": "ruined", "denied": "denied"}[outcome]
         self.callout_handler.force_output_sentence(category)

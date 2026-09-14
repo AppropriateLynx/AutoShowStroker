@@ -74,8 +74,7 @@ class SettingsDialog(QDialog):
         self.add_setting("Beat Max. duration (s):", "max_beat_dur", self.beat_handler, float, 1.0, 120.0, 1.0)
         self.add_setting("Pause Min. duration (s):", "min_pause_dur", self.beat_handler, int, 1, 180, 1)
         self.add_setting("Pause Max. duration (s):", "max_pause_dur", self.beat_handler, int, 1, 180, 1)
-        self.add_setting("Beat change chance", "beat_change_chance", self.beat_handler, float, 0.01, 1, 0.01)
-        self.add_setting("Pause chance", "pause_chance", self.beat_handler, float, 0.001, 1, 0.001)
+        self.add_setting("Pause chance (per beat change)", "pause_chance", self.beat_handler, float, 0.001, 1, 0.001)
 
         self.add_section_header("Difficulty Ramping")
         self.ramping_active_checkbox = QCheckBox("Difficulty ramping active")
@@ -95,7 +94,7 @@ class SettingsDialog(QDialog):
         self.beat_reset_button = self.add_reset_button(
             [
                 "min_beat_freq", "max_beat_freq", "min_beat_dur", "max_beat_dur",
-                "min_pause_dur", "max_pause_dur", "beat_change_chance", "pause_chance",
+                "min_pause_dur", "max_pause_dur", "pause_chance",
                 "min_ramp_duration", "max_ramp_duration", "ramp_window_width",
             ],
             checkbox_defaults=[
@@ -111,7 +110,10 @@ class SettingsDialog(QDialog):
         self.climax_active_checkbox.setChecked(self.climax_handler.climax_active)
         self._current_layout.addWidget(self.climax_active_checkbox)
         self.add_setting(
-            "Climax chance (per beat change, after ramp)", "climax_chance", self.climax_handler, float, 0.0, 1.0, 0.01
+            "Climax Min. delay after ramp (s)", "min_climax_delay", self.climax_handler, float, 0.0, 3600.0, 10.0
+        )
+        self.add_setting(
+            "Climax Max. delay after ramp (s)", "max_climax_delay", self.climax_handler, float, 0.0, 3600.0, 10.0
         )
 
         self.ruined_orgasm_active_checkbox = QCheckBox("Allow ruined orgasm outcome")
@@ -144,7 +146,8 @@ class SettingsDialog(QDialog):
         )
         self.climax_reset_button = self.add_reset_button(
             [
-                "climax_chance", "ruined_orgasm_chance", "denied_orgasm_chance",
+                "min_climax_delay", "max_climax_delay",
+                "ruined_orgasm_chance", "denied_orgasm_chance",
                 "fake_climax_chance", "min_fake_climax_delay", "max_fake_climax_delay",
             ],
             checkbox_defaults=[
@@ -349,11 +352,12 @@ class SettingsDialog(QDialog):
         self.callout_handler.set_tones(self._ticked_tones())
         settings.setValue("CalloutHandler/selected_tones", self.callout_handler.selected_tones)
 
-        # Not during a pause: recalc_beat() would announce a new beat over the pause
-        # caption and roll the climax dice, and pause_loop() throws the new pattern away
-        # the moment the pause ends anyway.
-        if self.main_app.is_running and not self.beat_handler.is_paused():
-            self.beat_handler.recalc_beat()
+        # The running segment plays out on the old values - cutting the beat the user is
+        # currently following out from under them to prove the save worked would be worse
+        # than waiting. Everything still queued is rebuilt from the new ones.
+        if self.main_app.is_running:
+            self.climax_handler.settings_changed()
+            self.beat_handler.replan_from_next_segment()
         log.info("Settings saved (%d active rhythms)", len(new_selected_patterns))
         self.accept()
 
