@@ -201,3 +201,29 @@ def test_record_card_formats_count_metrics_as_plain_numbers(qtbot):
     assert "Fakeouts Survived" in card_text
     assert "3" in card_text
     assert "1" in card_text
+
+
+def test_missing_favourite_pattern_reads_as_not_available(qtbot):
+    """A second session stopped after a couple of seconds never recalculates the beat, so
+    most_used_pattern is None - it used to render as the literal string 'None'."""
+    stats = {
+        "total_dur_sec": 10.0,
+        "pause_dur_sec": 0.0,
+        "total_num_pauses": 0,
+        "total_num_beat": 0,
+        "total_num_beat_change": 0,
+        "average_pause_dur_sec": None,
+        "average_beat_speed": 0.0,
+        "average_beat_speed_active": 0.0,
+        "most_used_pattern": None,
+        "skips": 0,
+        "repeats": 0,
+        "fakeout_count": 0,
+        "climax_outcome": None,
+    }
+
+    dialog = StatisticsDialog(stats)
+    qtbot.addWidget(dialog)
+
+    assert "'None'" not in dialog.conclusion_label.text()
+    assert "N/A" in dialog.conclusion_label.text()

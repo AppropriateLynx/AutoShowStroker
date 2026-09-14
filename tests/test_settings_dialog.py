@@ -420,3 +420,42 @@ def test_settings_are_persisted_under_the_owner_group_constant(app, dialog):
     assert app.settings.value(f"{app.beat_handler.SETTINGS_GROUP}/min_pause_dur") is not None
     assert app.settings.value("BeatHandler/min_pause_dur") is not None
     assert app.settings.value("GoonerApp/min_dur") is not None
+
+
+# --- P4: spinbox precision, and not disturbing a running pause ---
+
+
+def test_every_spinbox_can_actually_reach_its_own_step(dialog):
+    """QDoubleSpinBox defaults to 2 decimals. 'Pause chance' had a 0.001 step, so setValue
+    rounded every arrow click straight back to where it started."""
+    for var_name, data in dialog.settings_fields.items():
+        widget = data["widget"]
+        step = widget.singleStep()
+        rounded = round(step, widget.decimals())
+        assert rounded == step, f"{var_name}: step {step} is finer than {widget.decimals()} decimals"
+
+
+def test_saving_during_a_pause_does_not_force_a_new_beat(app, dialog, tmp_path):
+    """recalc_beat() mid-pause announced a new beat over the pause caption and rolled the
+    climax dice, then threw the pattern away when the pause ended anyway."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.beat_handler.start_pause()
+    assert app.beat_handler.is_paused()
+    before = app.beat_handler.current_beat_pattern_name
+
+    dialog.accept_settings()
+
+    assert app.beat_handler.current_beat_pattern_name == before
+    assert app.beat_handler.is_paused()
+
+
+def test_saving_during_a_running_beat_still_recalculates(app, dialog, tmp_path, monkeypatch):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    called = {}
+    monkeypatch.setattr(app.beat_handler, "recalc_beat", lambda: called.setdefault("called", True))
+
+    dialog.accept_settings()
+
+    assert called.get("called") is True

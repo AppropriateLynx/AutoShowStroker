@@ -1265,3 +1265,131 @@ def test_the_folder_picker_is_released_after_use(app, monkeypatch, tmp_path):
 
 def test_settings_keys_come_from_an_explicit_group_constant(app):
     assert GoonerApp.SETTINGS_GROUP == "GoonerApp"
+
+
+# --- P4: dead code, stale overlays, quitting mid-session ---
+
+
+def test_no_orphaned_settings_button(app):
+    """btn_settings was constructed and wired but never added to a layout, so it read like
+    a control that exists while Ctrl+S / the menu were the only ways in."""
+    assert not hasattr(app, "btn_settings")
+
+
+def test_finde_unterstuetzte_dateien_is_gone(app):
+    """A German-named passthrough to media_kinds.find_supported_files with no callers."""
+    assert not hasattr(app, "finde_unterstützte_dateien")
+
+
+def test_empty_selection_message_is_english(app, monkeypatch):
+    monkeypatch.setattr(
+        "src.GoonerApp.MediaFolderPickerDialog", _fake_picker_dialog(QDialog.DialogCode.Accepted, [])
+    )
+
+    app.open_folder()
+
+    assert app.image_label.text() == "No supported files found."
+
+
+def test_session_timer_stays_hidden_outside_a_session(app):
+    """SettingsDialog calls this unconditionally on save, and it used to show a frozen clock
+    built from the previous session's start time."""
+    app.show_session_timer = True
+    app.is_running = False
+
+    app._update_session_timer()
+
+    assert app.session_timer_label.isHidden()
+
+
+def test_record_chase_stays_hidden_outside_a_session(app):
+    app.show_record_chase = True
+    app.is_running = False
+
+    app._update_record_chase()
+
+    assert app.record_chase_label.isHidden()
+
+
+def test_session_timer_shows_during_a_session(app, tmp_path):
+    app.show_session_timer = True
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app._update_session_timer()
+
+    assert not app.session_timer_label.isHidden()
+
+
+def test_closing_the_window_records_the_session(app, qtbot, tmp_path):
+    """Quitting mid-session used to drop it entirely - no history entry, no personal
+    records, as if it never happened."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    before = len(app.score_tracker.get_history())
+
+    app.close()
+
+    assert len(app.score_tracker.get_history()) == before + 1
+    assert app.is_running is False
+
+
+def test_closing_the_window_does_not_open_the_statistics_dialog(app, monkeypatch, tmp_path):
+    """Throwing a modal recap at someone who just hit the X is the opposite of what they
+    asked for - the session is recorded silently instead."""
+    shown = {}
+    monkeypatch.setattr(app, "show_statistics", lambda: shown.setdefault("called", True))
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app.close()
+
+    assert shown == {}
+
+
+def test_closing_the_window_without_a_session_is_harmless(app):
+    before = len(app.score_tracker.get_history())
+
+    app.close()
+
+    assert len(app.score_tracker.get_history()) == before
+
+
+def test_release_url_with_a_foreign_scheme_is_not_opened(app, monkeypatch):
+    """release_url comes straight from the GitHub API response - anything but http(s)
+    would hand an arbitrary protocol handler to the shell on one click."""
+    opened = []
+    monkeypatch.setattr("src.GoonerApp.QDesktopServices.openUrl", lambda url: opened.append(url))
+
+    class FakeBox:
+        def __init__(self, *a, **kw):
+            pass
+
+        def setWindowTitle(self, _t):
+            pass
+
+        def setText(self, _t):
+            pass
+
+        def addButton(self, *a):
+            return "button"
+
+        def exec(self):
+            pass
+
+        def clickedButton(self):
+            return "button"
+
+    monkeypatch.setattr("src.GoonerApp.QMessageBox", FakeBox)
+
+    app._show_update_available_dialog("v9.9.9", "file:///C:/Windows/System32/calc.exe")
+
+    assert opened == []
+
+
+def test_update_consent_text_mentions_the_user_agent(app):
+    """The dialog claimed 'nothing else is sent' while the request carries a
+    self-identifying User-Agent that lands in GitHub's access logs."""
+    text = app._update_check_consent_text()
+
+    assert "User-Agent" in text

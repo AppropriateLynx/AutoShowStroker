@@ -671,3 +671,20 @@ def test_settings_group_is_an_explicit_constant():
     """SettingsDialog used to derive the QSettings key from __class__.__name__, so renaming
     the class silently orphaned every user's saved values."""
     assert BeatHandler.SETTINGS_GROUP == "BeatHandler"
+
+
+def test_is_paused_reports_the_pause_phase(handler):
+    assert handler.is_paused() is False
+
+    handler.start_pause()
+    assert handler.is_paused() is True
+
+    handler.beat_meter_pause_timer.stop()
+    assert handler.is_paused() is False
+
+
+def test_defaults_drive_the_initial_attributes(handler):
+    """DEFAULTS is the single source of truth - __init__ used to repeat every value as a
+    literal, with only a guard test keeping the two copies honest."""
+    for key, value in BeatHandler.DEFAULTS.items():
+        assert getattr(handler, key) == value
