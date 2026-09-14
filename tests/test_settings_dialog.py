@@ -1,5 +1,6 @@
 import pytest
 
+from src.CalloutHandler import CalloutHandler
 from src.SettingsDialog import SettingsDialog
 
 
@@ -460,3 +461,51 @@ def test_saving_during_a_running_beat_still_recalculates(app, dialog, tmp_path, 
     dialog.accept_settings()
 
     assert called.get("called") is True
+
+
+# --- callout tones (second axis next to language) ---
+
+
+def test_tone_checkboxes_offer_every_available_tone(app, dialog):
+    assert list(dialog.tone_checkboxes) == app.callout_handler.available_tones
+
+
+def test_tone_checkboxes_are_labelled_not_keyed(app, dialog):
+    assert dialog.tone_checkboxes["girlfriend"].text() == "Girlfriend Experience"
+
+
+def test_tone_checkboxes_start_from_the_current_selection(app, dialog):
+    for tone, checkbox in dialog.tone_checkboxes.items():
+        assert checkbox.isChecked() == (tone in app.callout_handler.selected_tones)
+
+
+def test_accept_settings_applies_and_persists_the_tone_mix(app, dialog):
+    dialog.tone_checkboxes["shy"].setChecked(True)
+    dialog.tone_checkboxes["dominant"].setChecked(True)
+    dialog.tone_checkboxes["flirty"].setChecked(False)
+
+    dialog.accept_settings()
+
+    assert app.callout_handler.selected_tones == ["shy", "dominant"]
+    assert app.settings.value("CalloutHandler/selected_tones") == ["shy", "dominant"]
+
+
+def test_saving_with_no_tone_ticked_falls_back_to_the_default_tone(app, dialog):
+    """The handler falls back at draw time anyway - doing it here too keeps the dialog
+    from claiming nothing is active while the default tone is what actually speaks."""
+    for checkbox in dialog.tone_checkboxes.values():
+        checkbox.setChecked(False)
+
+    dialog.accept_settings()
+
+    assert app.callout_handler.selected_tones == [CalloutHandler.DEFAULT_TONE]
+    assert dialog.tone_checkboxes[CalloutHandler.DEFAULT_TONE].isChecked() is True
+
+
+def test_callout_reset_button_resets_the_tone_mix(app, dialog):
+    dialog.tone_checkboxes["degrading"].setChecked(True)
+
+    dialog.callout_reset_button.click()
+
+    for tone, checkbox in dialog.tone_checkboxes.items():
+        assert checkbox.isChecked() == (tone in CalloutHandler.DEFAULTS["selected_tones"])

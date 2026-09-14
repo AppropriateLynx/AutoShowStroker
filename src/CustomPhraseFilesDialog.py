@@ -14,8 +14,9 @@ from src import theme
 
 class CustomPhraseFilesDialog(QDialog):
     """Manages user-chosen external callout phrase files (same {trigger_key: [phrases]}
-    schema as res/callouts/<lang>.json), merged onto the built-in phrases for an explicitly
-    picked language. The dialog only calls CalloutHandler mutators - CalloutHandler itself
+    schema as res/callouts/<lang>/<tone>.json), merged onto the built-in phrases for an
+    explicitly picked language and tone - or every tone, which is how phrase files behaved
+    before tones existed. The dialog only calls CalloutHandler mutators - CalloutHandler itself
     self-persists on every add/remove (to a JSON file via UserDataStore, not to QSettings),
     same split as PatternEditorDialog."""
 
@@ -31,9 +32,16 @@ class CustomPhraseFilesDialog(QDialog):
         add_row = QHBoxLayout()
         self.lang_combo = QComboBox()
         self.lang_combo.addItems(self.callout_handler.available_languages)
+        self.tone_combo = QComboBox()
+        # "Any tone" first and preselected: a file the user added without thinking about
+        # tones should keep being heard whatever mix they later tick.
+        self.tone_combo.addItem("Any tone", None)
+        for tone in self.callout_handler.available_tones:
+            self.tone_combo.addItem(self.callout_handler.tone_label(tone), tone)
         self.add_file_button = QPushButton("Add File...")
         self.add_file_button.clicked.connect(self._on_add_file)
         add_row.addWidget(self.lang_combo)
+        add_row.addWidget(self.tone_combo)
         add_row.addWidget(self.add_file_button)
         layout.addLayout(add_row)
 
@@ -58,7 +66,9 @@ class CustomPhraseFilesDialog(QDialog):
     def _refresh_file_list(self):
         self.file_list.clear()
         for entry in self.callout_handler.custom_phrase_files:
-            self.file_list.addItem(f"{entry['lang']}: {entry['path']}")
+            tone = entry.get("tone")
+            tone_text = self.callout_handler.tone_label(tone) if tone else "Any tone"
+            self.file_list.addItem(f"{entry['lang']} / {tone_text}: {entry['path']}")
 
     def _on_add_file(self):
         self.error_label.setText("")
@@ -66,7 +76,9 @@ class CustomPhraseFilesDialog(QDialog):
         if not path:
             return
         try:
-            self.callout_handler.load_custom_file(path, self.lang_combo.currentText())
+            self.callout_handler.load_custom_file(
+                path, self.lang_combo.currentText(), self.tone_combo.currentData()
+            )
         except ValueError as exc:
             self.error_label.setText(str(exc))
             return
