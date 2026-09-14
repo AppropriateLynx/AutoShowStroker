@@ -48,7 +48,7 @@ Join the Discord: https://discord.gg/qqkcxvq37Z
 
 ## 🚀 Installation & Execution (Developers)
 
-To run the application locally, you need **Python 3.8+** and the appropriate dependencies.
+To run the application locally, you need **Python 3.13** and the appropriate dependencies. That is what CI runs, what `ruff` is configured for, and what the released `.exe` bundles — end users need no Python at all.
 
 ### 1. Create and Activate a Virtual Python Environment
 ```bash
