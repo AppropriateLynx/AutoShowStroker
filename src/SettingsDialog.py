@@ -267,6 +267,7 @@ class SettingsDialog(QDialog):
         ("min_beat_dur", "max_beat_dur", "Beat duration"),
         ("min_pause_dur", "max_pause_dur", "Pause duration"),
         ("min_ramp_duration", "max_ramp_duration", "Ramp duration"),
+        ("min_climax_delay", "max_climax_delay", "Climax delay after ramp"),
         ("min_fake_climax_delay", "max_fake_climax_delay", "Fake climax reveal delay"),
     )
 
