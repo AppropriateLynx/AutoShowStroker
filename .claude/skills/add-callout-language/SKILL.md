@@ -1,39 +1,85 @@
 ---
 name: add-callout-language
-description: Add a new localized language file for teasing-line callouts (res/callouts/<lang>.json), or add new phrases to an existing language file, following the project's CONTRIBUTING.md structure. Use when the user asks to add a new callout language or new teasing phrases.
+description: Add or extend the localized teasing-line callouts in res/callouts/<lang>/<tone>.json - a new language, a new tone, or new phrases in an existing file - following the project's CONTRIBUTING.md structure. Use when the user asks to add a callout language, a callout tone, or new teasing phrases.
 ---
 
-Follow this to add or extend a language file for `CalloutHandler` (`src/CalloutHandler.py`).
+Follow this to add or extend phrase files for `CalloutHandler` (`src/CalloutHandler.py`).
 
-## Adding phrases to an existing language
+## The layout
 
-1. Open `res/callouts/<lang>.json`.
-2. Append the new phrase string(s) to the array under the relevant trigger key.
-3. Keep tone/style consistent with existing phrases in that array — this is explicit adult content by design, matching the app's theme.
-4. Validate the file is still valid JSON (e.g. `python -m json.tool res/callouts/<lang>.json > /dev/null`).
+`res/callouts/<lang>/<tone>.json` — the folder is the language, the file is the tone. Language
+and tone are two independent axes: the user picks exactly one language and any number of tones,
+and the handler mixes the ticked tones evenly (it draws a tone first, then a line from it).
+
+Shipped today: `en`, `de`, `fr` × `flirty`, `shy`, `dominant`, `degrading`, `girlfriend`.
+
+Every file holds the same schema, `{trigger_key: [phrases]}`, with all of these keys present and
+non-empty — a missing or typo'd key does not raise, the app just goes silent for that event:
+
+- `beat_change_general`
+- `beat_change_faster`
+- `beat_change_slower`
+- `pause_start`
+- `pause_end`
+- `media_skipped`
+- `media_repeated`
+- `session_started`
+- `climax_real`
+- `climax_ruined`
+- `climax_denied`
+- `fake_climax_reveal`
+
+## Adding phrases to an existing file
+
+1. Open `res/callouts/<lang>/<tone>.json`.
+2. Append the new string(s) to the array under the relevant trigger key.
+3. Match that file's **voice**, not just its language. The tones are deliberately distinct:
+   - `flirty` — playful, teasing, winking (the app's original voice and the default)
+   - `shy` — timid, hesitant, apologetic about being bossy
+   - `dominant` — commanding, imperative, no negotiation
+   - `degrading` — humiliation play, mocking the user's neediness and stamina
+   - `girlfriend` — warm, affectionate, present; sweet to gently bossy, never degrading
+
+   A soft line dropped into `dominant.json` weakens the tone for exactly the people who ticked it
+   on purpose. Put the phrase in the tone it belongs to instead.
+4. This is explicit adult content by design — that is expected in these files.
 
 ## Adding a brand-new language
 
-1. Create `res/callouts/<code>.json` using the standard two-letter language code (e.g. `fr.json` for French).
-2. Copy the full key structure from `res/callouts/en.json` — every trigger key below must be present, even with an empty array, or `CalloutHandler.select_and_output_sentence` will silently no-op for that category:
-   - `beat_change_general`
-   - `beat_change_faster`
-   - `beat_change_slower`
-   - `pause_start`
-   - `pause_end`
-   - `media_skipped`
-   - `media_repeated`
-   - `session_started`
-   - `climax_real`
-   - `climax_ruined`
-   - `climax_denied`
-   - `fake_climax_reveal`
-3. Translate (or write new) phrases into each array.
-4. No code changes are needed — `CalloutHandler._load_available_languages()` globs `res/callouts/*.json` at startup and the Settings dialog auto-detects the new language from the file's stem (e.g. `fr.json` → `fr`).
-5. Validate the file is valid JSON before finishing.
+1. Create `res/callouts/<code>/` using the standard two-letter language code (e.g. `es/`).
+2. Add **one file per shipped tone** — all five. The tone selection survives a language switch,
+   so a language missing a tone silently drops it from the user's mix the moment they switch.
+3. Write in the target language rather than translating the English line for line; a callout that
+   reads like a translation breaks the mood faster than a missing one would.
+4. No code changes are needed — `CalloutHandler._load_available_languages()` discovers both
+   languages and tones from the folder layout at startup, and the Settings dialog builds its
+   language combo and tone checkboxes from what it finds.
+
+## Adding a brand-new tone
+
+1. Add `<tone>.json` to **every** language folder, for the same reason as above.
+2. Add the tone to `CalloutHandler.TONE_LABELS` to give it a display name and a fixed position.
+   An undeclared tone still works (it is offered with a title-cased name), but the shipped set is
+   curated and `tests/test_callout_language_files.py` asserts it matches `TONE_LABELS` — that
+   assertion is what catches a typo'd file name.
+3. Ask the user before inventing a tone: since several tones can already be ticked at once, a tone
+   that is just "two existing ones blended" costs 5 files and adds no range.
+4. `CalloutHandler.DEFAULT_TONE` (`flirty`) is both the default selection and the fallback for an
+   unusable one. Do not widen that fallback to "every available tone" — it is what keeps the
+   harsher `degrading` tone from ever switching itself on.
 
 ## Verification
 
-`tests/test_callout_language_files.py` automatically discovers every file in `res/callouts/*.json` and checks: valid JSON, all required trigger keys present (see `CalloutHandler.TRIGGER_KEYS` for the current list), no unknown/typo'd keys, and all values are lists of strings. Run `python -m pytest tests/test_callout_language_files.py -v` after adding or editing a language file — this catches the exact "silently no-op" trap described above (missing key or typo'd key name) without needing to launch the app.
+`tests/test_callout_language_files.py` discovers every `res/callouts/*/*.json` and checks: valid
+JSON, all required trigger keys, no unknown/typo'd keys, values are lists of strings, no empty
+phrase list, no duplicate phrase inside a list, every language shipping every tone, no stray
+phrase file left outside a language folder, and that every shipped tone has a declared label.
 
-This only validates structure, not content — it does not check that phrase arrays are non-empty or that translations read well. After the automated check passes, still ask the user to run the app (`python main.py`), select the new/changed language in Settings, and confirm phrases appear and read correctly during a session before claiming the work is fully verified.
+```bash
+python -m pytest tests/test_callout_language_files.py -v
+```
+
+This only validates structure, not content — it cannot tell you a translation reads awkwardly or
+that a phrase is in the wrong tone. After the automated check passes, still ask the user to run
+the app (`python main.py`), pick the new/changed language and tone in Settings > Callouts, and
+play through a session before claiming the work is fully verified.
