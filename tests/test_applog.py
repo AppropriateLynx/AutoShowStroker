@@ -225,3 +225,44 @@ def test_selectable_levels_are_exposed_for_the_ui():
     """The dialog builds its dropdown from this, so it cannot drift from what configure()
     actually accepts."""
     assert applog.LEVELS == ("INFO", "WARNING", "ERROR")
+
+
+def test_deleting_the_log_keeps_the_chosen_level(tmp_path):
+    """Delete and the level picker sit in the same dialog - wiping the file must not
+    quietly widen what gets recorded afterwards."""
+    applog.configure(enabled=True, log_dir=tmp_path, level="ERROR")
+    applog.get_logger("src.Test").error("before the delete")
+
+    applog.delete_log_files(tmp_path)
+
+    applog.get_logger("src.Test").info("an info line")
+    applog.get_logger("src.Test").error("an error line")
+    contents = applog.log_file_path(tmp_path).read_text(encoding="utf-8")
+    assert "an info line" not in contents
+    assert "an error line" in contents
+
+
+def test_no_stream_handler_without_a_stderr(tmp_path, monkeypatch):
+    """PyInstaller's --windowed build has sys.stderr set to None. A StreamHandler built
+    against it fails on every emit and logging swallows the error - wasted work in exactly
+    the build this log exists for."""
+    import logging as _logging
+    import sys as _sys
+
+    monkeypatch.setattr(_sys, "stderr", None)
+
+    applog.configure(enabled=True, log_dir=tmp_path)
+
+    handlers = _logging.getLogger(applog.LOGGER_NAME).handlers
+    assert not any(type(h) is _logging.StreamHandler for h in handlers)
+
+
+def test_file_logging_still_works_without_a_stderr(tmp_path, monkeypatch):
+    import sys as _sys
+
+    monkeypatch.setattr(_sys, "stderr", None)
+    applog.configure(enabled=True, log_dir=tmp_path)
+
+    applog.get_logger("src.Test").warning("still recorded")
+
+    assert "still recorded" in applog.log_file_path(tmp_path).read_text(encoding="utf-8")

@@ -23,6 +23,7 @@ that writes extra data about the user.
 """
 
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -97,11 +98,15 @@ def configure(enabled: bool, log_dir, level=DEFAULT_LEVEL) -> None:
 
     _close_handlers(logger)
 
-    # Always present: discarded in the windowed build, genuinely useful when running
-    # `python main.py` from a terminal, and it writes nothing to disk either way.
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(logging.Formatter(_FORMAT, _DATE_FORMAT))
-    logger.addHandler(stream_handler)
+    # Useful when running `python main.py` from a terminal, and it writes nothing to disk.
+    # Skipped when there is no stderr to write to: PyInstaller's --windowed build sets
+    # sys.stderr to None, and a StreamHandler built against that fails on every single
+    # emit, with logging quietly swallowing the error - pure waste in exactly the build
+    # this log exists for.
+    if sys.stderr is not None:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(logging.Formatter(_FORMAT, _DATE_FORMAT))
+        logger.addHandler(stream_handler)
 
     if not enabled or log_dir is None:
         return
@@ -143,6 +148,10 @@ def delete_log_files(log_dir) -> bool:
     """
     was_active = is_file_logging_active()
     logger = logging.getLogger(LOGGER_NAME)
+    # Captured before the rebuild below: reconfiguring with the default would reset the
+    # user's threshold, and deleting the log sits in the same dialog as the level picker -
+    # wiping the file must not quietly widen what gets recorded afterwards.
+    current_level = logging.getLevelName(logger.level)
     if was_active:
         _close_handlers(logger, only_files=True)
 
@@ -155,7 +164,7 @@ def delete_log_files(log_dir) -> bool:
             logger.warning("Could not delete %s: %s", path.name, error)
 
     if was_active:
-        configure(enabled=True, log_dir=log_dir)
+        configure(enabled=True, log_dir=log_dir, level=current_level)
     return removed
 
 
