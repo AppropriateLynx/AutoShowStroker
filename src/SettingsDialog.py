@@ -163,13 +163,14 @@ class SettingsDialog(QDialog):
             checkbox_defaults=[
                 (self.callout_active_checkbox, self.callout_handler.DEFAULTS["active_callout"]),
             ],
-            extra_reset=self._reset_callout_lang,
+            extra_reset=self._reset_callout_lang_and_tones,
         )
         self._current_layout.addStretch()
 
         self.layout.addWidget(self.tabs)
 
-        self.button_ok = QPushButton("Save & Close Settings")
+        # && - a single & is a mnemonic prefix and gets swallowed, leaving "Save  Close".
+        self.button_ok = QPushButton("Save && Close Settings")
         self.button_ok.setObjectName("primary")
         self.button_ok.clicked.connect(self.accept_settings)
         self.layout.addWidget(self.button_ok)
@@ -205,11 +206,15 @@ class SettingsDialog(QDialog):
         self._current_layout.addWidget(button)
         return button
 
-    def _reset_callout_lang(self):
+    def _reset_callout_lang_and_tones(self):
         default_lang = self.callout_handler.DEFAULTS["lang"]
         index = self.callout_selected_lang.findText(default_lang)
         if index != -1:
             self.callout_selected_lang.setCurrentIndex(index)
+
+        default_tones = self.callout_handler.DEFAULTS["selected_tones"]
+        for tone, checkbox in self.tone_checkboxes.items():
+            checkbox.setChecked(tone in default_tones)
 
     def add_section_header(self, title):
         header = QLabel(f"--- <b>{title}</b> ---")
@@ -341,6 +346,8 @@ class SettingsDialog(QDialog):
         self.callout_handler.active_callout = self.callout_active_checkbox.isChecked()
         settings.setValue("CalloutHandler/selected_lang", self.callout_selected_lang.currentText())
         self.callout_handler.set_lang(self.callout_selected_lang.currentText())
+        self.callout_handler.set_tones(self._ticked_tones())
+        settings.setValue("CalloutHandler/selected_tones", self.callout_handler.selected_tones)
 
         # Not during a pause: recalc_beat() would announce a new beat over the pause
         # caption and roll the climax dice, and pause_loop() throws the new pattern away
@@ -413,6 +420,8 @@ class SettingsDialog(QDialog):
         self._current_layout.addWidget(self.callout_active_checkbox)
         self._current_layout.addWidget(self.callout_selected_lang)
 
+        self._add_tone_selection()
+
         self.add_setting(
             "Chance for callouts to happen during events", "talking_chance", self.callout_handler, float, 0, 1, 0.01
         )
@@ -420,6 +429,69 @@ class SettingsDialog(QDialog):
         self.manage_phrase_files_button = QPushButton("Manage Custom Phrase Files...")
         self.manage_phrase_files_button.clicked.connect(self._open_phrase_files_dialog)
         self._current_layout.addWidget(self.manage_phrase_files_button)
+
+    def _add_tone_selection(self):
+        """Tone is the second axis next to language, and unlike language it is a mix -
+        hence checkboxes, laid out like the Active Rhythms grid rather than a combo box."""
+        self.add_section_header("Tone")
+
+        hint = QLabel("Pick one or more. Ticking several mixes them evenly.")
+        hint.setStyleSheet(f"color: {theme.TEXT}; font-size: 11px;")
+        self._current_layout.addWidget(hint)
+
+        tone_grid = QGridLayout()
+        self.tone_checkboxes = {}
+        for index, tone in enumerate(self.callout_handler.available_tones):
+            checkbox = QCheckBox(self.callout_handler.tone_label(tone))
+            checkbox.setChecked(tone in self.callout_handler.selected_tones)
+            tone_grid.addWidget(checkbox, index // 2, index % 2)
+            self.tone_checkboxes[tone] = checkbox
+        self._current_layout.addLayout(tone_grid)
+
+        self.tone_hint = QLabel("")
+        self.tone_hint.setWordWrap(True)
+        self.tone_hint.setStyleSheet(f"color: {theme.DISABLED_TEXT}; font-size: 11px;")
+        self._current_layout.addWidget(self.tone_hint)
+
+        # A language may ship only some tones. CalloutHandler already skips what the
+        # current language lacks, but silently - the box would stay ticked while a
+        # different tone speaks.
+        self.callout_selected_lang.currentTextChanged.connect(self._mark_unavailable_tones)
+        self._mark_unavailable_tones(self.callout_selected_lang.currentText())
+
+    def _mark_unavailable_tones(self, lang: str):
+        """Greys out the tones the selected language has no file for.
+
+        Disabled rather than relabelled: the greyed-out state already carries the meaning,
+        where a parenthetical on half the rows is just noise. A disabled QCheckBox keeps
+        its check state and still answers isChecked(), so a ticked tone stays in the saved
+        mix - the user may well switch back to the language that has it.
+        """
+        available = self.callout_handler.tones_for(lang)
+        unavailable = []
+        for tone, checkbox in self.tone_checkboxes.items():
+            usable = tone in available
+            checkbox.setEnabled(usable)
+            checkbox.setToolTip("" if usable else f"No phrases for this tone in {lang} yet.")
+            if not usable:
+                unavailable.append(self.callout_handler.tone_label(tone))
+        # Greyed out alone only says "no". Saying why once under the grid beats a
+        # parenthetical on every second row.
+        self.tone_hint.setText(
+            "" if not unavailable else f"Greyed out: no {lang} phrases yet for {', '.join(unavailable)}."
+        )
+
+    def _ticked_tones(self) -> list[str]:
+        """Falls back to the default tone rather than saving an empty mix: CalloutHandler
+        would fall back at draw time anyway, and this way the dialog doesn't reopen
+        claiming no tone is active while one plainly is."""
+        ticked = [tone for tone, checkbox in self.tone_checkboxes.items() if checkbox.isChecked()]
+        if ticked:
+            return ticked
+        fallback = [self.callout_handler.DEFAULT_TONE]
+        for tone, checkbox in self.tone_checkboxes.items():
+            checkbox.setChecked(tone in fallback)
+        return fallback
 
     def _open_phrase_files_dialog(self):
         CustomPhraseFilesDialog(self.callout_handler, parent=self).exec()

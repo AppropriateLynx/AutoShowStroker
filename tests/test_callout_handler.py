@@ -10,10 +10,10 @@ from src.user_data import UserDataStore
 
 @pytest.fixture
 def callout_dir(tmp_path):
-    en = {key: [f"en {key} phrase"] for key in TRIGGER_KEYS}
-    de = {key: [f"de {key} phrase"] for key in TRIGGER_KEYS}
-    (tmp_path / "en.json").write_text(json.dumps(en), encoding="utf-8")
-    (tmp_path / "de.json").write_text(json.dumps(de), encoding="utf-8")
+    for lang in ("en", "de"):
+        phrases = {key: [f"{lang} {key} phrase"] for key in TRIGGER_KEYS}
+        (tmp_path / lang).mkdir()
+        (tmp_path / lang / "flirty.json").write_text(json.dumps(phrases), encoding="utf-8")
     return tmp_path
 
 
@@ -107,7 +107,7 @@ def test_force_output_sentence_missing_category_does_not_raise(handler, qtbot):
 def test_missing_category_does_not_raise(handler):
     handler.active_callout = True
     handler.talking_chance = 1.0
-    handler.callout_data["en"]["session_started"] = []
+    handler.callout_data["en"]["flirty"]["session_started"] = []
     handler.select_and_output_sentence("session_started")
 
 
@@ -162,12 +162,13 @@ def test_empty_callout_dir_does_not_crash_and_disables_callouts(qapp, tmp_path):
 
 
 def test_invalid_json_file_is_skipped_but_language_stays_listed(qapp, tmp_path):
-    (tmp_path / "en.json").write_text("{not valid json", encoding="utf-8")
+    (tmp_path / "en").mkdir()
+    (tmp_path / "en" / "flirty.json").write_text("{not valid json", encoding="utf-8")
 
     handler = CalloutHandler(callout_dir=tmp_path)
 
     assert handler.available_languages == ["en"]
-    assert handler.callout_data == {}
+    assert handler.callout_data == {"en": {}}
     # lang falls back to "en" but there's no data loaded for it - selecting
     # a sentence must degrade gracefully rather than raise.
     handler.active_callout = True
@@ -196,7 +197,7 @@ def test_load_custom_file_merges_phrases_after_builtins(handler, tmp_path):
 
     handler.load_custom_file(custom_path, "en")
 
-    assert handler.callout_data["en"]["session_started"] == ["en session_started phrase", "custom phrase"]
+    assert handler.callout_data["en"]["flirty"]["session_started"] == ["en session_started phrase", "custom phrase"]
 
 
 def test_load_custom_file_raises_for_unknown_language(handler, tmp_path):
@@ -241,10 +242,10 @@ def test_load_custom_file_ignores_unknown_trigger_keys_and_bad_values(handler, t
 
     handler.load_custom_file(custom_path, "en")
 
-    assert handler.callout_data["en"]["session_started"] == ["en session_started phrase", "good phrase"]
-    assert "not_a_real_key" not in handler.callout_data["en"]
-    assert handler.callout_data["en"]["pause_start"] == ["en pause_start phrase"]
-    assert handler.callout_data["en"]["pause_end"] == ["en pause_end phrase"]
+    assert handler.callout_data["en"]["flirty"]["session_started"] == ["en session_started phrase", "good phrase"]
+    assert "not_a_real_key" not in handler.callout_data["en"]["flirty"]
+    assert handler.callout_data["en"]["flirty"]["pause_start"] == ["en pause_start phrase"]
+    assert handler.callout_data["en"]["flirty"]["pause_end"] == ["en pause_end phrase"]
 
 
 def test_unload_custom_file_removes_entry_and_stops_contributing(handler, tmp_path):
@@ -255,7 +256,7 @@ def test_unload_custom_file_removes_entry_and_stops_contributing(handler, tmp_pa
 
     handler.unload_custom_file(custom_en_1)
 
-    assert handler.callout_data["en"]["session_started"] == ["en session_started phrase", "phrase two"]
+    assert handler.callout_data["en"]["flirty"]["session_started"] == ["en session_started phrase", "phrase two"]
     assert [e["path"] for e in handler.custom_phrase_files] == [custom_en_2]
 
 
@@ -292,7 +293,7 @@ def test_load_custom_file_persists_and_reloads_across_instances(handler_with_set
         callout_dir=handler_with_settings.callout_dir,
     )
 
-    assert second.callout_data["en"]["session_started"] == ["en session_started phrase", "persisted phrase"]
+    assert second.callout_data["en"]["flirty"]["session_started"] == ["en session_started phrase", "persisted phrase"]
 
 
 def test_custom_phrase_files_migrate_out_of_settings(qapp, callout_dir, tmp_path):
@@ -306,7 +307,7 @@ def test_custom_phrase_files_migrate_out_of_settings(qapp, callout_dir, tmp_path
 
     handler = CalloutHandler(settings=settings, data_store=store, callout_dir=callout_dir)
 
-    assert handler.callout_data["en"]["session_started"] == ["en session_started phrase", "legacy phrase"]
+    assert handler.callout_data["en"]["flirty"]["session_started"] == ["en session_started phrase", "legacy phrase"]
     assert store.path_for("custom_phrase_files").exists()
     assert settings.value("CalloutHandler/custom_phrase_files") is None
 
@@ -380,7 +381,8 @@ def test_missing_callout_dir_disables_callouts_without_crashing(qapp, tmp_path):
 def test_set_lang_falls_back_when_the_configured_language_has_no_file(qapp, tmp_path):
     """set_lang guarded on self.lang (the old value) instead of lang (the new one), so the
     fallback in _load_available_languages could never fire for the case it was written for."""
-    (tmp_path / "fr.json").write_text('{"session_started": ["salut"]}', encoding="utf-8")
+    (tmp_path / "fr").mkdir()
+    (tmp_path / "fr" / "flirty.json").write_text('{"session_started": ["salut"]}', encoding="utf-8")
 
     handler = CalloutHandler(callout_dir=tmp_path)
 

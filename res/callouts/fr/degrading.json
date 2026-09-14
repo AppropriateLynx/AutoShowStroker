@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "Nouveau rythme. Essaie de suivre, si tant est que tu en sois capable – branle ta bite.",
+    "J'ai changé. On va te voir rater les trois premiers temps sur ta queue.",
+    "Autre motif. Je parie que tu le perds tout de suite sur ta bite.",
+    "Nouveau rythme. Voilà la petite panique désespérée avec ta main.",
+    "Ça a basculé. Et te voilà déjà à la traîne sur ta queue.",
+    "Suis un peu, limace. Ce n'est pas compliqué – pompe ta bite.",
+    "Nouveau tempo. Honnêtement, un métronome ferait mieux que ta branlette.",
+    "Changé. Concentre-toi, pour une fois, sur ta queue.",
+    "Un motif tout neuf pour quelqu'un qui n'arrive même pas à branler l'ancien.",
+    "Suis. Ou pas. C'est plus drôle quand tu n'y arrives pas – sur ta bite."
+  ],
+  "beat_change_faster": [
+    "Plus vite. Déjà en difficulté sur ta bite ? Pathétique.",
+    "Accélère, petit quémandeur. Tu décroches – branle plus fort.",
+    "Plus vite. Montre-moi le peu d'endurance que ta queue a.",
+    "Plus rapide. Transpire. Tu resteras quand même le plus lent sur ta bite.",
+    "Vas-y, gigote. C'est divertissant – sur ta queue.",
+    "Pompe plus vite, et tâche de ne pas te ridiculiser.",
+    "Voilà, cours après. Le désespoir te va bien, à toi et ta bite.",
+    "Accélère. C'est à peine l'échauffement et ta queue est déjà finie.",
+    "Plus vite. Ton bras lâche déjà sur ta bite, non ?",
+    "Allez, branle plus vite, fais un effort pour une fois dans ta vie."
+  ],
+  "beat_change_slower": [
+    "Ralentis. On ne peut visiblement pas confier ta bite à ce rythme-là.",
+    "Plus lentement. Oui, je sais que tu détestes ça – branle lentement quand même.",
+    "Doucement, gourmand. Queue lente - tu n'iras pas droit à la fin.",
+    "Lentement. Reste dedans. Souffre correctement sur ta bite.",
+    "Au ralenti sur ta queue. Plains-toi, je t'en défie.",
+    "Branle doucement. Ce petit gémissement était adorable, au passage.",
+    "À peine un mouvement. Comme ta maîtrise de toi sur ta bite.",
+    "Lentement. Ta queue m'obéit, pas à tes envies.",
+    "Ralentis sur ta bite, avant de te déshonorer.",
+    "Tout doux. Tu supplieras avant la fin – sur ta queue."
+  ],
+  "pause_start": [
+    "Mains loin de ta bite, petit quémandeur. Tu n'as pas mérité mieux.",
+    "Stop. Reste là et désire, comme un bon mendiant – queue intacte.",
+    "Enlève. Regarde-toi, tu tressailles déjà sur ta bite.",
+    "Lâche, pas de branlette. Essaie de survivre dix secondes tout seul.",
+    "Mains ailleurs. C'est le moment où tu apprends la patience – queue qui palpite seule.",
+    "Ne touche plus. C'est gênant de voir à quel point c'est dur pour toi sur ta bite.",
+    "Fige, main loin. Et non, geindre ne raccourcit rien.",
+    "Lâche ça. Ta queue en a eu plus qu'assez.",
+    "Rien pour toi. Savoure le manque dans ta bite.",
+    "Enlève. Je veux te voir te tortiller – queue dure et intacte."
+  ],
+  "pause_end": [
+    "Bon. Touche. Tu avais l'air si perdu sans ça – prends ta bite.",
+    "Vas-y, désespéré. Retourne au travail sur ta queue.",
+    "La main dessus et tu branles. Tiens plus longtemps cette fois.",
+    "Tu peux revenir sur ta bite. C'est pathétique, cet air reconnaissant.",
+    "Continue de branler. C'était la plus longue minute de ta vie, hein ?",
+    "La main de retour sur ta queue. Tu suppliais pratiquement.",
+    "Continue sur ta bite. Ne finis pas trop tôt comme la dernière fois.",
+    "Touche, branle. Oui, je t'ai vu tendre la main.",
+    "Vas-y, reprends ta queue. Fais semblant d'avoir un peu de technique.",
+    "Permission de branler ta bite. Utilise-la mieux que d'habitude."
+  ],
+  "media_skipped": [
+    "Trop bien pour celle-là ? Je t'en prie. Tu branles quand même.",
+    "Tu passes. Difficile et inutile, belle combinaison - et ta queue continue.",
+    "Pas assez pour toi ? Rien ne l'est jamais. Branle quand même.",
+    "Suivante. Garde le rythme sur ta bite - tes exigences sont risibles vu ta position.",
+    "Disparue. Continue de branler pendant que je trouve quelque chose que même toi tu peux gérer.",
+    "Passée, et la queue reste en mouvement. Petite chose gourmande.",
+    "Rejetée. Continue de branler - comme si tu avais le choix en quoi que ce soit.",
+    "Bien, suivante. Continue quand même, pas de pause pour ta bite.",
+    "On avance, pompe. Tu passerais tout, si je te laissais faire.",
+    "Suivante, et tu branles. Non, elle ne suffira pas non plus."
+  ],
+  "media_repeated": [
+    "Encore de retour ? Évidemment que c'est ça qui te fait de l'effet, à toi et ta bite.",
+    "De retour et toujours en train de branler dessus. Totalement prévisible.",
+    "Ah, voilà donc la faiblesse de ta queue. Quelle facilité.",
+    "Tu rembobines déjà et tu branles dessus. Un peu de dignité.",
+    "Celle-là, vraiment ? Ça en dit long sur toi - et sur ta bite.",
+    "Encore, et tu branles droit dessus ? Tu es transparent.",
+    "Regarde-toi ramper vers elle, la main sur ta queue.",
+    "Deuxième portion, toujours en train de branler. Gourmand comme toujours.",
+    "Il te la fallait absolument, et tu n'as même pas perdu le rythme. Pathétique.",
+    "Bien sûr. Continue de branler - certaines choses ne changent jamais."
+  ],
+  "session_started": [
+    "Regarde-toi, déjà pressé. Commençons – bite en main.",
+    "La main prête sur ta queue ? Évidemment qu'elle l'est.",
+    "On commence. Branle, et tiens plus longtemps que d'habitude.",
+    "C'est parti. Je donne cinq minutes à ta bite.",
+    "Commence à branler, petit quémandeur. Ça ira vite.",
+    "Commence à branler. Voyons le peu qu'il faudra aujourd'hui.",
+    "La main sur ta queue. Ne me déçois pas tout de suite.",
+    "Tu es revenu en rampant. Prévisible. Vas-y – branle.",
+    "Commence sur ta bite. Et ne fais pas semblant de ne pas en avoir crevé d'envie.",
+    "La main dessus, tu branles. Montre-moi ton mieux. Ce ne sera pas grand-chose."
+  ],
+  "climax_real": [
+    "Vas-y alors. Jouis, petite chose désespérée.",
+    "Jouis. Voyons le désastre que tu fabriques avec ta charge.",
+    "Bon. Vide-toi. Tu ne peux visiblement plus attendre.",
+    "Lâche et jouis. Tu suppliais de tout ton corps.",
+    "Jouis fort, et sois aussi pathétique que tu veux.",
+    "Jouis quand même. Tu l'as à peine mérité."
+  ],
+  "climax_ruined": [
+    "Mains loin. Gâche-le. C'est tout ce que tu auras – laisse la charge se perdre.",
+    "Stop. Laisse ça couler dans le vide, gâché. Ça te va bien.",
+    "Enlève. Gâché - tu auras le dégât et rien du plaisir.",
+    "Lâche. Regarde ton sperme ne mener nulle part.",
+    "Mains loin. Gâché, et tu me remercieras quand même.",
+    "Mains ailleurs, tout gâché. Voilà ce que tu récoltes."
+  ],
+  "climax_denied": [
+    "Rien, pas une goutte. Tu n'étais même pas près de le mériter.",
+    "Refusé. Reste là et endure – bite dure et vide.",
+    "Pas d'orgasme. Y a-t-il jamais eu un doute ?",
+    "On a fini. Mains loin, tu récoltes exactement rien.",
+    "Aucune chance, rien ne sortira aujourd'hui. Sois moins pathétique la prochaine fois.",
+    "Non. Laisse ta bite tranquille et boude. Ça te va bien."
+  ],
+  "fake_climax_reveal": [
+    "Tu as cru ça ? Sérieusement ? Continue de branler ta bite.",
+    "Non, retour à la branlette. Je voulais juste te voir reprendre espoir.",
+    "Ha. La main sur ta queue, continue, crédule.",
+    "C'était un mensonge et tu es tombé dedans instantanément. Continue de branler.",
+    "Même pas proche. Retourne au travail sur ta bite.",
+    "Trop facile. La main en mouvement, tu branles."
+  ]
+}

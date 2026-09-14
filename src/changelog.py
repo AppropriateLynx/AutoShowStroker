@@ -193,6 +193,27 @@ CHANGELOG = {
         "</ul>"
         "Watch them come at you now. See how long you keep up."
     ),
+    "0.10.0": (
+        "She only ever had one voice. Now you get to choose who is whispering at you - "
+        "and you do not have to choose just one."
+        "<ul>"
+        "<li><b>Eleven tones to pick from:</b> Flirty, Shy, Bratty, Drunk, Girlfriend "
+        "Experience, Nurturing, Dominant, Sadistic, Degrading, Degrading (Hard) and "
+        "Clinical - the same session, eleven very different voices in your ear</li>"
+        "<li><b>Tick as many as you like.</b> Tones mix evenly, so a sweet little apology "
+        "and a flat order can land back to back in the same session</li>"
+        "<li>Over 1700 brand-new lines. English has all eleven tones; German and French "
+        "have six so far, and Settings tells you which ones your language is missing</li>"
+        "<li>The mean ones are as mean as they sound - Sadistic enjoys the suffering, and "
+        "the hard Degrading goes after your size from the first line to the last. They "
+        "stay switched off until you tick them yourself. Nothing turns them on for you</li>"
+        "<li>Your old voice is still there, untouched, under <i>Flirty</i> - change nothing "
+        "and nothing changes</li>"
+        "<li>Your own phrase files can now be pinned to one tone, or left to speak in all "
+        "of them</li>"
+        "</ul>"
+        "Settings &gt; Callouts. Go find out which one of her gets to you."
+    ),
     "0.9.0": (
         "Every corner of GoonerApp got picked apart and put back together. It takes more, "
         "breaks less, and finally tells you what it knows about you."

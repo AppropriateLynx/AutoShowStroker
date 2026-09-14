@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "E-euh... le rythme vient de changer. C'est bon pour ta bite ?",
+    "Oh ! Ça a basculé... désolée, j'aurais dû te prévenir. Tu branles toujours ?",
+    "Le tempo est différent maintenant... tu le sens aussi sur ta queue ?",
+    "Euh... essaie de suivre celui-là avec ta main ? S'il te plaît ?",
+    "N-nouveau rythme... je l'ai choisi rien que pour toi et ta bite.",
+    "Ça a encore changé... j'espère que ça ne t'ennuie pas, toi et ta queue.",
+    "Oups - tu as remarqué ? Le motif a bougé, tiens le rythme avec ta bite.",
+    "Q-quelque chose est différent... prends ton temps et branle.",
+    "Un nouveau rythme... je suis toute nerveuse de te regarder branler ta queue.",
+    "Euh, ça s'est décalé... tu t'en sors très bien avec ta bite, tu sais."
+  ],
+  "beat_change_faster": [
+    "Ça... ça accélère maintenant. Branle plus vite si tu peux. D-désolée !",
+    "Euh, plus vite ? Si tu peux... seulement si ta bite peut le supporter.",
+    "Oups, ça s'emballe... suis le rythme et pompe ta queue, s'il te plaît ?",
+    "B-bouge ta bite plus vite... je rougis rien qu'en le disant.",
+    "Ça monte sur ta queue... mais ne te fais pas mal, d'accord ?",
+    "Plus rapide maintenant... euh, tu as l'air si concentré en branlant.",
+    "J-j'ai accéléré... c'était trop pour ta bite ?",
+    "Va un peu plus vite sur ta queue... s'il te plaît ? Pour moi ?",
+    "Ça file... j'ose à peine regarder comment tu branles ta bite.",
+    "Branle plus vite... d-désolée, je me suis emballée."
+  ],
+  "beat_change_slower": [
+    "Oh... ça ralentit. C'est plus doux pour ta bite, non ?",
+    "Euh, plus doucement... vas-y tranquillement et branle ta queue lentement.",
+    "P-plus lentement... laisse ta bite mijoter, on n'est pas obligés de se presser.",
+    "Ça se calme... tu respires avec moi et tu branles doucement ?",
+    "Tout doux maintenant... j'aime bien ce moment sur ta queue.",
+    "Euh... branle lentement et laisse ça devenir tout doux un moment.",
+    "Plus lentement... j-je me suis dit que toi et ta bite aviez besoin d'une pause.",
+    "Doucement, la main légère sur ta queue... rien ne presse, vraiment.",
+    "C'est redevenu tendre... c'est mieux comme ça pour toi et ta bite ?",
+    "Ralentis sur ta queue... je veux que ça dure, euh... si ça te va."
+  ],
+  "pause_start": [
+    "Euh... arrêtons-nous une seconde. Les mains loin de ta bite ?",
+    "P-pause... désolée, je sais que toi et ta queue aimiez ça.",
+    "Arrête de branler... juste un instant. S'il te plaît ?",
+    "Mains ailleurs, bite intacte... j-j'attends avec toi.",
+    "Une petite pause... tu as le droit de respirer pendant que ta queue palpite.",
+    "Euh, on fige ? Pardon. On fige – main loin de ta bite.",
+    "N-ne touche plus, lâche ta queue... je n'arrive pas à croire que j'ai dit ça.",
+    "Attends... pas de main sur ta bite, attends un peu avec moi.",
+    "Lâche... ta queue peut attendre, je te promets que ce ne sera pas long.",
+    "Pause... euh, je surveille que tu le fasses vraiment et que tu ne branles pas."
+  ],
+  "pause_end": [
+    "D-d'accord... la main sur ta bite, tu peux recommencer.",
+    "Euh, vas-y... ça m'a manqué de te regarder branler.",
+    "Tu peux toucher à nouveau et continuer de branler... d-désolée pour l'attente.",
+    "On reprend... tout doucement d'abord sur ta queue, d'accord ?",
+    "C'est fini... euh, reprends ta bite. Tu as été si patient.",
+    "Recommence à branler... m-moi aussi je comptais les secondes.",
+    "Vas-y, reviens sur ta queue... s'il te plaît ?",
+    "Voilà... la main revient sur ta bite. Tu l'as mérité.",
+    "Euh, branle ta queue à nouveau... j'aime bien ce moment.",
+    "La main sur ta bite, tu peux bouger à nouveau... je commençais à m'impatienter."
+  ],
+  "media_skipped": [
+    "Oh... celle-là ne plaisait pas à ta bite ?",
+    "Euh, d'accord, suivante... pardon. Tu continues de branler, hein ?",
+    "T-tu passes ? C'est bon, ça ne me dérange pas, tant que ta queue continue.",
+    "Oh ! On avance... garde le rythme sur ta bite, je vais t'en trouver une meilleure.",
+    "Tu es difficile... euh, c'est mignon en fait. Ne t'arrête pas de branler.",
+    "L-la suivante alors. J'espère qu'elle plaira mieux à ta queue.",
+    "Ça disparaît... pardon, je pensais que ça irait à ta bite.",
+    "Euh... peut-être que celle-ci gardera ta bite occupée ?",
+    "Passée... j-je vais faire plus d'efforts si tu continues de branler.",
+    "Oh, d'accord... autre chose alors, mais la main reste sur ta queue."
+  ],
+  "media_repeated": [
+    "Oh... tu voulais la revoir, et tu branles encore dessus ?",
+    "Euh, la revoilà. Elle doit vraiment te plaire, à toi et ta bite.",
+    "T-tu vois, je savais que ta bite aimait celle-là. Branle dessus, alors.",
+    "Encore ? C'est... c'est mignon, et ta queue est bien d'accord.",
+    "D'accord... encore un regard, rien que pour toi - garde ta main en mouvement.",
+    "Tu reviens en arrière... euh, je comprends. Continue juste de branler dessus.",
+    "Celle-là, hein ? T-tu as bon goût. Reste sur ta bite pour elle.",
+    "On rembobine et tu branles... prends tout ton temps.",
+    "Oh ! Elle t'a attrapé. Euh... profite, la main sur ta queue ?",
+    "Encore, et tu branles droit dessus... j-je ne juge pas. Promis."
+  ],
+  "session_started": [
+    "S-salut... bon. La main sur ta bite. On commence ?",
+    "Euh... je suis un peu nerveuse. Mais je suis là. Tu branles pour moi ?",
+    "On commence... s-sois doux avec toi-même et ta queue.",
+    "D'accord... la main prête sur ta bite ? J-je te guide.",
+    "C'est parti, commence à branler... ne me regarde pas comme ça.",
+    "O-on démarre, bite en main... j'attendais ce moment.",
+    "Euh... la main sur ta queue. Je fais de mon mieux. Toi aussi ?",
+    "Ça commence, branle... j'espère que je suis douée pour ça.",
+    "Salut... la main sur ta bite, on va, euh... on va faire ça ensemble.",
+    "Bon... on respire un grand coup, tous les deux. Et puis tu branles."
+  ],
+  "climax_real": [
+    "V-vas-y... tu peux jouir. Je veux que tu le fasses.",
+    "Euh... jouis pour moi. S'il te plaît. Je veux voir.",
+    "Tu peux vider ta charge... j-je l'ai dit. À voix haute.",
+    "Vide ta bite... tu l'as vraiment mérité.",
+    "M-maintenant, jouis... ne te retiens pas pour moi.",
+    "S'il te plaît... jouis fort pour moi. Euh. S'il te plaît."
+  ],
+  "climax_ruined": [
+    "O-oh non... mains loin de ta bite. Tout de suite. Pardon ! Laisse ça se perdre sans le plein plaisir.",
+    "Stop ! Euh... stop, laisse-le se gâcher. J-je sais, je suis désolée.",
+    "Lâche... pas de vrai orgasme au bout. Je sais, je sais. Je suis désolée.",
+    "Mains ailleurs et laisse la charge couler... ce sera fini dans une seconde.",
+    "Euh... celui-là est gâché, il ne compte pas. Pardon.",
+    "N-ne touche plus et laisse ça se perdre... je n'ai pas pu m'en empêcher."
+  ],
+  "climax_denied": [
+    "Euh... pas de jouissance aujourd'hui. Je suis vraiment désolée.",
+    "N-non... mains loin de ta bite. Je sais que c'est méchant.",
+    "On a fini... bite intacte, et tu n'as pas le droit de jouir. Pardon.",
+    "C'est tout... j-j'ai décidé. Pas de jouissance.",
+    "Pas d'orgasme ce soir... ne m'en veux pas, s'il te plaît.",
+    "Euh... pas aujourd'hui. La prochaine fois peut-être ? J'espère."
+  ],
+  "fake_climax_reveal": [
+    "Oh ! Euh... j'ai menti, continue de branler. Je suis vraiment désolée.",
+    "C-ce n'était pas vrai... la main revient sur ta bite, ne sois pas fâché.",
+    "J'ai inventé ça et tu continues de branler... je voulais voir ta tête.",
+    "Euh... non. Pas encore, continue sur ta queue. Pardon !",
+    "J-je t'ai piégé, alors branle. C'était méchant de ma part.",
+    "C'était un petit mensonge... continue sur ta bite, d'accord ?"
+  ]
+}

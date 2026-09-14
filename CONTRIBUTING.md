@@ -11,13 +11,30 @@ phrases without touching the Python code.
 
 #### 1. Locate the Files
 
-All callout data is stored in the `./res/callouts/` directory. Each file corresponds to a language code (e.g.,
-`en.json`, `de.json`).
+All callout data lives in `./res/callouts/`, one folder per language and one file per tone
+inside it:
+
+```
+res/callouts/
+  en/
+    flirty.json
+    shy.json
+    bratty.json
+    ...
+  de/  ... a subset is fine, see below
+  fr/  ... a subset is fine, see below
+```
+
+**Language and tone are two independent axes.** The user picks exactly one language and any
+number of tones; the app then mixes the ticked tones evenly. That is why the file name carries
+the tone and the folder carries the language — the same `{trigger_key: [phrases]}` content,
+indexed twice.
 
 #### 2. Understand the Structure
 
-The JSON structure is based on **Trigger Keys**. When a specific event happens in the app (e.g., the beat speeds up),
-the corresponding key is used to randomly select one phrase from the array.
+Inside a tone file, the structure is based on **Trigger Keys**. When a specific event happens in
+the app (e.g. the beat speeds up), the corresponding key is used to randomly select one phrase
+from the array.
 
 ```json
 {
@@ -49,10 +66,26 @@ The available Trigger Keys at the moment are:
 | `climax_denied`       | Fired once per session when the climax system decides the session ends without an orgasm.     |
 | `fake_climax_reveal`  | Fired a few seconds after a fake climax cue (which reuses `climax_real`) to reveal it was a joke. |
 
+The tones that ship today:
+
+| Tone         | File            | Voice                                                                            |
+|:-------------|:----------------|:---------------------------------------------------------------------------------|
+| Flirty       | `flirty.json`   | Playful, teasing, winking. The app's original voice and the default.             |
+| Shy          | `shy.json`      | Timid, blushing, hesitant — apologises for being bossy.                           |
+| Dominant     | `dominant.json` | Commanding and certain. Imperatives, no negotiation.                              |
+| Degrading    | `degrading.json`| Humiliation play: mocks the user's neediness and stamina. **Opt-in, never default.** |
+| Degrading (Hard) | `hard_degrading.json` | The same register turned up: small-penis humiliation and inadequacy throughout. **Opt-in, never default.** |
+| Bratty       | `bratty.json`   | Petulant and entitled — teases by withholding rather than commanding. |
+| Drunk        | `drunk.json`    | Loud, sloppy, uninhibited. All exclamation marks and no filter. |
+| Nurturing    | `nurturing.json`| Caring and protective, softer than Girlfriend Experience and less flirtatious. |
+| Sadistic     | `sadistic.json` | Enjoys the suffering itself rather than the obedience. **Opt-in, never default.** |
+| Clinical     | `clinical.json` | Detached and procedural, like a technician reading instructions. |
+| Girlfriend Experience | `girlfriend.json` | Warm, affectionate, present. Ranges from sweet to gently bossy, never degrading. |
+
 #### 3. How to Contribute Phrases
 
-To add a new phrase, simply append your new text string to the relevant array within the existing language file (e.g.,
-`en.json`):
+To add a new phrase, append your new text string to the relevant array in the file for the
+language **and** tone you are writing for (e.g. `en/dominant.json`):
 
 ```json
 "beat_change_faster": [
@@ -62,46 +95,62 @@ To add a new phrase, simply append your new text string to the relevant array wi
 ],
 ```
 
---- 
+Keep the phrase in that file's voice. A gentle line in `dominant.json` weakens the tone for
+everyone who ticked it precisely because they wanted the harsh one — put it in the tone where it
+belongs instead.
 
-### Adding New Languages
+---
 
-To add a completely new language (e.g., French), you need to create a new JSON file based on the corresponding language
-code.
+### Adding a New Language
 
-#### 1. Create the New File
+To add a completely new language (e.g. Spanish), create a folder named with the standard
+two-letter language code and give it **one file per shipped tone**:
 
-Create a new file in the `./res/callouts/` directory and name it using the standard two-letter language code (e.g.,
-`fr.json`).
+```
+res/callouts/es/flirty.json      <- required
+res/callouts/es/shy.json         <- optional
+res/callouts/es/dominant.json    <- optional
+...
+```
 
-#### 2. Duplicate the Structure
+1. Copy the key structure from the matching English file — every Trigger Key must be present and
+   non-empty, because a tone that is ticked but silent for one event looks like a bug.
+2. Write the phrases in that language rather than translating word for word. A callout that reads
+   like a translation breaks the mood faster than a missing one.
+3. **`flirty.json` is the only required file.** A language may ship any subset of the other tones:
+   `CalloutHandler` skips a tone the current language lacks and falls back to the default, and the
+   Settings dialog marks such a tone `(not in <lang>)` so the gap is visible rather than silent.
+   `flirty` is required precisely because it is what that fallback lands on.
+4. No code changes are needed — `CalloutHandler` discovers languages and tones from the folder
+   layout at startup, and the Settings dialog builds its controls from what it finds.
 
-Copy the entire contents of an existing file (like `en.json`) into your new `fr.json` file. Ensure that all required
-Trigger Keys are present, even if their arrays are temporarily empty. The CalloutHandler depends on the presence of
-these keys.
+### Adding a New Tone
 
-#### 3. Translate the Content
+Adding a tone works the same way in the other direction, except you do not have to do every
+language at once — one `<tone>.json` in a single language folder already makes the tone appear.
+A tone nobody declared a label for still works and is offered with a title-cased name
+(`bratty.json` → "Bratty"); adding it to `CalloutHandler.TONE_LABELS` gives it a proper display
+name and a fixed position in the list.
 
-Translate the phrases within the arrays of your new file. Or add completely new ones. That is up to you and nobody
-else :D
+Before proposing a new tone, check it is a genuinely distinct voice rather than a few phrases the
+existing tones could hold — the user can already tick several tones at once, so a tone that is
+just "two existing ones mixed" adds files without adding range.
 
-Once the file is saved, the application's Settings Window will automatically detect the new language and make it
-available for selection.
+#### Validate Your Files
 
-#### 4. Validate Your File
-
-A missing or misspelled Trigger Key (e.g. `beat_changed_general` instead of `beat_change_general`) will not throw an
-error — the app just silently stays quiet for that event, which is easy to miss by playing the app alone. Before
-opening a PR, run the automated schema check, which verifies every file in `res/callouts/` against the required
-Trigger Keys:
+A missing or misspelled Trigger Key (e.g. `beat_changed_general` instead of `beat_change_general`)
+will not throw an error — the app just silently stays quiet for that event, which is easy to miss
+by playing the app alone. Before opening a PR, run the automated schema check:
 
 ```bash
 python -m pytest tests/test_callout_language_files.py -v
 ```
 
-This confirms your file has valid JSON, all required keys, no typo'd/unknown keys, and that every value is a list of
-strings. It does **not** check that your translations read well or that arrays are non-empty — for that, still run
-the app (`python main.py`), select your language in Settings, and play through a session.
+It walks every `res/callouts/*/*.json` and verifies: valid JSON, all required Trigger Keys, no
+unknown/typo'd keys, every value a list of strings, no empty phrase lists, no duplicate phrases
+within a list, no phrase shared between two tones of the same language, every language shipping at
+least the default tone, and no stray phrase file outside a language folder. It does **not** check that your writing reads well — for that, still run the app
+(`python main.py`), pick your language and tone in Settings, and play through a session.
 
 ---
 

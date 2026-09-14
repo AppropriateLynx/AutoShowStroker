@@ -18,7 +18,8 @@ Local still means written somewhere, so: your data (session history, custom patt
 * **Custom Beat Patterns:** Build your own rhythm patterns in the built-in Pattern Editor and mix them in alongside the presets.
 * **Random Pause Phases:** The Strokemeter unexpectedly transitions into a controlled pause featuring a countdown display in the green-colored footer.
 * **Climax System:** Configurable climax announcements with real, ruined, and denied orgasm outcomes, plus optional fake climax cues to keep you guessing — chances for every outcome are independently tunable.
-* **Multilingual Callouts (Teases):** Random text instructions tailored to the current event (e.g., during tempo changes, pauses, or media transitions). Supports German and English (expandable via JSON files).
+* **Multilingual Callouts (Teases):** Random text instructions tailored to the current event (e.g., during tempo changes, pauses, or media transitions). Available in German, English and French (expandable via JSON files).
+* **Selectable Tone:** Tone is a second axis next to language. Pick **Flirty**, **Shy**, **Dominant**, **Degrading**, **Degrading (Hard)** or **Girlfriend Experience** — or tick several and the app mixes them evenly. Both degrading tones are strictly opt-in and never switch themselves on.
 * **Detailed Session Statistics:** At the end of each session, you receive a detailed evaluation (duration, number of beats, favorite rhythm, pause statistics), with a highlighted card for every personal record you just broke.
 * **Long-term Statistics:** Track how your stamina develops over time. A dedicated "Statistics" menu opens a history view with your all-time bests and a trend chart across every session you've ever played.
 * **Flexible Control:** Keyboard shortcuts for rapid navigation and adjustments during the session.
@@ -40,7 +41,7 @@ Local still means written somewhere, so: your data (session history, custom patt
     * **Playback:** slideshow timing for images/GIFs, minimum video duration, and beat/video volume.
     * **Beat & Rhythm:** beat frequency and duration ranges, pause duration and chance, which rhythm patterns are active (plus a Pattern Editor for creating your own), and optional difficulty ramping.
     * **Climax:** climax chance, and independent toggles/chances for ruined, denied, and fake climax outcomes.
-    * **Callouts:** enable/disable, callout language, and how often callouts trigger.
+    * **Callouts:** enable/disable, callout language, the tone mix, and how often callouts trigger.
 
 ## 💬 Community
 
@@ -97,15 +98,15 @@ After a successful build, you will find the finished file **`GoonerApp.exe`** in
 
 * `src/GoonerApp.py` - Main window, media control, and GUI layout.
 * `src/BeatHandler.py` - Logic for rhythm, audio playback, and pauses.
-* `src/CalloutHandler.py` - Management and selection of multilingual text instructions.
+* `src/CalloutHandler.py` - Management and selection of text instructions, across both language and tone.
 * `src/ScoreTracker.py` - Recording of session statistics.
-* `res/callouts/` - JSON files for translations (`de.json`, `en.json`).
+* `res/callouts/` - phrase files, one folder per language and one file per tone (`en/flirty.json`, `de/dominant.json`, ...).
 
-## 🌍 Contributing (New Languages & Phrases)
+## 🌍 Contributing (New Languages, Tones & Phrases)
 
-Want to add your own language, or new teasing phrases to an existing one? No Python knowledge required — see
-[CONTRIBUTING.md](CONTRIBUTING.md) for the full guide, including which Trigger Key fires for which in-app event,
-how to validate your file, and how to submit it as a Pull Request.
+Want to add your own language or tone, or new teasing phrases to an existing one? No Python knowledge required — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the full guide, including how the `res/callouts/<lang>/<tone>.json` layout works,
+which Trigger Key fires for which in-app event, how to validate your files, and how to submit them as a Pull Request.
 
 ## 📸 Screenshots
 

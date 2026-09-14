@@ -103,6 +103,21 @@ QCheckBox::indicator:checked {{
     background-color: {ACCENT};
     border-color: {ACCENT};
 }}
+/* The rules above set colour unconditionally, which overrides Qt's own disabled
+   palette - without these three, setEnabled(False) is invisible and the control just
+   stops responding for no apparent reason. A ticked-but-disabled box keeps its tick,
+   only muted: the selection is still real, it just has nothing to say right now. */
+QCheckBox:disabled {{
+    color: {DISABLED_TEXT};
+}}
+QCheckBox::indicator:disabled {{
+    border-color: {DISABLED_TEXT};
+    background-color: {DISABLED_BG};
+}}
+QCheckBox::indicator:checked:disabled {{
+    background-color: {DISABLED_TEXT};
+    border-color: {DISABLED_TEXT};
+}}
 QComboBox, QDoubleSpinBox, QSpinBox {{
     background-color: {SURFACE};
     color: {TEXT};
