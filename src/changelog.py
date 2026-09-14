@@ -255,6 +255,24 @@ CHANGELOG = {
         "</ul>"
         "Fewer surprises. Unless you asked for those."
     ),
+    "0.8.5": (
+        "The small stuff, tidied. You'll mostly notice it by nothing going wrong."
+        "<ul>"
+        "<li>Walking out mid-session now counts. Closing the window used to throw the "
+        "whole thing away - no time on the clock, no record, as if you'd never started</li>"
+        "<li>No more ghost timer sitting on the start screen counting up from a session "
+        "that ended long ago</li>"
+        "<li>Saving your settings mid-pause no longer yanks you out of it with a new "
+        "rhythm you never get to feel</li>"
+        "<li>The pause-chance dial responds to its arrows again, instead of politely "
+        "snapping back to where it was</li>"
+        "<li>A session too short to settle on a favourite rhythm says so, rather than "
+        "telling you your favourite was 'None'</li>"
+        "<li>And the update check now tells you exactly what it hands to GitHub, down to "
+        "the one line that identifies the app</li>"
+        "</ul>"
+        "Nothing dramatic. Just less in your way."
+    ),
 }
 
 
