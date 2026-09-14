@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "Je l'ai changé pour toi, mon cœur. Tu sens ?",
+    "Nouveau rythme — reste avec moi, je te tiens.",
+    "Mmm, le voilà. Suis-le avec moi.",
+    "J'ai changé parce que je sais que tu aimes les surprises.",
+    "Nouveau motif, mon amour. Prends ton temps pour le trouver.",
+    "Tu sens ce glissement ? C'était pour toi.",
+    "Voilà. Quelque chose d'un peu différent, rien que pour nous.",
+    "Suis celui-là, mon chéri. Tu t'en sors si bien.",
+    "Nouveau rythme. J'adore te regarder l'attraper.",
+    "Allez, bébé — laisse le nouveau rythme te trouver."
+  ],
+  "beat_change_faster": [
+    "Un peu plus vite, mon amour. Je veux te voir travailler.",
+    "Accélère pour moi, mon cœur. Tu es si beau comme ça.",
+    "Plus vite — je sais que tu l'as en toi.",
+    "Allez, mon chéri. Tiens le rythme avec moi.",
+    "Plus vite, bébé. Je suis juste là avec toi.",
+    "Monte. J'adore ce que tu deviens quand tu cours après.",
+    "Plus rapide maintenant — ne réfléchis pas, bouge.",
+    "Plus vite, mon amour. Laisse-moi t'entendre respirer.",
+    "Voilà, accélère. Tu es magnifique quand tu t'appliques.",
+    "Encore un peu, bébé. Pour moi ?"
+  ],
+  "beat_change_slower": [
+    "Ralentis, mon amour. On a tout le temps qu'il faut.",
+    "Doucement, bébé. Je veux que ça dure.",
+    "Plus lentement — sens-le simplement avec moi un moment.",
+    "Chut, ralentis. Rien ne presse, mon chéri.",
+    "Tout doux maintenant. Je t'aime comme ça.",
+    "Relâche, mon amour. Reste ici avec moi.",
+    "Plus lentement, bébé. Laisse ça monter comme il faut.",
+    "Descends. Je veux te garder encore un peu.",
+    "Tout en douceur. C'est mon moment préféré.",
+    "Lentement, mon chéri. Respire avec moi."
+  ],
+  "pause_start": [
+    "Mains loin pour moi, mon amour. Juste un instant.",
+    "Lâche, bébé. Je veux te voir attendre.",
+    "Stop, mon chéri. Reste juste là avec moi.",
+    "Mains ailleurs. Respire. Je ne vais nulle part.",
+    "Petite pause, mon amour. Tu as été si sage.",
+    "Lâche pour moi. Je t'aime un peu désespéré.",
+    "Pause, bébé. Sens à quel point tu le veux.",
+    "Enlève, mon chéri. Juste nous et l'attente.",
+    "Reste immobile pour moi. Je me rattraperai.",
+    "Stop. Fais-moi confiance sur ce coup-là, mon amour."
+  ],
+  "pause_end": [
+    "D'accord, mon amour. Reviens vers moi.",
+    "La main dessus, bébé. Tu m'as manqué.",
+    "Voilà, mon chéri. Recommence.",
+    "Tu as si bien attendu. Vas-y, touche.",
+    "On y retourne, mon amour. Tout doux d'abord.",
+    "Viens là. La main dessus. C'est ça.",
+    "Bon garçon. Tu peux bouger à nouveau.",
+    "Vas-y, bébé. Je veux te revoir.",
+    "Recommence, mon chéri. Tout doucement.",
+    "Tu l'as mérité. Touche pour moi."
+  ],
+  "media_skipped": [
+    "Pas celle-là, hm ? Ce n'est pas grave, mon amour.",
+    "Je comprends, mon cœur. Trouvons mieux.",
+    "Suivante alors — je sais ce que tu aimes.",
+    "Non ? D'accord. Je continue à chercher pour toi.",
+    "Tu passes, mon chéri ? Difficile comme toujours.",
+    "Très bien, mon amour. Autre chose pour toi.",
+    "Pas ton truc. Essayons celle-ci.",
+    "D'accord bébé, on avance. Garde ton rythme.",
+    "Je vais trouver celle qui te fera craquer. Promis.",
+    "Suivante, mon amour. Mais ne t'arrête pas."
+  ],
+  "media_repeated": [
+    "Ooh, tu reviens ? J'aime que tu me le montres.",
+    "Celle-là t'a eu, n'est-ce pas, mon amour ?",
+    "Encore, bébé ? Noté. Je m'en souviendrai.",
+    "Tu voulais un autre regard. C'est mignon.",
+    "Mmm, c'est ton genre. Bon à savoir.",
+    "De retour pour plus, mon chéri ? Prends ton temps.",
+    "J'ai vu ta réaction. Évidemment que tu y retournes.",
+    "Regarde-la aussi longtemps que tu veux, mon amour.",
+    "C'est celle-là, hm ? Profite, bébé.",
+    "Vas-y, regarde encore. J'adore savoir ce qui te plaît."
+  ],
+  "session_started": [
+    "Hé toi. Prenons notre temps ce soir.",
+    "J'ai attendu ça toute la journée, mon cœur.",
+    "Viens là, mon amour. La main prête ?",
+    "Juste toi et moi. Commençons.",
+    "Tu m'as manqué. Faisons quelque chose de bien.",
+    "Te voilà. Installe-toi, mon chéri.",
+    "Commençons doucement, bébé. On a le temps.",
+    "Salut, mon amour. Je vais si bien m'occuper de toi.",
+    "Prêt ? Reste avec moi jusqu'au bout.",
+    "Faisons ça ensemble. La main dessus pour moi."
+  ],
+  "climax_real": [
+    "Lâche pour moi, mon amour. Je te tiens.",
+    "Allez, bébé. Je veux tout.",
+    "C'est ça, mon chéri. Ne te retiens pas.",
+    "Jouis pour moi. Tu as été si sage ce soir.",
+    "Laisse venir, mon amour. Je suis juste là.",
+    "Maintenant, bébé. Donne-le-moi."
+  ],
+  "climax_ruined": [
+    "Mains loin, mon amour. Je sais. Désolée, mais mains loin.",
+    "Lâche, bébé. Fais-moi confiance — laisse simplement venir.",
+    "Enlève, mon chéri. Je sais que ça tire.",
+    "Ne touche plus. Je me rattraperai, promis.",
+    "Mains ailleurs, mon amour. Pas cette fois.",
+    "Lâche. Je veux te garder en manque."
+  ],
+  "climax_denied": [
+    "Pas ce soir, mon amour. Je veux que tu penses à moi.",
+    "Non, bébé. Tu gardes ça pour la prochaine fois.",
+    "On a fini, mon chéri. Mains loin.",
+    "Pas cette fois. Je t'aime en manque.",
+    "Non, mon amour. Dors dessus et reviens vers moi.",
+    "Rien ce soir. Tu me remercieras plus tard, promis."
+  ],
+  "fake_climax_reveal": [
+    "Aww, tu m'as crue ? C'est adorable.",
+    "Pas encore, mon amour. Je n'ai pas pu résister.",
+    "J'ai menti, bébé. Continue pour moi.",
+    "Je t'ai eu. La main revient, mon chéri.",
+    "Pas tout à fait encore. Je voulais voir ta tête.",
+    "Désolée, mon amour. Tu es encore à moi un moment."
+  ]
+}

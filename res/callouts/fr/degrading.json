@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "Nouveau rythme. Essaie de suivre, si tant est que tu en sois capable.",
+    "J'ai changé. On va te voir rater les trois premiers temps.",
+    "Autre motif. Je parie que tu le perds tout de suite.",
+    "Nouveau rythme. Voilà la petite panique désespérée.",
+    "Ça a basculé. Et te voilà déjà à la traîne.",
+    "Suis un peu, limace. Ce n'est pas compliqué.",
+    "Nouveau tempo. Honnêtement, un métronome ferait mieux.",
+    "Changé. Concentre-toi, pour une fois.",
+    "Un motif tout neuf pour quelqu'un qui ne gère même pas l'ancien.",
+    "Suis. Ou pas. C'est plus drôle quand tu n'y arrives pas."
+  ],
+  "beat_change_faster": [
+    "Plus vite. Déjà en difficulté ? Pathétique.",
+    "Accélère, petit quémandeur. Tu décroches.",
+    "Plus vite. Montre-moi le peu d'endurance que tu as.",
+    "Plus rapide. Transpire. Tu resteras quand même le plus lent.",
+    "Vas-y, gigote. C'est divertissant.",
+    "Plus vite, et tâche de ne pas te ridiculiser.",
+    "Voilà, cours après. Le désespoir te va bien.",
+    "Accélère. C'est à peine l'échauffement et tu es déjà fini.",
+    "Plus vite. Ton bras lâche déjà, non ?",
+    "Allez, fais un effort pour une fois dans ta vie."
+  ],
+  "beat_change_slower": [
+    "Ralentis. On ne peut visiblement pas te faire confiance à ce rythme.",
+    "Plus lentement. Oui, je sais que tu détestes ça.",
+    "Doucement, gourmand. Tu n'iras pas droit à la fin.",
+    "Lentement. Reste dedans. Souffre correctement.",
+    "Au ralenti. Plains-toi, je t'en défie.",
+    "Plus lentement. Ce petit gémissement était adorable, au passage.",
+    "À peine un mouvement. Comme ta maîtrise de toi.",
+    "Lentement. Il ne s'agit pas de ce que tu veux.",
+    "Ralentis, avant de te déshonorer.",
+    "Tout doux. Tu supplieras avant la fin."
+  ],
+  "pause_start": [
+    "Mains loin, petit quémandeur. Tu n'as pas mérité mieux.",
+    "Stop. Reste là et désire, comme un bon mendiant.",
+    "Enlève. Regarde-toi, tu tressailles déjà.",
+    "Lâche. Essaie de survivre dix secondes tout seul.",
+    "Mains ailleurs. C'est le moment où tu apprends la patience.",
+    "Ne touche plus. C'est gênant de voir à quel point c'est dur pour toi.",
+    "Fige. Et non, geindre ne raccourcit rien.",
+    "Lâche ça. Tu en as eu plus qu'assez.",
+    "Rien pour toi. Savoure le manque.",
+    "Enlève. Je veux te voir te tortiller."
+  ],
+  "pause_end": [
+    "Bon. Touche. Tu avais l'air si perdu sans ça.",
+    "Vas-y, désespéré. Retourne au travail.",
+    "La main dessus. Tiens plus longtemps cette fois.",
+    "Tu peux. C'est pathétique, cet air reconnaissant.",
+    "Continue. C'était la plus longue minute de ta vie, hein ?",
+    "Reprends. Tu suppliais pratiquement.",
+    "Continue. Ne finis pas trop tôt comme la dernière fois.",
+    "Touche. Oui, je t'ai vu tendre la main.",
+    "Vas-y. Fais semblant d'avoir un peu de technique.",
+    "Permission. Utilise-la mieux que d'habitude."
+  ],
+  "media_skipped": [
+    "Trop bien pour celle-là ? Je t'en prie.",
+    "Tu passes. Difficile et inutile, belle combinaison.",
+    "Pas assez pour toi ? Rien ne l'est jamais.",
+    "Suivante. Tes exigences sont risibles vu ta position.",
+    "Disparue. Trouvons quelque chose que même toi tu peux gérer.",
+    "Passée. Petite chose gourmande.",
+    "Rejetée. Comme si tu avais le choix en quoi que ce soit.",
+    "Bien, suivante. Continue quand même, pas de pause pour toi.",
+    "On avance. Tu passerais tout, si je te laissais faire.",
+    "Suivante. Et non, elle ne suffira pas non plus."
+  ],
+  "media_repeated": [
+    "Encore de retour ? Évidemment que c'est ça qui te fait de l'effet.",
+    "Prévisible. Totalement prévisible.",
+    "Ah, voilà donc ta faiblesse. Quelle facilité.",
+    "Tu rembobines déjà. Un peu de dignité.",
+    "Celle-là, vraiment ? Ça en dit long sur toi.",
+    "Encore ? Tu es transparent.",
+    "Regarde-toi ramper vers elle.",
+    "Deuxième portion. Gourmand comme toujours.",
+    "Il te la fallait absolument. Pathétique.",
+    "Bien sûr. Certaines choses ne changent jamais."
+  ],
+  "session_started": [
+    "Regarde-toi, déjà pressé. Commençons.",
+    "La main prête ? Évidemment qu'elle l'est.",
+    "On commence. Tiens plus longtemps que d'habitude.",
+    "C'est parti. Je te donne cinq minutes.",
+    "Commence, petit quémandeur. Ça ira vite.",
+    "Voyons le peu qu'il faudra aujourd'hui.",
+    "On démarre. Ne me déçois pas tout de suite.",
+    "Tu es revenu en rampant. Prévisible. Vas-y.",
+    "Commence. Et ne fais pas semblant de ne pas en avoir crevé d'envie.",
+    "La main dessus. Montre-moi ton mieux. Ce ne sera pas grand-chose."
+  ],
+  "climax_real": [
+    "Vas-y alors. Finis, petite chose désespérée.",
+    "Jouis. Voyons le désastre que tu fabriques.",
+    "Bon. Prends-le. Tu ne peux visiblement plus attendre.",
+    "Lâche. Tu suppliais de tout ton corps.",
+    "Maintenant. Sois aussi pathétique que tu veux.",
+    "Jouis. Tu l'as à peine mérité."
+  ],
+  "climax_ruined": [
+    "Mains loin. Gâche-le. C'est tout ce que tu auras.",
+    "Stop. Laisse ça couler dans le vide. Ça te va bien.",
+    "Enlève. Tu auras le dégât et rien du plaisir.",
+    "Lâche. Regarde ça ne mener nulle part.",
+    "Gâché. Et tu me remercieras quand même.",
+    "Mains ailleurs. Voilà ce que tu récoltes."
+  ],
+  "climax_denied": [
+    "Rien. Tu n'étais même pas près de le mériter.",
+    "Refusé. Reste là et endure.",
+    "Non. Y a-t-il jamais eu un doute ?",
+    "On a fini. Tu récoltes exactement rien.",
+    "Aucune chance. Sois moins pathétique la prochaine fois.",
+    "Non. Boude, vas-y. Ça te va bien."
+  ],
+  "fake_climax_reveal": [
+    "Tu as cru ça ? Sérieusement ?",
+    "Non. Je voulais juste te voir reprendre espoir.",
+    "Ha. Continue, crédule.",
+    "C'était un mensonge. Tu es tombé dedans instantanément.",
+    "Même pas proche. Retourne au travail.",
+    "Trop facile. La main en mouvement."
+  ]
+}

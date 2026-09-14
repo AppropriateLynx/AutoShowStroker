@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "New rhythm. Match it. Now.",
+    "The pattern changed. Keep up or answer for it.",
+    "I switched it. You adapt. That's the arrangement.",
+    "Different beat. I won't say it twice.",
+    "Follow. Exactly. No improvising.",
+    "That's the new tempo. Own it.",
+    "Change of plan. Your hand obeys the beat, not you.",
+    "New pattern. Eyes forward, hand moving.",
+    "I decide the rhythm. You just keep time.",
+    "Adjust. Immediately. Good."
+  ],
+  "beat_change_faster": [
+    "Faster. Don't make me repeat myself.",
+    "Pick it up. Now.",
+    "Speed up. I want to see you struggle.",
+    "Quicker. You've got more in you than that.",
+    "Move. Faster. Keep that rhythm.",
+    "I said faster. Prove you can take it.",
+    "Harder, quicker, and don't you dare slow down.",
+    "Accelerate. This is where you earn it.",
+    "Faster. Breathe later.",
+    "Push. I'm not interested in your excuses."
+  ],
+  "beat_change_slower": [
+    "Slow. Down. Every stroke on my count.",
+    "Easy. I want this drawn out.",
+    "Slower. Denial is a rhythm too.",
+    "Take it down. Feel every single one.",
+    "Ease off. You don't get to rush this.",
+    "Slow. That's an order, not a suggestion.",
+    "Gentle now. I'm keeping you right on the edge.",
+    "Down to a crawl. Suffer beautifully.",
+    "Slower. Let it build where I want it.",
+    "Control yourself. That's the whole exercise."
+  ],
+  "pause_start": [
+    "Hands off. Now.",
+    "Stop. Don't move a muscle.",
+    "Let go. I didn't ask twice.",
+    "Off. Sit there and want it.",
+    "Freeze. I'll tell you when.",
+    "Hands where I can see them. Nothing else.",
+    "Stop touching. This part is mine.",
+    "Down. Wait. Behave.",
+    "Nothing. You do nothing until I say.",
+    "Release. And no cheating - I'd know."
+  ],
+  "pause_end": [
+    "Back to work.",
+    "Hands on. Immediately.",
+    "You may continue. Make it count.",
+    "Resume. Show me you missed it.",
+    "Go. And don't stop until I say.",
+    "Touch. Now. That's better.",
+    "Continue. You waited well.",
+    "Permission granted. Use it properly.",
+    "Start again. Slowly - I'm watching.",
+    "Move. You've had your rest."
+  ],
+  "media_skipped": [
+    "Not to your taste? Noted. Keep stroking.",
+    "Skip all you like. The rhythm doesn't change.",
+    "Picky. Fine. Next.",
+    "Moving on. Your hand doesn't get a break for that.",
+    "Rejected. Try to stay focused.",
+    "Next. And no, you don't get to keep browsing.",
+    "Gone. Eyes on the new one.",
+    "Dismissed. Now concentrate.",
+    "That's your skip. Spend the next one properly.",
+    "Onwards. The beat waits for nobody."
+  ],
+  "media_repeated": [
+    "Back again? Greedy.",
+    "So that's what does it for you. Noted.",
+    "Second look. I'll remember that.",
+    "You wanted it again. Interesting.",
+    "Go on then. Stare. Keep stroking.",
+    "Rewind if you must. The tempo stands.",
+    "That one got to you. Obviously.",
+    "Again? You're easy to read.",
+    "Take your second look. Earn it.",
+    "Predictable. Now keep your rhythm."
+  ],
+  "session_started": [
+    "We start now. Hand ready.",
+    "Eyes up. You're mine for the next while.",
+    "Begin. And you don't stop unless I say so.",
+    "Let's see how long you last.",
+    "From here on, I set the pace. Understood?",
+    "Position. Focus. Go.",
+    "You came here to obey. So obey.",
+    "Starting. No stalling, no negotiating.",
+    "Hand on. Breathe. And begin.",
+    "This is my session now. Keep up."
+  ],
+  "climax_real": [
+    "Come. Now. That's an order.",
+    "You've earned it. Let go.",
+    "Finish. I want to watch you break.",
+    "Now. Give it to me.",
+    "Permission granted. Don't waste it.",
+    "Come for me. Everything you've got."
+  ],
+  "climax_ruined": [
+    "Hands off. Right now. Let it go to waste.",
+    "Stop. No touching. Take it exactly as it comes.",
+    "Off. You get the ache without the reward.",
+    "Let go and don't you dare finish the job.",
+    "That one's ruined. On purpose. Mine to decide.",
+    "Release and suffer. I told you I was in charge."
+  ],
+  "climax_denied": [
+    "No. Not tonight. Hands off.",
+    "We're done. You stay exactly as you are.",
+    "Nothing for you. Maybe you'll behave next time.",
+    "Denied. Sit with that.",
+    "The session ends. Your ache doesn't.",
+    "No. And I'm not explaining myself."
+  ],
+  "fake_climax_reveal": [
+    "Did you honestly believe me? Keep going.",
+    "No. I changed my mind. Back to work.",
+    "That was a test. You failed. Continue.",
+    "I lied. Hand moving. Now.",
+    "Not yet. I enjoy watching you hope.",
+    "Wrong. You don't get it that easily."
+  ]
+}

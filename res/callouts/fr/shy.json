@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "E-euh... le rythme vient de changer. C'est bon pour toi ?",
+    "Oh ! Ça a basculé... désolée, j'aurais dû te prévenir.",
+    "Le tempo est différent maintenant... tu le sens aussi ?",
+    "Euh... essaie de suivre celui-là ? S'il te plaît ?",
+    "N-nouveau rythme... je l'ai choisi rien que pour toi.",
+    "Ça a encore changé... j'espère que ça ne t'ennuie pas.",
+    "Oups — tu as remarqué ? Le motif a bougé.",
+    "Q-quelque chose est différent... prends ton temps.",
+    "Un nouveau rythme... je suis toute nerveuse de te regarder.",
+    "Euh, ça s'est décalé... tu t'en sors très bien, tu sais."
+  ],
+  "beat_change_faster": [
+    "Ça... ça accélère maintenant. D-désolée !",
+    "Euh, plus vite ? Si tu peux... seulement si tu peux.",
+    "Oups, ça s'emballe... suis le rythme, s'il te plaît ?",
+    "P-plus vite... je rougis rien qu'en le disant.",
+    "Ça monte... mais ne te fais pas mal, d'accord ?",
+    "Plus rapide maintenant... euh, tu as l'air si concentré.",
+    "J-j'ai accéléré... c'était trop ?",
+    "Va un peu plus vite... s'il te plaît ? Pour moi ?",
+    "Ça file... j'ose à peine regarder.",
+    "Plus vite... d-désolée, je me suis emballée."
+  ],
+  "beat_change_slower": [
+    "Oh... ça ralentit. C'est plus doux, non ?",
+    "Euh, plus doucement... vas-y tranquillement.",
+    "P-plus lentement... on n'est pas obligés de se presser.",
+    "Ça se calme... tu respires avec moi ?",
+    "Tout doux maintenant... j'aime bien ce moment.",
+    "Euh... laisse ça devenir tout doux un moment.",
+    "Plus lentement... j-je me suis dit que tu avais besoin d'une pause.",
+    "Doucement... rien ne presse, vraiment.",
+    "C'est redevenu tendre... c'est mieux comme ça ?",
+    "Ralentis... je veux que ça dure, euh... si ça te va."
+  ],
+  "pause_start": [
+    "Euh... arrêtons-nous une seconde. Les mains loin ?",
+    "P-pause... désolée, je sais que tu aimais ça.",
+    "Stop... juste un instant. S'il te plaît ?",
+    "Mains ailleurs... j-j'attends avec toi.",
+    "Une petite pause... tu as le droit de respirer.",
+    "Euh, on fige ? Pardon. On fige.",
+    "N-ne touche plus... je n'arrive pas à croire que j'ai dit ça.",
+    "Attends... attends un peu avec moi.",
+    "Lâche... je te promets que ce ne sera pas long.",
+    "Pause... euh, je surveille que tu le fasses vraiment."
+  ],
+  "pause_end": [
+    "D-d'accord... tu peux recommencer.",
+    "Euh, vas-y... tu m'as manqué à regarder.",
+    "Tu peux toucher à nouveau... d-désolée pour l'attente.",
+    "On reprend... tout doucement d'abord, d'accord ?",
+    "C'est fini... euh, tu as été si patient.",
+    "Recommence... m-moi aussi je comptais les secondes.",
+    "Vas-y... s'il te plaît ?",
+    "Voilà... la main revient. Tu l'as mérité.",
+    "Euh, reprends... j'aime bien ce moment.",
+    "Tu peux bouger à nouveau... je commençais à m'impatienter."
+  ],
+  "media_skipped": [
+    "Oh... celle-là ne te plaisait pas ?",
+    "Euh, d'accord, suivante... pardon.",
+    "T-tu passes ? C'est bon, ça ne me dérange pas.",
+    "Oh ! On avance... je vais t'en trouver une meilleure.",
+    "Tu es difficile... euh, c'est mignon en fait.",
+    "L-la suivante alors. J'espère qu'elle te plaira mieux.",
+    "Ça disparaît... pardon, je pensais que ça t'irait.",
+    "Euh... peut-être celle-ci après ?",
+    "Passée... j-je vais faire plus d'efforts.",
+    "Oh, d'accord... autre chose alors."
+  ],
+  "media_repeated": [
+    "Oh... tu voulais la revoir ?",
+    "Euh, la revoilà. Elle doit vraiment te plaire.",
+    "T-tu vois, je savais que tu aimais celle-là.",
+    "Encore ? C'est... c'est mignon, en fait.",
+    "D'accord... encore un regard. Rien que pour toi.",
+    "Tu reviens en arrière... euh, je comprends.",
+    "Celle-là, hein ? T-tu as bon goût.",
+    "On rembobine... prends tout ton temps.",
+    "Oh ! Elle t'a attrapé. Euh... profite ?",
+    "Encore... j-je ne juge pas. Promis."
+  ],
+  "session_started": [
+    "S-salut... bon. On commence ?",
+    "Euh... je suis un peu nerveuse. Mais je suis là.",
+    "On commence... s-sois doux avec toi-même.",
+    "D'accord... la main prête ? J-je te guide.",
+    "C'est parti... ne me regarde pas comme ça.",
+    "O-on démarre... j'attendais ce moment.",
+    "Euh... je fais de mon mieux. Toi aussi ?",
+    "Ça commence... j'espère que je suis douée pour ça.",
+    "Salut... on va, euh... on va faire ça ensemble.",
+    "Bon... on respire un grand coup. Tous les deux."
+  ],
+  "climax_real": [
+    "V-vas-y... tu peux lâcher. Je veux que tu le fasses.",
+    "Euh... finis. S'il te plaît. Je veux voir.",
+    "Tu peux jouir... j-je l'ai dit. À voix haute.",
+    "Laisse venir... tu l'as vraiment mérité.",
+    "M-maintenant... ne te retiens pas pour moi.",
+    "S'il te plaît... jouis pour moi. Euh. S'il te plaît."
+  ],
+  "climax_ruined": [
+    "O-oh non... mains loin. Tout de suite. Pardon !",
+    "Stop ! Euh... stop. J-je sais, je suis désolée.",
+    "Lâche... je sais, je sais. Je suis désolée.",
+    "Mains ailleurs... ce sera fini dans une seconde.",
+    "Euh... celui-là ne compte pas. Pardon.",
+    "N-ne touche plus... je n'ai pas pu m'en empêcher."
+  ],
+  "climax_denied": [
+    "Euh... pas aujourd'hui. Je suis vraiment désolée.",
+    "N-non... mains loin. Je sais que c'est méchant.",
+    "On a fini... et tu n'as pas le droit de jouir. Pardon.",
+    "C'est tout... j-j'ai décidé. Non.",
+    "Rien ce soir... ne m'en veux pas, s'il te plaît.",
+    "Euh... la prochaine fois peut-être ? J'espère."
+  ],
+  "fake_climax_reveal": [
+    "Oh ! Euh... j'ai menti. Je suis vraiment désolée.",
+    "C-ce n'était pas vrai... ne sois pas fâché.",
+    "J'ai inventé ça... je voulais voir ta tête.",
+    "Euh... non. Pas encore. Pardon !",
+    "J-je t'ai piégé. C'était méchant de ma part.",
+    "C'était un petit mensonge... continue, d'accord ?"
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "Ä-ähm... der Rhythmus hat sich geändert. Ist das okay?",
+    "Oh! Er ist umgesprungen... tut mir leid, ich hätte was sagen sollen.",
+    "Der Beat ist jetzt anders... spürst du das auch?",
+    "Ähm... versuch mal, dem hier zu folgen? Bitte?",
+    "N-neuer Rhythmus... ich hab ihn extra für dich ausgesucht.",
+    "Er hat schon wieder gewechselt... ich hoffe, das stört dich nicht.",
+    "Hui — hast du's gemerkt? Das Muster ist gewandert.",
+    "E-etwas ist jetzt anders... lass dir ruhig Zeit damit.",
+    "Ein neuer Beat... ich bin ganz nervös, wenn ich dir zuschaue.",
+    "Ähm, es hat sich verschoben... du machst das übrigens richtig gut."
+  ],
+  "beat_change_faster": [
+    "Es... es wird jetzt schneller. T-tut mir leid!",
+    "Ähm, schneller? Wenn du kannst... nur wenn du kannst.",
+    "Hui, das zieht an... bitte halt mit?",
+    "S-schneller... ich werde schon rot, wenn ich das sage.",
+    "Es zieht an... tu dir aber nicht weh, ja?",
+    "Jetzt zügiger... ähm, du siehst so konzentriert aus.",
+    "I-ich hab es schneller gemacht... war das zu viel?",
+    "Mach ein bisschen schneller... bitte? Für mich?",
+    "Es rast... ich kann kaum hinsehen.",
+    "Schneller... e-entschuldige, ich hab mich hinreißen lassen."
+  ],
+  "beat_change_slower": [
+    "Oh... es wird langsamer. Das ist schöner, oder?",
+    "Ähm, jetzt sanfter... nimm's ruhig.",
+    "L-langsamer... wir müssen gar nichts überstürzen.",
+    "Es beruhigt sich... atmest du mit mir?",
+    "Schön langsam jetzt... ich mag diesen Teil.",
+    "Ähm... lass es eine Weile ganz weich werden.",
+    "Langsamer... i-ich dachte, du brauchst vielleicht einen Moment.",
+    "Ganz ruhig... es eilt wirklich nicht.",
+    "Es ist wieder sanft... ist das besser so?",
+    "Mach langsamer... ich will, dass das lange dauert, ähm... falls das okay ist."
+  ],
+  "pause_start": [
+    "Ähm... lass uns kurz aufhören. Hände weg?",
+    "P-pause... tut mir leid, ich weiß, es hat dir gefallen.",
+    "Stopp... nur für einen Moment. Bitte?",
+    "Hände weg... i-ich warte mit dir.",
+    "Eine kleine Pause... du darfst ruhig atmen.",
+    "Ähm, einfrieren? Sorry. Einfrieren.",
+    "N-nicht mehr anfassen... ich fasse es nicht, dass ich das gesagt habe.",
+    "Warte... warte einfach kurz mit mir.",
+    "Lass los... ich verspreche, es dauert nicht lang.",
+    "Pause... ähm, ich schaue nach, ob du dich auch dran hältst."
+  ],
+  "pause_end": [
+    "O-okay... du darfst wieder.",
+    "Ähm, mach weiter... ich hab dir gern zugesehen.",
+    "Du darfst wieder anfassen... t-tut mir leid wegen der Wartezeit.",
+    "Weiter geht's... erst mal ganz sanft, ja?",
+    "Vorbei... ähm, du warst so geduldig.",
+    "Fang wieder an... i-ich hab auch mitgezählt.",
+    "Mach schon... bitte?",
+    "Okay... Hand zurück. Das hast du dir verdient.",
+    "Ähm, weiter... ich mag diesen Teil.",
+    "Du darfst dich wieder bewegen... ich wurde schon unruhig."
+  ],
+  "media_skipped": [
+    "Oh... das war nichts für dich?",
+    "Ähm, okay, weiter... sorry.",
+    "Ü-überspringen? Ist okay, stört mich nicht.",
+    "Oh! Weiter dann... ich such dir was Besseres.",
+    "Du bist wählerisch... ähm, eigentlich ganz süß.",
+    "D-dann eben das nächste. Hoffentlich gefällt's dir besser.",
+    "Weg damit... sorry, ich dachte, das wär was für dich.",
+    "Ähm... vielleicht das nächste hier?",
+    "Übersprungen... i-ich streng mich mehr an.",
+    "Oh, okay... dann was anderes."
+  ],
+  "media_repeated": [
+    "Oh... du wolltest das nochmal sehen?",
+    "Ähm, da ist es wieder. Das muss dir echt gefallen.",
+    "S-siehst du, ich wusste, das mochtest du.",
+    "Nochmal? Das ist... das ist eigentlich süß.",
+    "Okay... noch ein Blick. Nur für dich.",
+    "Du gehst zurück... ähm, ich versteh das.",
+    "Das also, hm? D-du hast guten Geschmack.",
+    "Zurückspulen... lass dir so viel Zeit, wie du willst.",
+    "Oh! Das hat's dir angetan. Ähm... viel Spaß?",
+    "Nochmal... i-ich urteile nicht. Versprochen."
+  ],
+  "session_started": [
+    "H-hi... okay. Fangen wir an?",
+    "Ähm... ich bin ein bisschen nervös. Aber ich bin da.",
+    "Wir fangen an... s-sei bitte lieb zu dir.",
+    "Okay... Hand bereit? I-ich führ dich.",
+    "Los geht's... schau mich nicht so an.",
+    "E-es geht los... ich hab darauf gewartet.",
+    "Ähm... ich geb mein Bestes. Du auch?",
+    "Es beginnt... hoffentlich kann ich das überhaupt.",
+    "Hi... lass uns das, ähm... lass uns das zusammen machen.",
+    "Okay... einmal tief durchatmen. Wir beide."
+  ],
+  "climax_real": [
+    "M-mach schon... du darfst. Ich will das.",
+    "Ähm... komm. Bitte. Ich will es sehen.",
+    "Du darfst kommen... i-ich hab's laut gesagt.",
+    "Lass es zu... du hast dir das wirklich verdient.",
+    "J-jetzt... halt dich meinetwegen nicht zurück.",
+    "Bitte... komm für mich. Ähm. Bitte."
+  ],
+  "climax_ruined": [
+    "O-oh nein... Hände weg. Sofort. Sorry!",
+    "Stopp! Ähm... stopp. I-ich weiß, tut mir leid.",
+    "Lass los... ich weiß, ich weiß. Es tut mir leid.",
+    "Hände weg... in einer Sekunde ist es vorbei.",
+    "Ähm... das zählt nicht. Sorry.",
+    "N-nicht mehr anfassen... ich konnte nicht anders."
+  ],
+  "climax_denied": [
+    "Ähm... heute nicht. Tut mir wirklich leid.",
+    "N-nein... Hände weg. Ich weiß, das ist gemein.",
+    "Wir sind fertig... und du darfst nicht kommen. Sorry.",
+    "Das war's... i-ich hab entschieden. Nein.",
+    "Heute nichts... sei mir bitte nicht böse.",
+    "Ähm... vielleicht nächstes Mal? Hoffentlich."
+  ],
+  "fake_climax_reveal": [
+    "Oh! Ähm... ich hab gelogen. Es tut mir so leid.",
+    "D-das war nicht echt... sei bitte nicht sauer.",
+    "Das hab ich erfunden... ich wollte dein Gesicht sehen.",
+    "Ähm... nein. Noch nicht. Sorry!",
+    "I-ich hab dich reingelegt. Das war gemein von mir.",
+    "Das war geschwindelt... mach weiter, ja?"
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "Nouveau rythme. Tu t'adaptes. Maintenant.",
+    "Le motif a changé. Suis, ou assume.",
+    "J'ai changé. Tu t'adaptes. C'est l'accord.",
+    "Autre tempo. Je ne le répéterai pas.",
+    "Tu suis. Exactement. Pas d'improvisation.",
+    "Voilà le nouveau tempo. Approprie-le-toi.",
+    "Changement de programme. Ta main obéit au rythme, pas à toi.",
+    "Nouveau motif. Les yeux devant, la main en mouvement.",
+    "C'est moi qui décide du rythme. Toi, tu tiens la mesure.",
+    "Ajuste. Immédiatement. Bien."
+  ],
+  "beat_change_faster": [
+    "Plus vite. Ne me fais pas répéter.",
+    "Accélère. Maintenant.",
+    "Monte le rythme. Je veux te voir lutter.",
+    "Plus vite. Tu as mieux que ça en réserve.",
+    "Bouge. Plus vite. Et tiens la mesure.",
+    "J'ai dit plus vite. Prouve que tu encaisses.",
+    "Plus fort, plus vite, et n'ose pas ralentir.",
+    "Accélère. C'est ici que tu le mérites.",
+    "Plus vite. Tu respireras plus tard.",
+    "Force. Tes excuses ne m'intéressent pas."
+  ],
+  "beat_change_slower": [
+    "Len. Te. Ment. Chaque mouvement sur mon compte.",
+    "Doucement. Je veux faire durer ça.",
+    "Plus lentement. La frustration est un rythme aussi.",
+    "Descends. Sens-en chacun.",
+    "Relâche. Tu n'as pas le droit de te précipiter.",
+    "Lentement. C'est un ordre, pas une suggestion.",
+    "Tout doux maintenant. Je te tiens pile sur le bord.",
+    "Au ralenti. Souffre joliment.",
+    "Plus lentement. Laisse monter là où je veux.",
+    "Contrôle-toi. C'est tout l'exercice."
+  ],
+  "pause_start": [
+    "Mains loin. Maintenant.",
+    "Stop. Ne bouge pas un muscle.",
+    "Lâche. Je n'ai pas demandé deux fois.",
+    "Enlève. Reste là et désire.",
+    "Fige. Je te dirai quand.",
+    "Les mains là où je les vois. Rien d'autre.",
+    "Ne touche plus. Ce moment m'appartient.",
+    "En bas. Attends. Tiens-toi bien.",
+    "Rien. Tu ne fais rien tant que je ne l'ai pas dit.",
+    "Lâche. Et pas de triche — je le saurais."
+  ],
+  "pause_end": [
+    "Au travail.",
+    "La main dessus. Immédiatement.",
+    "Tu peux continuer. Que ça compte.",
+    "Reprends. Montre-moi que ça t'a manqué.",
+    "Vas-y. Et tu ne t'arrêtes pas avant que je le dise.",
+    "Touche. Maintenant. Voilà qui est mieux.",
+    "Continue. Tu as bien attendu.",
+    "Permission accordée. Utilise-la correctement.",
+    "Recommence. Lentement — je te regarde.",
+    "Bouge. Ta pause est terminée."
+  ],
+  "media_skipped": [
+    "Pas à ton goût ? Noté. Continue.",
+    "Passe autant que tu veux. Le rythme ne change pas.",
+    "Difficile. Soit. Suivante.",
+    "On avance. Ta main n'a pas de pause pour autant.",
+    "Rejetée. Reste concentré.",
+    "Suivante. Et non, tu ne vas pas feuilleter indéfiniment.",
+    "Disparue. Les yeux sur la nouvelle.",
+    "Écartée. Maintenant concentre-toi.",
+    "C'était ton passage. Profite bien de la prochaine.",
+    "On continue. Le rythme n'attend personne."
+  ],
+  "media_repeated": [
+    "De retour ? Gourmand.",
+    "C'est donc ça qui te fait de l'effet. Noté.",
+    "Deuxième regard. Je m'en souviendrai.",
+    "Tu la voulais encore. Intéressant.",
+    "Vas-y, regarde. Et continue.",
+    "Rembobine si tu veux. Le tempo reste.",
+    "Celle-là t'a eu. Évidemment.",
+    "Encore ? Tu es facile à lire.",
+    "Prends ton deuxième regard. Mérite-le.",
+    "Prévisible. Maintenant tiens ton rythme."
+  ],
+  "session_started": [
+    "On commence. La main prête.",
+    "Les yeux en haut. Tu m'appartiens pour un moment.",
+    "Commence. Et tu n'arrêtes pas sans mon accord.",
+    "Voyons combien de temps tu tiens.",
+    "À partir de maintenant, c'est moi qui donne le tempo. Compris ?",
+    "En place. Concentration. Vas-y.",
+    "Tu es venu pour obéir. Alors obéis.",
+    "On démarre. Pas de délai, pas de négociation.",
+    "La main dessus. Respire. Et commence.",
+    "C'est ma séance maintenant. Suis."
+  ],
+  "climax_real": [
+    "Jouis. Maintenant. C'est un ordre.",
+    "Tu l'as mérité. Lâche.",
+    "Termine. Je veux te voir craquer.",
+    "Maintenant. Donne-le-moi.",
+    "Permission accordée. Ne la gâche pas.",
+    "Jouis pour moi. Tout ce que tu as."
+  ],
+  "climax_ruined": [
+    "Mains loin. Tout de suite. Laisse ça se perdre.",
+    "Stop. On ne touche pas. Prends-le exactement comme il vient.",
+    "Enlève. Tu auras le manque sans la récompense.",
+    "Lâche, et n'ose pas finir le travail.",
+    "Celui-là est gâché. Exprès. C'est moi qui décide.",
+    "Lâche et souffre. Je t'ai dit que je commandais."
+  ],
+  "climax_denied": [
+    "Non. Pas ce soir. Mains loin.",
+    "On a fini. Tu restes exactement comme tu es.",
+    "Rien pour toi. Tu te tiendras peut-être mieux la prochaine fois.",
+    "Refusé. Assume.",
+    "La séance se termine. Pas ton manque.",
+    "Non. Et je ne me justifie pas."
+  ],
+  "fake_climax_reveal": [
+    "Tu m'as vraiment crue ? Continue.",
+    "Non. J'ai changé d'avis. Au travail.",
+    "C'était un test. Raté. Continue.",
+    "J'ai menti. La main en mouvement. Maintenant.",
+    "Pas encore. J'aime te regarder espérer.",
+    "Faux. Tu ne l'auras pas si facilement."
+  ]
+}

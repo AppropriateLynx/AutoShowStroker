@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "Neuer Rhythmus. Versuch mitzuhalten, falls du das überhaupt kannst.",
+    "Umgestellt. Mal sehen, wie du die ersten drei Schläge verpatzt.",
+    "Anderes Muster. Wetten, du verlierst es sofort?",
+    "Neuer Beat. Jetzt kommt das verzweifelte Gestolper.",
+    "Es hat gewechselt. Und schon hängst du hinterher.",
+    "Folg mit, Schnecke. So schwer ist das nicht.",
+    "Neues Tempo. Ehrlich, ein Metronom wäre besser.",
+    "Gewechselt. Konzentrier dich ausnahmsweise mal.",
+    "Frisches Muster für jemanden, der das alte nicht hinkriegt.",
+    "Halt mit. Oder auch nicht. Es ist lustiger, wenn nicht."
+  ],
+  "beat_change_faster": [
+    "Schneller. Schon am Kämpfen? Erbärmlich.",
+    "Zieh an, du bedürftiges Ding. Du fällst zurück.",
+    "Schneller. Zeig mir, wie wenig Ausdauer du hast.",
+    "Zügiger. Schwitz dafür. Der Langsamste bleibst du trotzdem.",
+    "Los, zapple. Das ist unterhaltsam.",
+    "Schneller, und blamier dich nach Möglichkeit nicht.",
+    "Ja, jag dem hinterher. Verzweiflung steht dir.",
+    "Tempo hoch. Das ist kaum das Aufwärmen und du bist schon durch.",
+    "Schneller. Dein Arm gibt jetzt schon auf, oder?",
+    "Komm schon, streng dich einmal im Leben an."
+  ],
+  "beat_change_slower": [
+    "Langsamer. Bei Tempo kann man dir offensichtlich nicht trauen.",
+    "Langsamer. Ja, ich weiß, das hasst du.",
+    "Ruhig, du Gieriger. Du darfst nicht zum Ende hetzen.",
+    "Langsam. Sitz da drin. Leide anständig.",
+    "Runter aufs Schneckentempo. Jammer ruhig, ich fordere dich heraus.",
+    "Langsamer. Das Winseln war übrigens goldig.",
+    "Kaum noch Bewegung. Genau wie deine Selbstbeherrschung.",
+    "Langsam. Es geht nicht darum, was du willst.",
+    "Nimm zurück, bevor du dich noch blamierst.",
+    "Schön langsam. Du wirst betteln, bevor das hier vorbei ist."
+  ],
+  "pause_start": [
+    "Hände weg, du Bedürftiger. Mehr hast du nicht verdient.",
+    "Stopp. Sitz da und wünsch es dir wie ein braver Bettler.",
+    "Weg damit. Sieh dich an, du zuckst jetzt schon.",
+    "Loslassen. Versuch, zehn Sekunden allein zu überstehen.",
+    "Hände weg. Jetzt lernst du Geduld.",
+    "Nicht mehr anfassen. Peinlich, wie schwer dir das fällt.",
+    "Einfrieren. Und nein, Jammern verkürzt das nicht.",
+    "Lass los. Du hattest mehr als genug.",
+    "Nichts für dich. Genieß das Ziehen.",
+    "Weg. Ich will dich zappeln sehen."
+  ],
+  "pause_end": [
+    "Na gut. Fass an. Du hast so verloren ausgesehen.",
+    "Los, du Verzweifelter. Zurück an die Arbeit.",
+    "Hand dran. Halt diesmal länger durch.",
+    "Du darfst. Erbärmlich, wie dankbar du aussiehst.",
+    "Weiter. Das war die längste Minute deines Lebens, was?",
+    "Zurück damit. Du hast praktisch gebettelt.",
+    "Weitermachen. Komm nicht wieder zu früh.",
+    "Anfassen. Ja, ich hab dich greifen sehen.",
+    "Los. Lass es aussehen, als hättest du Talent.",
+    "Erlaubnis. Nutz sie besser als sonst."
+  ],
+  "media_skipped": [
+    "Zu fein dafür? Ach bitte.",
+    "Übersprungen. Wählerisch und nutzlos, tolle Kombination.",
+    "Nicht genug für dich? Es ist nie genug.",
+    "Weiter. Deine Ansprüche sind lächerlich für deine Lage.",
+    "Weg. Suchen wir was, das sogar du hinkriegst.",
+    "Übersprungen. Du gieriges kleines Ding.",
+    "Abgelehnt. Als hättest du irgendwo eine Wahl.",
+    "Gut, weiter. Wichs trotzdem, du kriegst keine Pause.",
+    "Weiter. Du würdest ewig überspringen, wenn ich dich ließe.",
+    "Nächstes. Und nein, das reicht auch nicht."
+  ],
+  "media_repeated": [
+    "Schon wieder zurück? Natürlich zieht genau das bei dir.",
+    "Vorhersehbar. Absolut vorhersehbar.",
+    "Ah, das ist also deine Schwäche. Wie billig.",
+    "Spulst schon zurück. Hab ein bisschen Würde.",
+    "Ausgerechnet das? Sagt einiges über dich.",
+    "Nochmal? Du bist durchsichtig.",
+    "Sieh dich an, wie du dahin zurückkriechst.",
+    "Zweite Portion. Gierig wie immer.",
+    "Du musstest es unbedingt nochmal sehen. Erbärmlich.",
+    "Natürlich. Manche Dinge ändern sich nie."
+  ],
+  "session_started": [
+    "Sieh dich an, schon ganz eifrig. Fangen wir an.",
+    "Hand bereit? Natürlich ist sie das.",
+    "Wir fangen an. Halt länger durch als sonst.",
+    "Los geht's. Ich geb dir fünf Minuten.",
+    "Anfangen, du Bedürftiger. Das wird schnell gehen.",
+    "Mal sehen, wie wenig es heute braucht.",
+    "Start. Enttäusch mich nicht direkt.",
+    "Du bist zurückgekrochen. Vorhersehbar. Los.",
+    "Anfangen. Und tu nicht so, als wärst du nicht verzweifelt gewesen.",
+    "Hand dran. Zeig mir dein Bestes. Viel wird es nicht."
+  ],
+  "climax_real": [
+    "Dann mach schon. Komm, du verzweifeltes Ding.",
+    "Komm. Mal sehen, was für eine Sauerei du machst.",
+    "Na gut. Nimm es. Du kannst offensichtlich nicht länger warten.",
+    "Lass los. Du hast mit dem ganzen Körper gebettelt.",
+    "Jetzt. Sei dabei so erbärmlich, wie du willst.",
+    "Komm. Verdient hast du es kaum."
+  ],
+  "climax_ruined": [
+    "Hände weg. Verschwende es. Mehr kriegst du nicht.",
+    "Stopp. Lass es raustropfen. Passt ja zu dir.",
+    "Weg damit. Du kriegst die Sauerei und nichts von der Freude.",
+    "Loslassen. Sieh zu, wie es ins Leere läuft.",
+    "Ruiniert. Und du bedankst dich trotzdem.",
+    "Hände weg. Das hast du davon."
+  ],
+  "climax_denied": [
+    "Nichts. Du warst nicht mal in der Nähe, es zu verdienen.",
+    "Verweigert. Sitz da und zieh.",
+    "Nein. Stand das je zur Debatte?",
+    "Wir sind fertig. Du kriegst exakt gar nichts.",
+    "Keine Chance. Sei nächstes Mal weniger erbärmlich.",
+    "Nein. Schmoll ruhig. Es steht dir."
+  ],
+  "fake_climax_reveal": [
+    "Das hast du geglaubt? Im Ernst?",
+    "Nein. Ich wollte nur sehen, wie du Hoffnung schöpfst.",
+    "Ha. Weitermachen, du Leichtgläubiger.",
+    "Das war gelogen. Du bist sofort drauf reingefallen.",
+    "Nicht mal ansatzweise. Zurück an die Arbeit.",
+    "Zu einfach. Hand in Bewegung."
+  ]
+}

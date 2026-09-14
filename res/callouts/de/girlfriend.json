@@ -1,0 +1,130 @@
+{
+  "beat_change_general": [
+    "Ich hab's für dich umgestellt, Schatz. Spürst du das?",
+    "Neuer Rhythmus — bleib bei mir, ich hab dich.",
+    "Mmh, da geht er hin. Folg ihm mit mir.",
+    "Ich hab gewechselt, weil ich weiß, dass du Überraschungen magst.",
+    "Neues Muster, Liebster. Lass dir Zeit, ihn zu finden.",
+    "Spürst du die Verschiebung? Die war für dich.",
+    "So. Etwas anderes, nur für uns zwei.",
+    "Folg diesem hier, Süßer. Du machst das so gut.",
+    "Neuer Beat. Ich seh so gern zu, wie du ihn einfängst.",
+    "Komm schon, Baby — lass den neuen Rhythmus dich finden."
+  ],
+  "beat_change_faster": [
+    "Ein bisschen schneller, Liebster. Ich will dich arbeiten sehen.",
+    "Zieh an, Schatz. Du siehst so gut aus dabei.",
+    "Schneller — ich weiß, das hast du drauf.",
+    "Komm schon, Süßer. Halt mit mir Schritt.",
+    "Schneller, Baby. Ich bin direkt bei dir.",
+    "Mach zu. Ich liebe, wie du wirst, wenn du dem hinterherjagst.",
+    "Jetzt zügiger — nicht denken, einfach bewegen.",
+    "Schneller, Liebster. Lass mich dich atmen hören.",
+    "Ja, so, schneller. Du bist wunderschön, wenn du dich anstrengst.",
+    "Ein bisschen mehr, Baby. Für mich?"
+  ],
+  "beat_change_slower": [
+    "Langsamer, Liebster. Wir haben alle Zeit, die wir brauchen.",
+    "Ruhig, Baby. Ich will, dass das lange dauert.",
+    "Langsamer — spür es einfach eine Weile mit mir.",
+    "Schh, langsamer. Es eilt nicht, Süßer.",
+    "Schön sanft jetzt. So mag ich dich.",
+    "Nimm zurück, Liebster. Bleib hier bei mir.",
+    "Langsamer, Baby. Lass es sich richtig aufbauen.",
+    "Runter damit. Ich will dich noch ein Weilchen behalten.",
+    "Ganz weich jetzt. Das ist mein Lieblingsteil.",
+    "Langsam, Süßer. Atme mit mir."
+  ],
+  "pause_start": [
+    "Hände weg für mich, Liebster. Nur einen Moment.",
+    "Lass los, Baby. Ich will dich warten sehen.",
+    "Stopp, Süßer. Bleib genau hier bei mir.",
+    "Hände weg. Atme. Ich geh nirgendwohin.",
+    "Kleine Pause, Liebster. Du warst so brav.",
+    "Lass für mich los. Ich mag dich ein bisschen verzweifelt.",
+    "Pause, Baby. Spür, wie sehr du es willst.",
+    "Weg damit, Süßer. Nur wir und das Warten.",
+    "Halt für mich still. Ich mach es wieder gut.",
+    "Stopp. Vertrau mir bei dem hier, Liebster."
+  ],
+  "pause_end": [
+    "Okay, Liebster. Komm zurück zu mir.",
+    "Hand dran, Baby. Ich hab dich vermisst.",
+    "Na bitte, Süßer. Fang wieder an.",
+    "Du hast so gut gewartet. Los, fass an.",
+    "Weiter, Liebster. Erst mal ganz sanft.",
+    "Komm her. Hand dran. Genau so.",
+    "Braver Junge. Du darfst dich wieder bewegen.",
+    "Mach schon, Baby. Ich will dich wieder sehen.",
+    "Fang wieder an, Süßer. Schön langsam.",
+    "Das hast du dir verdient. Fass an für mich."
+  ],
+  "media_skipped": [
+    "Nicht das, hm? Ist okay, Liebster.",
+    "Ich versteh dich, Schatz. Suchen wir was Besseres.",
+    "Dann weiter — ich weiß doch, was dir gefällt.",
+    "Nein? Gut. Ich such für dich weiter.",
+    "Übersprungen, Süßer? Wählerisch wie immer.",
+    "Alles klar, Liebster. Was anderes für dich.",
+    "Nicht dein Ding. Probieren wir das hier.",
+    "Okay Baby, weiter. Halt deinen Rhythmus.",
+    "Ich finde das, was dich kriegt. Versprochen.",
+    "Weiter, Liebster. Aber wichs weiter."
+  ],
+  "media_repeated": [
+    "Ooh, zurück? Ich mag, dass du es mir zeigst.",
+    "Das hat dich erwischt, oder, Liebster?",
+    "Nochmal, Baby? Notiert. Ich merk's mir.",
+    "Du wolltest noch einen Blick. Das ist süß.",
+    "Mmh, das ist dein Typ. Gut zu wissen.",
+    "Zurück für mehr, Süßer? Lass dir Zeit.",
+    "Ich hab deine Reaktion gesehen. Klar gehst du zurück.",
+    "Schau es dir an, so lange du willst, Liebster.",
+    "Das ist es also, hm? Genieß es, Baby.",
+    "Los, schau nochmal. Ich liebe es zu wissen, was dir gefällt."
+  ],
+  "session_started": [
+    "Hey du. Lass uns heute Abend Zeit haben.",
+    "Ich hab mich den ganzen Tag darauf gefreut, Schatz.",
+    "Komm her, Liebster. Hand bereit?",
+    "Nur du und ich. Fangen wir an.",
+    "Ich hab dich vermisst. Machen wir das schön.",
+    "Da bist du ja. Mach's dir bequem, Süßer.",
+    "Lass uns langsam anfangen, Baby. Wir haben Zeit.",
+    "Hi, Liebster. Ich kümmere mich so gut um dich.",
+    "Bereit? Bleib den ganzen Weg bei mir.",
+    "Machen wir das zusammen. Hand dran für mich."
+  ],
+  "climax_real": [
+    "Lass los für mich, Liebster. Ich hab dich.",
+    "Komm schon, Baby. Ich will alles davon.",
+    "Ja, genau so, Süßer. Halt nichts zurück.",
+    "Komm für mich. Du warst heute so brav.",
+    "Lass es raus, Liebster. Ich bin direkt hier.",
+    "Jetzt, Baby. Gib es mir."
+  ],
+  "climax_ruined": [
+    "Hände weg, Liebster. Ich weiß. Tut mir leid, aber Hände weg.",
+    "Lass los, Baby. Vertrau mir — lass es einfach passieren.",
+    "Weg damit, Süßer. Ich weiß, dass es zieht.",
+    "Nicht mehr anfassen. Ich mach's wieder gut, versprochen.",
+    "Hände weg, Liebster. Diesmal nicht.",
+    "Lass los. Ich will dich weiter wollen sehen."
+  ],
+  "climax_denied": [
+    "Heute nicht, Liebster. Ich will, dass du an mich denkst.",
+    "Nein, Baby. Das hebst du dir für nächstes Mal auf.",
+    "Wir sind fertig, Süßer. Hände weg.",
+    "Diesmal nicht. Ich mag dich bedürftig.",
+    "Nein, Liebster. Schlaf drüber und komm zu mir zurück.",
+    "Heute nichts. Du wirst mir noch danken, versprochen."
+  ],
+  "fake_climax_reveal": [
+    "Aww, du hast mir geglaubt? Wie süß.",
+    "Noch nicht, Liebster. Ich konnte nicht widerstehen.",
+    "Ich hab gelogen, Baby. Mach weiter für mich.",
+    "Erwischt. Hand zurück, Süßer.",
+    "Noch nicht ganz. Ich wollte dein Gesicht sehen.",
+    "Sorry, Liebster. Du gehörst noch ein bisschen mir."
+  ]
+}
