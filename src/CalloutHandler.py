@@ -57,8 +57,8 @@ class CalloutHandler(QObject):
         self.custom_phrase_files: list[dict] = []
 
         self._load_available_languages()
-        self.active_callout = False
-        self.talking_chance = 0.5
+        self.active_callout = self.DEFAULTS["active_callout"]
+        self.talking_chance = self.DEFAULTS["talking_chance"]
         self.cur_freq = 0
 
         if settings is not None:

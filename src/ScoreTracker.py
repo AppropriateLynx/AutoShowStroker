@@ -104,6 +104,12 @@ class ScoreTracker:
 
     def session_ended(self):
         print("Session Ended")
+        # session_start_time is None if this fires without a matching session_started -
+        # which GoonerApp.closeEvent made reachable, since it ends whatever it finds
+        # running when the window closes. Treat it as a zero-length session rather than
+        # raising out of the close handler.
+        if self.session_start_time is None:
+            self.session_start_time = time.time()
         self.total_run_time = time.time() - self.session_start_time
         if self.number_of_pauses > 0:
             self.average_pause_duration = self.total_duration_of_pauses / self.number_of_pauses

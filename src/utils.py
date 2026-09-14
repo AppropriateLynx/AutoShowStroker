@@ -6,28 +6,24 @@ from PyQt6.QtGui import QImageReader, QPixmap
 
 
 def get_project_root() -> Path:
+    """Resolves the project root, both when run as a script and when frozen by PyInstaller.
+
+    Every read under res/ (and the root VERSION file) has to go through this - a relative
+    path resolves against the current working directory and breaks the packaged .exe as
+    well as any launch from outside the repo root.
     """
-    Findet das Projekt-Wurzelverzeichnis robust, sowohl als Skript
-    als auch als PyInstaller-Exe.
-    """
-    # Fall 1: Läuft als PyInstaller Exe
+    # Frozen by PyInstaller: resources are extracted to a temp directory it names for us.
     if hasattr(sys, '_MEIPASS'):
         return Path(sys._MEIPASS)
 
-    # Fall 2: Läuft als Skript (PyCharm, Terminal)
-    # Startpunkt ist die Datei, in der wir uns befinden (GoonerApp.py oder main.py)
+    # Running from source: walk up from this file looking for the repo's marker file.
     start_path = Path(__file__).resolve()
-
-    # Wir durchsuchen die Eltern-Ordner nach einer Marker-Datei.
-    # requirements.txt oder .git sind gute Marker.
     for parent in start_path.parents:
         if (parent / 'main.py').exists():
             return parent
 
-    # Falls kein Marker gefunden wurde, nutzen wir den Fallback
-    # (z.B. wenn man ohne Git arbeitet).
-    # Hier könnte man hartkodiert `..` nutzen, falls GoonerApp.py in src/ liegt.
-    return start_path.parent.parent  # Entspricht ../.. wenn start_path in src/ liesgt
+    # No marker found - fall back to ../.. , which is the repo root for a file in src/.
+    return start_path.parent.parent
 
 
 def get_current_version() -> str:

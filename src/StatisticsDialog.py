@@ -111,7 +111,10 @@ class StatisticsDialog(QDialog):
             f"During this session, you spent {formatted_active} actively stroking "
             f"with an average speed of {avg_speed:.2f} beats per second.\n"
             f"You skipped {skips} media files and repeated {repeats} of them. "
-            f"Your favorite rhythm pattern was '{stats_data['most_used_pattern']}'."
+            # A session too short to ever recalculate the beat has no favourite - that
+            # rendered as the literal string 'None' while every other nullable stat here
+            # already goes through an "N/A".
+            f"Your favorite rhythm pattern was '{stats_data['most_used_pattern'] or 'N/A'}'."
         )
         self.conclusion_label.setText(text)
 
@@ -126,7 +129,7 @@ class StatisticsDialog(QDialog):
             ("Average pause duration", lambda x: self._format_time(x['average_pause_dur_sec'])),
             ("Average beat speed (1/sec)", lambda x: f"{x['average_beat_speed']:.2f}"),
             ("Average beat speed during active time (1/sec)", lambda x: f"{x['average_beat_speed_active']:.2f}"),
-            ("Favourite pattern", lambda x: f"{x['most_used_pattern']}"),
+            ("Favourite pattern", lambda x: f"{x['most_used_pattern'] or 'N/A'}"),
             ("Skips", lambda x: f"{x['skips']}"),
             ("Repeats", lambda x: f"{x['repeats']}"),
             ("Fakeouts survived", lambda x: f"{x['fakeout_count']}"),

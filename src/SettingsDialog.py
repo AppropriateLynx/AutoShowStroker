@@ -214,6 +214,14 @@ class SettingsDialog(QDialog):
         header.setStyleSheet(f"font-size: 14px; margin-top: 10px; color: {theme.ACCENT}; font-weight: bold;")
         self._current_layout.addWidget(header)
 
+    @staticmethod
+    def _decimals_for(step) -> int:
+        """Enough decimal places to represent `step` exactly, with Qt's default of 2 as the
+        floor so the ordinary 0.1/0.01 fields keep looking the way they always have."""
+        text = f"{float(step):.10f}".rstrip("0")
+        fractional = text.split(".")[1] if "." in text else ""
+        return max(2, len(fractional))
+
     def add_setting(self, label_text, var_name, target_object, var_type, min_val, max_val, step):
         h_layout = QHBoxLayout()
 
@@ -221,6 +229,10 @@ class SettingsDialog(QDialog):
         h_layout.addWidget(label, stretch=1)
 
         spinbox = QDoubleSpinBox()
+        # Decimals before range/step: QDoubleSpinBox defaults to 2, and setValue() rounds to
+        # that. "Pause chance" steps by 0.001, so every arrow click was rounded straight back
+        # to where it started and the declared 0.001 minimum was unreachable.
+        spinbox.setDecimals(self._decimals_for(step))
         spinbox.setRange(min_val, max_val)
         spinbox.setSingleStep(step)
 
@@ -327,7 +339,10 @@ class SettingsDialog(QDialog):
         settings.setValue("CalloutHandler/selected_lang", self.callout_selected_lang.currentText())
         self.callout_handler.set_lang(self.callout_selected_lang.currentText())
 
-        if self.main_app.is_running:
+        # Not during a pause: recalc_beat() would announce a new beat over the pause
+        # caption and roll the climax dice, and pause_loop() throws the new pattern away
+        # the moment the pause ends anyway.
+        if self.main_app.is_running and not self.beat_handler.is_paused():
             self.beat_handler.recalc_beat()
         self.accept()
 

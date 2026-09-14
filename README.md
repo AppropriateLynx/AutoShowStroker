@@ -8,7 +8,7 @@ Local still means written somewhere, so: your data (session history, custom patt
 
 ## ✨ Features
 
-* **Playlist Functionality:** Select any local folder. The application recursively searches for all supported media formats (`.mp4`, `.gif`, `.jpeg`, `.jpg`, `.png`).
+* **Playlist Functionality:** Select any local folder. The application recursively searches for all supported media formats (`.mp4`, `.avi`, `.mov`, `.mkv`, `.gif`, `.jpeg`, `.jpg`, `.png`, `.bmp`).
 * **Randomized Playback:** The order of the media is completely shuffled (`random.shuffle`) each time a folder is loaded.
 * **Interactive Strokemeter (Beat Timer):** A dynamic rhythm generator located in the application's footer:
     * Automatically varying beat frequencies and rhythm patterns (e.g., *Standard Beat*, *Quick Swing*, *Simple Bounce*, *Double Tap*).
@@ -27,7 +27,7 @@ Local still means written somewhere, so: your data (session history, custom patt
 
 1. **Installation:** Download the latest `GoonerApp.exe` from the [Releases page](https://github.com/pohupremmail-svg/AutoShowStroker/releases/latest) — no Python or installation required, just run the `.exe`.
    * The `.exe` isn't code-signed, so Windows SmartScreen or your antivirus may flag it as unrecognized. If you want to double-check it yourself before running it, scan the downloaded file with [VirusTotal](https://www.virustotal.com/).
-2. **Load Folder:** Click "Add Gooning Folder" (or press `Ctrl + O`) and select the directory containing your images and videos. The slideshow will start automatically.
+2. **Load Folder:** Click "Set Gooning Folder and Start." (or press `Ctrl + O`) and select the directory containing your images and videos. The slideshow will start automatically.
 3. **Navigation:**
     * **Next Media:** `Right Arrow` key or click "Skip >>".
     * **Previous Media:** `Left Arrow` key or click "<< Previous".
@@ -41,7 +41,6 @@ Local still means written somewhere, so: your data (session history, custom patt
     * **Beat & Rhythm:** beat frequency and duration ranges, pause duration and chance, which rhythm patterns are active (plus a Pattern Editor for creating your own), and optional difficulty ramping.
     * **Climax:** climax chance, and independent toggles/chances for ruined, denied, and fake climax outcomes.
     * **Callouts:** enable/disable, callout language, and how often callouts trigger.
-5. **Adjust Layout:** The boundary between the media area and the Strokemeter can be adjusted via drag-and-drop to customize the ratio to your liking.
 
 ## 💬 Community
 

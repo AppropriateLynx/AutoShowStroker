@@ -78,7 +78,7 @@ class GoonerApp(QMainWindow):
 
         self.current_movie = None
 
-        project_root = get_project_root()  # Siehe Funktion oben
+        project_root = get_project_root()
 
         icon_path = project_root / 'res' / 'icons' / 'favicon.ico'
 
@@ -87,7 +87,7 @@ class GoonerApp(QMainWindow):
         if icon_path.exists():
             self.setWindowIcon(QIcon(str_icon_path))
         else:
-            print(f"Fehler: Icon nicht gefunden unter: {str_icon_path}")
+            print(f"Icon not found at: {str_icon_path}")
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -260,9 +260,14 @@ class GoonerApp(QMainWindow):
         self.session_timer_tick = QTimer()
         self.session_timer_tick.timeout.connect(self._update_session_timer)
 
-        self.max_dur = float(self.settings.value("GoonerApp/max_dur", 4.0))
-        self.min_dur = float(self.settings.value("GoonerApp/min_dur", 0.5))
-        self.video_min_dur = float(self.settings.value("GoonerApp/video_min_dur", 1.5))
+        # Fallbacks come from DEFAULTS, not from repeated literals - these three used to
+        # carry their own copies of 4.0/0.5/1.5 while the lines right below already read
+        # the dict.
+        self.max_dur = float(self.settings.value("GoonerApp/max_dur", self.DEFAULTS["max_dur"]))
+        self.min_dur = float(self.settings.value("GoonerApp/min_dur", self.DEFAULTS["min_dur"]))
+        self.video_min_dur = float(
+            self.settings.value("GoonerApp/video_min_dur", self.DEFAULTS["video_min_dur"])
+        )
         self.show_startup_splash = bool(
             self.settings.value("GoonerApp/show_startup_splash", self.DEFAULTS["show_startup_splash"], type=bool)
         )
@@ -312,12 +317,11 @@ class GoonerApp(QMainWindow):
 
         self.video_start_time = 0
 
-        self.btn_settings = QPushButton("Settings")
 
-        self.main_splitter.setSizes([950, 50, 50])
+        # No setSizes() here: footer_container is setFixedHeight(110) above, so the
+        # splitter cannot size it at all and any numbers here would be inert.
 
         layout.addWidget(self.main_splitter)
-        self.btn_settings.clicked.connect(self.open_settings)
 
         self.create_menu_bar()
 
@@ -526,6 +530,23 @@ class GoonerApp(QMainWindow):
         if self._confirm_update_check():
             self.update_checker.check_now()
 
+    @staticmethod
+    def _update_check_consent_text() -> str:
+        """Spells out everything that actually goes over the wire.
+
+        This used to say "nothing else is sent" flat out, which wasn't quite true: the
+        request carries a User-Agent identifying the app, so GitHub's access logs tie an IP
+        to "runs GoonerApp". Small, but a privacy promise is worth nothing unless it's exact.
+        """
+        return (
+            "This will send one request to GitHub.com to check the latest release version.\n\n"
+            'It carries your IP address (unavoidable for any web request) and a User-Agent of '
+            '"GoonerApp-UpdateChecker", which identifies the app to GitHub. Nothing else is '
+            "sent - no folders, no filenames, no statistics, nothing identifying you or your "
+            "machine - and this never runs on its own.\n\n"
+            "Continue?"
+        )
+
     def _confirm_update_check(self) -> bool:
         # Built via explicit QMessageBox(...) + exec() rather than the static .question()
         # convenience method - the static convenience methods are separate C++ entry points
@@ -534,11 +555,7 @@ class GoonerApp(QMainWindow):
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
         box.setWindowTitle("Check for Updates?")
-        box.setText(
-            "This will send one request to GitHub.com to check the latest release version. "
-            "Nothing else is sent, and nothing else about your machine or usage leaves it.\n\n"
-            "Continue?"
-        )
+        box.setText(self._update_check_consent_text())
         box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         box.setDefaultButton(QMessageBox.StandardButton.No)
         box.exec()
@@ -552,7 +569,21 @@ class GoonerApp(QMainWindow):
         box.addButton("Close", QMessageBox.ButtonRole.RejectRole)
         box.exec()
         if box.clickedButton() is open_button:
-            QDesktopServices.openUrl(QUrl(release_url))
+            self._open_external_url(release_url)
+
+    @staticmethod
+    def _open_external_url(url_string):
+        """Opens a URL only if it is http(s).
+
+        release_url is whatever the GitHub API response said. If that response is ever
+        attacker-influenced, a file:// or custom-scheme URL would be handed to the default
+        Windows handler on a single click.
+        """
+        url = QUrl(url_string)
+        if url.scheme() not in ("http", "https"):
+            print(f"Refusing to open a non-web URL: {url_string!r}")
+            return
+        QDesktopServices.openUrl(url)
 
     def _show_up_to_date_dialog(self):
         box = QMessageBox(self)
@@ -617,9 +648,6 @@ class GoonerApp(QMainWindow):
     def recalc_autoplay_timer(self):
         self.auto_play_timer.start(int(random.uniform(self.min_dur, self.max_dur) * 1000))
 
-    def finde_unterstützte_dateien(self, verzeichnis_pfad: str) -> list[Path]:
-        return media_kinds.find_supported_files(verzeichnis_pfad)
-
     def open_folder(self):
         # deleteLater() on every dialog below: none of them are kept in an attribute, so
         # without it the C++ object survives as a child of the window and one instance
@@ -637,7 +665,7 @@ class GoonerApp(QMainWindow):
                 self.current_index = 0
                 self.start()
             else:
-                self.image_label.setText("Keine Dateien gefunden.")
+                self.image_label.setText("No supported files found.")
                 self.stop()
 
     def show_next(self):
@@ -699,7 +727,6 @@ class GoonerApp(QMainWindow):
             self.image_label.setPixmap(load_scaled_pixmap(file_path, self.image_label.size()))
             self.recalc_autoplay_timer()
 
-    # Neue Methode zur GoonerApp-Klasse hinzufügen
     def open_settings(self):
         settings_dialog = SettingsDialog(parent=self)
         settings_dialog.exec()
@@ -707,22 +734,37 @@ class GoonerApp(QMainWindow):
 
     def stop(self):
         if self.is_running:
-            self.auto_play_timer.stop()
-            # Playback was left running: the video kept playing (with sound) behind the
-            # modal statistics dialog, and its EndOfMedia then restarted the whole
-            # slideshow with no session, no beat and the controls greyed out.
-            self.media_player.stop()
-            if self.current_movie:
-                self.current_movie.stop()
-            self._denied_stop_timer.stop()
-            self.beat_handler.stop()
-            self.btn_load.setText("Set Gooning Folder and Start.")
-            self.is_running = False
-            self.btn_next.setEnabled(False)
-            self.btn_prev.setEnabled(False)
-            self.btn_stop.setEnabled(False)
-            self._freeze_climax_blink()
-            self.session_ended_event.emit()
+            self._end_session(show_statistics=True)
+
+    def closeEvent(self, event):
+        """Records a session still in progress before the window goes away.
+
+        Quitting mid-session used to drop it entirely - no history entry, no personal
+        records, as if it never happened. stop() isn't reusable here because it ends in a
+        modal recap, which is the last thing someone who just hit the X wants to see.
+        """
+        if self.is_running:
+            self._end_session(show_statistics=False)
+        super().closeEvent(event)
+
+    def _end_session(self, show_statistics: bool):
+        self.auto_play_timer.stop()
+        # Playback was left running: the video kept playing (with sound) behind the
+        # modal statistics dialog, and its EndOfMedia then restarted the whole
+        # slideshow with no session, no beat and the controls greyed out.
+        self.media_player.stop()
+        if self.current_movie:
+            self.current_movie.stop()
+        self._denied_stop_timer.stop()
+        self.beat_handler.stop()
+        self.btn_load.setText("Set Gooning Folder and Start.")
+        self.is_running = False
+        self.btn_next.setEnabled(False)
+        self.btn_prev.setEnabled(False)
+        self.btn_stop.setEnabled(False)
+        self._freeze_climax_blink()
+        self.session_ended_event.emit()
+        if show_statistics:
             self.show_statistics()
 
     def start(self):
@@ -731,12 +773,15 @@ class GoonerApp(QMainWindow):
             # 5 seconds is comfortably enough to stop, close the stats and start again,
             # and it would then kill the fresh session instead.
             self._denied_stop_timer.stop()
+            # Set before the signal: handlers reacting to "a session started" should see a
+            # running session. _start_session_timer/_start_record_chase both now check it,
+            # and would have hidden their overlays the moment they were meant to appear.
+            self.is_running = True
             self.session_started_event.emit()
             self.btn_next.setEnabled(True)
             self.btn_prev.setEnabled(True)
             self.btn_stop.setEnabled(True)
             self.beat_handler.start_beat()
-            self.is_running = True
             self.btn_load.setText("Change Gooning Folder.")
         self.load_current_index()
         self.recalc_autoplay_timer()
@@ -796,7 +841,9 @@ class GoonerApp(QMainWindow):
         self.record_chase_label.hide()
 
     def _update_record_chase(self):
-        if not self.show_record_chase:
+        # SettingsDialog calls this on every save, including outside a session, where
+        # live_metrics() still reports the *previous* session's numbers.
+        if not self.is_running or not self.show_record_chase:
             self.record_chase_label.hide()
             return
         status = self.score_tracker.record_chase_status(self._session_start_bests)
@@ -823,7 +870,9 @@ class GoonerApp(QMainWindow):
         self.session_timer_label.hide()
 
     def _update_session_timer(self):
-        if not self.show_session_timer:
+        # Same reasoning as _update_record_chase: without this, saving settings after a
+        # session put a frozen clock back on screen, counting from the old start time.
+        if not self.is_running or not self.show_session_timer:
             self.session_timer_label.hide()
             return
         elapsed = self.score_tracker.live_metrics().get("total_dur_sec", 0)

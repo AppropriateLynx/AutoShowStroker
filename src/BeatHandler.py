@@ -45,8 +45,8 @@ class BeatHandler(QObject):
         "Suspense Build": [2, -4, -3, -2, -1, 3],
     }
 
-    # Keep in sync with the literal defaults set in __init__ below - single source of truth
-    # for the SettingsDialog "Reset to defaults" buttons.
+    # Single source of truth: __init__ applies these directly, and the SettingsDialog
+    # "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
         "max_beat_dur": 45.0,
         "min_beat_dur": 15,
@@ -82,27 +82,19 @@ class BeatHandler(QObject):
         self.cur_pause_dur = None
         self.is_red = False
 
-        self.settings = settings  # QSettings Instanz speichern
+        self.settings = settings
 
-        # --- Standardwerte definieren ---
-        self.max_beat_dur = 45.0
-        self.min_beat_dur = 15
-        self.max_beat_freq = 5.0
-        self.min_beat_freq = 0.5
-        self.min_pause_dur = 5
-        self.max_pause_dur = 20
-        self.pause_chance = 0.05
-        self.beat_change_chance = 0.1
-
-        self.ramping_active = True
-        self.min_ramp_duration = 600.0
-        self.max_ramp_duration = 1800.0
-        self.ramp_window_width = 0.4
+        # Every DEFAULTS entry is the attribute's starting value - the settings block below
+        # then overrides whatever the user has saved. Driven from the dict rather than
+        # repeated as literals, which is what the "keep in sync" comment used to ask a
+        # reader to do by hand.
+        for _key, _value in self.DEFAULTS.items():
+            setattr(self, _key, _value)
 
         self.session_start_time = 0.0
         self.ramp_target_duration = 0.0
 
-        # --- Laden, falls QSettings existieren ---
+        # Whatever the user has saved wins over the defaults above.
         if self.settings:
             self.max_beat_dur = float(self.settings.value("BeatHandler/max_beat_dur", self.max_beat_dur))
             self.min_beat_dur = float(self.settings.value("BeatHandler/min_beat_dur", self.min_beat_dur))
@@ -128,10 +120,10 @@ class BeatHandler(QObject):
             )
             loaded_patterns = self.settings.value("BeatHandler/selected_beat_patterns")
             if loaded_patterns:
-                # Das geladene Muster ist eine Liste von Strings (Namen)
+                # What comes back is a list of pattern names
                 self.selected_beat_patterns = loaded_patterns
             else:
-                # Standard: Alle Muster aktiv
+                # Nothing saved yet: every built-in rhythm starts active
                 self.selected_beat_patterns = list(self.BEAT_PATTERNS_MAP.keys())
 
         else:
@@ -153,9 +145,8 @@ class BeatHandler(QObject):
         self.cur_beat_start_time = 0
 
         self.sound_effect = None
-        self.beat_loudness = self.DEFAULTS["beat_loudness"]
         if self.settings:
-            # Read here rather than in the settings block above: init_beat_sound() below
+            # Read here rather than up in the settings block: init_beat_sound() below
             # applies it, so it has to be resolved before the QSoundEffect is built.
             self.beat_loudness = float(
                 self.settings.value("BeatHandler/beat_loudness", self.beat_loudness)
@@ -350,6 +341,10 @@ class BeatHandler(QObject):
             self.beat_event.emit()
         self.reset_beat_timer()
 
+
+    def is_paused(self) -> bool:
+        """True while a rhythm pause is counting down (the beat timer is stopped)."""
+        return self.beat_meter_pause_timer.isActive()
 
     def start_pause(self):
         self.beat_meter_timer.stop()

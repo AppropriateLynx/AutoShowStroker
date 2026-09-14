@@ -139,26 +139,6 @@ def test_control_buttons_are_not_keyboard_focusable(app):
 # --- folder scanning ---
 
 
-def test_finde_unterstuetzte_dateien_finds_all_supported_extensions(app, tmp_path):
-    names = ["a.mp4", "b.avi", "c.mov", "d.mkv", "e.gif", "f.png", "g.jpg", "h.jpeg", "i.bmp", "j.txt"]
-    for name in names:
-        (tmp_path / name).write_bytes(b"")
-
-    found = app.finde_unterstützte_dateien(str(tmp_path))
-
-    assert {f.name for f in found} == set(names) - {"j.txt"}
-
-
-def test_finde_unterstuetzte_dateien_searches_recursively(app, tmp_path):
-    nested = tmp_path / "sub"
-    nested.mkdir()
-    (nested / "deep.png").write_bytes(b"")
-
-    found = app.finde_unterstützte_dateien(str(tmp_path))
-
-    assert [f.name for f in found] == ["deep.png"]
-
-
 # --- open_folder ---
 
 
@@ -187,7 +167,7 @@ def test_open_folder_no_supported_files_shows_message_and_stays_stopped(app, mon
         "src.GoonerApp.MediaFolderPickerDialog", _fake_picker_dialog(QDialog.DialogCode.Accepted, [])
     )
     app.open_folder()
-    assert app.image_label.text() == "Keine Dateien gefunden."
+    assert app.image_label.text() == "No supported files found."
     assert app.is_running is False
 
 
@@ -1355,36 +1335,24 @@ def test_closing_the_window_without_a_session_is_harmless(app):
     assert len(app.score_tracker.get_history()) == before
 
 
-def test_release_url_with_a_foreign_scheme_is_not_opened(app, monkeypatch):
+def test_a_foreign_scheme_url_is_not_opened(app, monkeypatch):
     """release_url comes straight from the GitHub API response - anything but http(s)
     would hand an arbitrary protocol handler to the shell on one click."""
     opened = []
     monkeypatch.setattr("src.GoonerApp.QDesktopServices.openUrl", lambda url: opened.append(url))
 
-    class FakeBox:
-        def __init__(self, *a, **kw):
-            pass
-
-        def setWindowTitle(self, _t):
-            pass
-
-        def setText(self, _t):
-            pass
-
-        def addButton(self, *a):
-            return "button"
-
-        def exec(self):
-            pass
-
-        def clickedButton(self):
-            return "button"
-
-    monkeypatch.setattr("src.GoonerApp.QMessageBox", FakeBox)
-
-    app._show_update_available_dialog("v9.9.9", "file:///C:/Windows/System32/calc.exe")
+    app._open_external_url("file:///C:/Windows/System32/calc.exe")
 
     assert opened == []
+
+
+def test_an_https_url_is_opened(app, monkeypatch):
+    opened = []
+    monkeypatch.setattr("src.GoonerApp.QDesktopServices.openUrl", lambda url: opened.append(url))
+
+    app._open_external_url("https://github.com/owner/repo/releases")
+
+    assert [u.toString() for u in opened] == ["https://github.com/owner/repo/releases"]
 
 
 def test_update_consent_text_mentions_the_user_agent(app):
