@@ -214,6 +214,26 @@ CHANGELOG = {
         "</ul>"
         "Settings &gt; Callouts. Go find out which one of her gets to you."
     ),
+    "0.11.0": (
+        "She used to make it up as she went. Now she knows exactly how your session ends "
+        "before you have finished the first stroke."
+        "<ul>"
+        "<li><b>She speeds up before she lets you finish.</b> The rhythm going into your "
+        "climax is pinned to the fastest she is allowed to go, and it is still going when "
+        "she tells you. No more stumbling over the edge on some lazy pattern</li>"
+        "<li><b>You decide how long she draws it out.</b> The old \"climax chance\" guessing "
+        "game is gone - set how many seconds after the ramp she finally says it, and she "
+        "picks her moment inside that window</li>"
+        "<li>The difficulty ramp is a real curve now, climbing segment by segment instead "
+        "of rolling the dice again every time she changes her mind</li>"
+        "<li>The Strokemeter can see past her next change, so the notes keep flowing "
+        "towards you instead of stopping where her plan used to run out</li>"
+        "<li>Saving your settings mid-session no longer rips the beat out from under you - "
+        "she finishes what she started, then does it your way</li>"
+        "<li>\"Beat change chance\" is gone. Beat duration means what it says now</li>"
+        "</ul>"
+        "She has already decided. You just do not know it yet."
+    ),
     "0.9.0": (
         "Every corner of GoonerApp got picked apart and put back together. It takes more, "
         "breaks less, and finally tells you what it knows about you."
