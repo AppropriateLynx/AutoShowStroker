@@ -273,6 +273,20 @@ CHANGELOG = {
         "</ul>"
         "Nothing dramatic. Just less in your way."
     ),
+    "0.8.6": (
+        "For the times it misbehaves and you want to know why - strictly on your terms."
+        "<ul>"
+        "<li>New under Settings &gt; Playback: \"Write a diagnostic log file\". It notes "
+        "what the app is doing, so a problem you report can actually be traced</li>"
+        "<li><b>Off unless you switch it on.</b> A log is a record of when you used this, "
+        "and that's yours to hand over or not</li>"
+        "<li>It never writes down which folders you play from. A file that refuses to load "
+        "gets named, nothing else does</li>"
+        "<li>It sits with the rest of your data and wipes on its own under Help &gt; "
+        "Privacy &amp; Data, without touching anything you've earned</li>"
+        "</ul>"
+        "Leave it off. Unless you want a witness."
+    ),
 }
 
 
