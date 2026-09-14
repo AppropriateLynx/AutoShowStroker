@@ -4,7 +4,6 @@ import random
 import pytest
 from PyQt6.QtCore import QSettings
 
-from src import CalloutHandler as callout_module
 from src.CalloutHandler import TRIGGER_KEYS, CalloutHandler
 from src.user_data import UserDataStore
 
@@ -19,9 +18,8 @@ def callout_dir(tmp_path):
 
 
 @pytest.fixture
-def handler(qapp, callout_dir, monkeypatch):
-    monkeypatch.setattr(callout_module, "get_resource_path", lambda _relative_path: str(callout_dir))
-    return CalloutHandler()
+def handler(qapp, callout_dir):
+    return CalloutHandler(callout_dir=callout_dir)
 
 
 def test_loads_available_languages(handler):
@@ -151,16 +149,8 @@ def test_beat_change_general_picks_slower_when_freq_decreases(handler, monkeypat
 # --- directory-loading edge cases ---
 
 
-def test_missing_callout_dir_raises(qapp, tmp_path, monkeypatch):
-    monkeypatch.setattr(callout_module, "get_resource_path", lambda _relative_path: str(tmp_path / "does-not-exist"))
-    with pytest.raises(AssertionError):
-        CalloutHandler()
-
-
-def test_empty_callout_dir_does_not_crash_and_disables_callouts(qapp, tmp_path, monkeypatch):
-    monkeypatch.setattr(callout_module, "get_resource_path", lambda _relative_path: str(tmp_path))
-
-    handler = CalloutHandler()
+def test_empty_callout_dir_does_not_crash_and_disables_callouts(qapp, tmp_path):
+    handler = CalloutHandler(callout_dir=tmp_path)
 
     assert handler.available_languages == []
     assert handler.callout_data == {}
@@ -171,11 +161,10 @@ def test_empty_callout_dir_does_not_crash_and_disables_callouts(qapp, tmp_path, 
     handler.select_and_output_sentence("session_started")
 
 
-def test_invalid_json_file_is_skipped_but_language_stays_listed(qapp, tmp_path, monkeypatch):
+def test_invalid_json_file_is_skipped_but_language_stays_listed(qapp, tmp_path):
     (tmp_path / "en.json").write_text("{not valid json", encoding="utf-8")
-    monkeypatch.setattr(callout_module, "get_resource_path", lambda _relative_path: str(tmp_path))
 
-    handler = CalloutHandler()
+    handler = CalloutHandler(callout_dir=tmp_path)
 
     assert handler.available_languages == ["en"]
     assert handler.callout_data == {}
@@ -190,11 +179,10 @@ def test_invalid_json_file_is_skipped_but_language_stays_listed(qapp, tmp_path, 
 
 
 @pytest.fixture
-def handler_with_settings(qapp, callout_dir, monkeypatch, tmp_path):
-    monkeypatch.setattr(callout_module, "get_resource_path", lambda _relative_path: str(callout_dir))
+def handler_with_settings(qapp, callout_dir, tmp_path):
     settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
     store = UserDataStore(base_dir=tmp_path / "appdata")
-    return CalloutHandler(settings=settings, data_store=store)
+    return CalloutHandler(settings=settings, data_store=store, callout_dir=callout_dir)
 
 
 def _write_custom_file(tmp_path, name, data):
@@ -301,13 +289,13 @@ def test_load_custom_file_persists_and_reloads_across_instances(handler_with_set
     second = CalloutHandler(
         settings=handler_with_settings.settings,
         data_store=handler_with_settings.data_store,
+        callout_dir=handler_with_settings.callout_dir,
     )
 
     assert second.callout_data["en"]["session_started"] == ["en session_started phrase", "persisted phrase"]
 
 
-def test_custom_phrase_files_migrate_out_of_settings(qapp, callout_dir, monkeypatch, tmp_path):
-    monkeypatch.setattr(callout_module, "get_resource_path", lambda _relative_path: str(callout_dir))
+def test_custom_phrase_files_migrate_out_of_settings(qapp, callout_dir, tmp_path):
     custom_path = _write_custom_file(tmp_path, "legacy.json", {"session_started": ["legacy phrase"]})
     settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
     settings.setValue(
@@ -316,8 +304,86 @@ def test_custom_phrase_files_migrate_out_of_settings(qapp, callout_dir, monkeypa
     )
     store = UserDataStore(base_dir=tmp_path / "appdata")
 
-    handler = CalloutHandler(settings=settings, data_store=store)
+    handler = CalloutHandler(settings=settings, data_store=store, callout_dir=callout_dir)
 
     assert handler.callout_data["en"]["session_started"] == ["en session_started phrase", "legacy phrase"]
     assert store.path_for("custom_phrase_files").exists()
     assert settings.value("CalloutHandler/custom_phrase_files") is None
+
+
+# --- a fresh install must not silently disable callouts ---
+
+
+def test_talking_chance_falls_back_to_the_default_on_a_fresh_profile(qapp, tmp_path):
+    from PyQt6.QtCore import QSettings
+
+    settings = QSettings(str(tmp_path / "fresh.ini"), QSettings.Format.IniFormat)
+
+    handler = CalloutHandler(settings)
+
+    # QSettings.value(key, type=float) returns 0.0 for a missing key, which used to leave
+    # every ambient callout gated behind a 0% chance until the user noticed the spinbox.
+    assert handler.talking_chance == CalloutHandler.DEFAULTS["talking_chance"]
+
+
+def test_language_falls_back_to_the_default_on_a_fresh_profile(qapp, tmp_path):
+    from PyQt6.QtCore import QSettings
+
+    settings = QSettings(str(tmp_path / "fresh.ini"), QSettings.Format.IniFormat)
+
+    handler = CalloutHandler(settings)
+
+    assert handler.lang == CalloutHandler.DEFAULTS["lang"]
+
+
+def test_stored_talking_chance_still_wins_over_the_default(qapp, tmp_path):
+    from PyQt6.QtCore import QSettings
+
+    settings = QSettings(str(tmp_path / "stored.ini"), QSettings.Format.IniFormat)
+    settings.setValue("CalloutHandler/talking_chance", 0.0)
+
+    handler = CalloutHandler(settings)
+
+    # An explicit 0.0 is a real choice and must survive - only a *missing* key defaults.
+    assert handler.talking_chance == 0.0
+
+
+# --- P3: resource resolution, and set_lang's guard ---
+
+
+def test_callout_dir_resolves_from_the_project_root_not_the_cwd(qapp, monkeypatch, tmp_path):
+    """CLAUDE.md requires get_project_root() for every res/ read. The old module-level
+    get_resource_path used os.path.abspath, i.e. the current working directory - launching
+    from anywhere but the repo root killed startup outright."""
+    from src.utils import get_project_root
+
+    monkeypatch.chdir(tmp_path)
+
+    handler = CalloutHandler()
+
+    assert handler.callout_dir == get_project_root() / "res" / "callouts"
+    assert handler.available_languages  # the shipped files are still found
+
+
+def test_missing_callout_dir_disables_callouts_without_crashing(qapp, tmp_path):
+    """Used to be an `assert`, which killed startup with no window and no message - and
+    vanished entirely under python -O, silently booting into the same dead state."""
+    handler = CalloutHandler(callout_dir=tmp_path / "does-not-exist")
+
+    assert handler.available_languages == []
+    assert handler.callout_data == {}
+    handler.active_callout = True
+    handler.talking_chance = 1.0
+    handler.select_and_output_sentence("session_started")
+
+
+def test_set_lang_falls_back_when_the_configured_language_has_no_file(qapp, tmp_path):
+    """set_lang guarded on self.lang (the old value) instead of lang (the new one), so the
+    fallback in _load_available_languages could never fire for the case it was written for."""
+    (tmp_path / "fr.json").write_text('{"session_started": ["salut"]}', encoding="utf-8")
+
+    handler = CalloutHandler(callout_dir=tmp_path)
+
+    # "en" is the default but has no file here - the handler must land on what exists.
+    assert handler.lang == "fr"
+    assert handler.set_lang("de") is None or handler.lang == "fr"

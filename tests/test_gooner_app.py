@@ -1,3 +1,5 @@
+import os
+import sys
 import time
 from unittest.mock import MagicMock
 
@@ -5,8 +7,21 @@ import pytest
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import QDialog
 
+from src import applog
 from src.BeatTrackWidget import BeatTrackWidget
 from src.GoonerApp import GoonerApp
+
+
+class _FakeDialogBase:
+    """Base for stand-in dialogs.
+
+    GoonerApp releases every dialog it opens with deleteLater() so instances don't pile up
+    as children of the window - a fake without it just raises AttributeError.
+    """
+
+    def deleteLater(self):
+        pass
+
 
 # --- fullscreen ---
 
@@ -125,31 +140,11 @@ def test_control_buttons_are_not_keyboard_focusable(app):
 # --- folder scanning ---
 
 
-def test_finde_unterstuetzte_dateien_finds_all_supported_extensions(app, tmp_path):
-    names = ["a.mp4", "b.avi", "c.mov", "d.mkv", "e.gif", "f.png", "g.jpg", "h.jpeg", "i.bmp", "j.txt"]
-    for name in names:
-        (tmp_path / name).write_bytes(b"")
-
-    found = app.finde_unterstützte_dateien(str(tmp_path))
-
-    assert {f.name for f in found} == set(names) - {"j.txt"}
-
-
-def test_finde_unterstuetzte_dateien_searches_recursively(app, tmp_path):
-    nested = tmp_path / "sub"
-    nested.mkdir()
-    (nested / "deep.png").write_bytes(b"")
-
-    found = app.finde_unterstützte_dateien(str(tmp_path))
-
-    assert [f.name for f in found] == ["deep.png"]
-
-
 # --- open_folder ---
 
 
 def _fake_picker_dialog(exec_result, selected_files=None):
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, parent=None):
             self.selected_files = selected_files or []
 
@@ -173,7 +168,7 @@ def test_open_folder_no_supported_files_shows_message_and_stays_stopped(app, mon
         "src.GoonerApp.MediaFolderPickerDialog", _fake_picker_dialog(QDialog.DialogCode.Accepted, [])
     )
     app.open_folder()
-    assert app.image_label.text() == "Keine Dateien gefunden."
+    assert app.image_label.text() == "No supported files found."
     assert app.is_running is False
 
 
@@ -307,6 +302,7 @@ def test_load_media_video_extension_switches_to_video_widget(app, monkeypatch, t
 def test_video_status_changed_replays_if_below_min_duration(app, monkeypatch):
     fake_player = MagicMock()
     monkeypatch.setattr(app, "media_player", fake_player)
+    app.is_running = True
     app.video_min_dur = 5.0
     app.video_start_time = 100.0
     monkeypatch.setattr(time, "time", lambda: 102.0)
@@ -317,6 +313,7 @@ def test_video_status_changed_replays_if_below_min_duration(app, monkeypatch):
 
 
 def test_video_status_changed_advances_if_above_min_duration(app, monkeypatch):
+    app.is_running = True
     app.video_min_dur = 1.0
     app.video_start_time = 100.0
     monkeypatch.setattr(time, "time", lambda: 105.0)
@@ -466,24 +463,20 @@ def test_hide_last_tease_hides_and_clears_label(app):
 # --- climax outcome ---
 
 
-def test_on_climax_outcome_denied_schedules_stop(app, monkeypatch):
-    called = {}
-    monkeypatch.setattr("src.GoonerApp.QTimer.singleShot", lambda ms, fn: called.update(ms=ms, fn=fn))
+def test_on_climax_outcome_denied_schedules_stop(app):
+    from src.GoonerApp import DENIED_STOP_DELAY_MS
 
     app._on_climax_outcome("denied")
 
-    assert called["ms"] == 5000
-    assert called["fn"] == app.stop
+    assert app._denied_stop_timer.isActive()
+    assert app._denied_stop_timer.interval() == DENIED_STOP_DELAY_MS
 
 
 @pytest.mark.parametrize("outcome", ["real", "ruined"])
-def test_on_climax_outcome_non_denied_does_not_schedule_stop(app, monkeypatch, outcome):
-    called = {}
-    monkeypatch.setattr("src.GoonerApp.QTimer.singleShot", lambda ms, fn: called.update(ms=ms, fn=fn))
-
+def test_on_climax_outcome_non_denied_does_not_schedule_stop(app, outcome):
     app._on_climax_outcome(outcome)
 
-    assert called == {}
+    assert not app._denied_stop_timer.isActive()
 
 
 # --- climax status banner ---
@@ -792,7 +785,7 @@ def test_show_statistics_passes_new_records(app, monkeypatch):
     app.score_tracker.last_session_new_records = {"total_dur_sec": 42.0}
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, stats_data, new_records=None, parent=None):
             captured["new_records"] = new_records
 
@@ -811,14 +804,16 @@ def test_statistics_menu_has_long_term_statistics_action(app, monkeypatch):
 
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, history, all_time_bests, parent=None):
             captured["shown"] = True
 
         def exec(self):
             pass
 
-    monkeypatch.setattr("src.GoonerApp.LongTermStatisticsDialog", FakeDialog)
+    # Imported lazily inside show_long_term_statistics (keeps pyqtgraph out of startup),
+    # so the patch has to land on the source module, not on a GoonerApp attribute.
+    monkeypatch.setattr("src.LongTermStatisticsDialog.LongTermStatisticsDialog", FakeDialog)
 
     menu_bar = app.menuBar()
     stats_menu = next(m for m in menu_bar.findChildren(QMenu) if m.title() == "Statistics")
@@ -831,7 +826,7 @@ def test_statistics_menu_has_long_term_statistics_action(app, monkeypatch):
 def test_show_long_term_statistics_passes_history_and_bests(app, monkeypatch):
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, history, all_time_bests, parent=None):
             captured["history"] = history
             captured["all_time_bests"] = all_time_bests
@@ -839,7 +834,9 @@ def test_show_long_term_statistics_passes_history_and_bests(app, monkeypatch):
         def exec(self):
             pass
 
-    monkeypatch.setattr("src.GoonerApp.LongTermStatisticsDialog", FakeDialog)
+    # Imported lazily inside show_long_term_statistics (keeps pyqtgraph out of startup),
+    # so the patch has to land on the source module, not on a GoonerApp attribute.
+    monkeypatch.setattr("src.LongTermStatisticsDialog.LongTermStatisticsDialog", FakeDialog)
 
     app.show_long_term_statistics()
 
@@ -859,9 +856,9 @@ def test_show_startup_splash_defaults_to_true(app):
     assert app.show_startup_splash is True
 
 
-def test_show_startup_splash_respects_saved_setting(qtbot, qsettings):
+def test_show_startup_splash_respects_saved_setting(qtbot, qsettings, data_store):
     qsettings.setValue("GoonerApp/show_startup_splash", False)
-    window = GoonerApp(settings=qsettings)
+    window = GoonerApp(settings=qsettings, data_store=data_store)
     qtbot.addWidget(window)
 
     assert window.show_startup_splash is False
@@ -879,7 +876,7 @@ def test_maybe_show_whats_new_shows_dialog_when_new_entries_exist(app, monkeypat
 
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, entries, parent=None):
             captured["entries"] = entries
             captured["parent"] = parent
@@ -904,7 +901,7 @@ def test_maybe_show_whats_new_skips_dialog_when_no_new_entries(app, monkeypatch)
 
     called = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, *a, **kw):
             called["constructed"] = True
 
@@ -922,7 +919,7 @@ def test_maybe_show_whats_new_skips_dialog_when_no_new_entries(app, monkeypatch)
 def test_show_whats_new_dialog_shows_full_changelog(app, monkeypatch):
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, entries, parent=None):
             captured["entries"] = entries
 
@@ -943,7 +940,7 @@ def test_help_menu_has_whats_new_action(app, monkeypatch):
 
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, entries, parent=None):
             captured["shown"] = True
 
@@ -965,7 +962,7 @@ def test_help_menu_has_guide_action(app, monkeypatch):
 
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, parent=None):
             captured["shown"] = True
 
@@ -1076,3 +1073,324 @@ def test_check_failed_signal_shows_dialog(app, monkeypatch):
     app.update_checker.check_failed.emit("Host not found")
 
     assert captured.get("msg") == "Host not found"
+
+
+def test_vid_loudness_is_restored_from_settings(qtbot, qsettings, data_store):
+    qsettings.setValue("GoonerApp/vid_loudness", 0.25)
+
+    window = GoonerApp(settings=qsettings, data_store=data_store)
+    qtbot.addWidget(window)
+
+    assert window.vid_loudness == 0.25
+
+
+def test_importing_gooner_app_does_not_pull_in_pyqtgraph():
+    """pyqtgraph + numpy cost ~0.5s warm and ~1.6s cold, for a dialog most sessions never
+    open. Run in a subprocess so an earlier test's import can't mask a regression."""
+    import subprocess
+
+    from src.utils import get_project_root
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import sys; import src.GoonerApp; print('pyqtgraph' in sys.modules)"],
+        capture_output=True, text=True, cwd=str(get_project_root()),
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+    )
+
+    assert result.stdout.strip() == "False", result.stderr
+
+
+# --- P3: session lifecycle and dialog lifetimes ---
+
+
+def test_stop_stops_video_playback(app, monkeypatch, tmp_path):
+    """The player used to keep running behind the statistics dialog, and its EndOfMedia
+    then restarted the whole slideshow with no session behind it."""
+    app.media_player = MagicMock()
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    # load_media() stops the player on every slide, so only calls after this point count.
+    app.media_player.stop.reset_mock()
+
+    app.stop()
+
+    app.media_player.stop.assert_called_once()
+
+
+def test_stop_stops_a_running_gif(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    stopped = []
+    app.current_movie = type("FakeMovie", (), {"stop": lambda self: stopped.append(True)})()
+
+    app.stop()
+
+    assert stopped == [True]
+
+
+def test_end_of_media_is_ignored_once_the_session_stopped(app, monkeypatch, tmp_path):
+    advanced = []
+    monkeypatch.setattr(app, "show_next", lambda: advanced.append(True))
+    app.video_start_time = 0
+
+    app.is_running = False
+    app.video_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)
+
+    assert advanced == []
+
+
+def test_an_unplayable_video_advances_instead_of_stalling(app, monkeypatch, tmp_path):
+    """No EndOfMedia ever arrives for a codec the backend can't open, and the autoplay
+    timer is stopped for videos - so the session used to sit on a black frame forever."""
+    app.playlist = [tmp_path / "a.mp4", tmp_path / "b.png"]
+    app.start()
+    # What the video branch leaves behind: no autoplay timer, waiting on EndOfMedia only.
+    app.auto_play_timer.stop()
+
+    app.video_status_changed(QMediaPlayer.MediaStatus.InvalidMedia)
+
+    assert app.auto_play_timer.isActive()
+
+
+def test_a_media_error_advances_instead_of_stalling(app, tmp_path):
+    app.playlist = [tmp_path / "a.mp4", tmp_path / "b.png"]
+    app.start()
+    app.auto_play_timer.stop()
+
+    app._on_media_error(QMediaPlayer.Error.ResourceError, "boom")
+
+    assert app.auto_play_timer.isActive()
+
+
+def test_a_media_error_outside_a_session_is_ignored(app):
+    app.is_running = False
+
+    app._on_media_error(QMediaPlayer.Error.ResourceError, "boom")
+
+    assert not app.auto_play_timer.isActive()
+
+
+def test_starting_a_new_session_cancels_a_pending_denied_stop(app, tmp_path):
+    """The 5s stop armed by a denied outcome used to be an uncancellable singleShot, so it
+    could land on a session started after the old one had already been stopped."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app._on_climax_outcome("denied")
+    assert app._denied_stop_timer.isActive()
+
+    app.stop()
+    app.start()
+
+    assert not app._denied_stop_timer.isActive()
+
+
+def _pending_dialogs(app, dialog_type):
+    from PyQt6.QtCore import QEvent
+    from PyQt6.QtWidgets import QApplication
+
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    return app.findChildren(dialog_type)
+
+
+def test_reopening_settings_does_not_accumulate_dialogs(app):
+    from src.SettingsDialog import SettingsDialog as _SettingsDialog
+
+    for _ in range(3):
+        app.open_settings()
+
+    assert _pending_dialogs(app, _SettingsDialog) == []
+
+
+def test_reopening_the_guide_does_not_accumulate_dialogs(app):
+    from src.HelpDialog import HelpDialog as _HelpDialog
+
+    for _ in range(3):
+        app.show_help_dialog()
+
+    assert _pending_dialogs(app, _HelpDialog) == []
+
+
+def test_the_folder_picker_is_released_after_use(app, monkeypatch, tmp_path):
+    """This one holds the whole recursive file list of every folder - potentially tens of
+    thousands of Path objects - so leaking one per open actually costs memory."""
+    from src.MediaFolderPickerDialog import MediaFolderPickerDialog as _Picker
+
+    for _ in range(3):
+        app.open_folder()
+
+    assert _pending_dialogs(app, _Picker) == []
+
+
+def test_settings_keys_come_from_an_explicit_group_constant(app):
+    assert GoonerApp.SETTINGS_GROUP == "GoonerApp"
+
+
+# --- P4: dead code, stale overlays, quitting mid-session ---
+
+
+def test_session_timer_stays_hidden_outside_a_session(app):
+    """SettingsDialog calls this unconditionally on save, and it used to show a frozen clock
+    built from the previous session's start time."""
+    app.show_session_timer = True
+    app.is_running = False
+
+    app._update_session_timer()
+
+    assert app.session_timer_label.isHidden()
+
+
+def test_record_chase_stays_hidden_outside_a_session(app):
+    app.show_record_chase = True
+    app.is_running = False
+
+    app._update_record_chase()
+
+    assert app.record_chase_label.isHidden()
+
+
+def test_session_timer_shows_during_a_session(app, tmp_path):
+    app.show_session_timer = True
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app._update_session_timer()
+
+    assert not app.session_timer_label.isHidden()
+
+
+def test_closing_the_window_records_the_session(app, qtbot, tmp_path):
+    """Quitting mid-session used to drop it entirely - no history entry, no personal
+    records, as if it never happened."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    before = len(app.score_tracker.get_history())
+
+    app.close()
+
+    assert len(app.score_tracker.get_history()) == before + 1
+    assert app.is_running is False
+
+
+def test_closing_the_window_does_not_open_the_statistics_dialog(app, monkeypatch, tmp_path):
+    """Throwing a modal recap at someone who just hit the X is the opposite of what they
+    asked for - the session is recorded silently instead."""
+    shown = {}
+    monkeypatch.setattr(app, "show_statistics", lambda: shown.setdefault("called", True))
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app.close()
+
+    assert shown == {}
+
+
+def test_closing_the_window_without_a_session_is_harmless(app):
+    before = len(app.score_tracker.get_history())
+
+    app.close()
+
+    assert len(app.score_tracker.get_history()) == before
+
+
+def test_a_foreign_scheme_url_is_not_opened(app, monkeypatch):
+    """release_url comes straight from the GitHub API response - anything but http(s)
+    would hand an arbitrary protocol handler to the shell on one click."""
+    opened = []
+    monkeypatch.setattr("src.GoonerApp.QDesktopServices.openUrl", lambda url: opened.append(url))
+
+    app._open_external_url("file:///C:/Windows/System32/calc.exe")
+
+    assert opened == []
+
+
+def test_an_https_url_is_opened(app, monkeypatch):
+    opened = []
+    monkeypatch.setattr("src.GoonerApp.QDesktopServices.openUrl", lambda url: opened.append(url))
+
+    app._open_external_url("https://github.com/owner/repo/releases")
+
+    assert [u.toString() for u in opened] == ["https://github.com/owner/repo/releases"]
+
+
+def test_update_consent_text_mentions_the_user_agent(app):
+    """The dialog claimed 'nothing else is sent' while the request carries a
+    self-identifying User-Agent that lands in GitHub's access logs."""
+    text = app._update_check_consent_text()
+
+    assert "User-Agent" in text
+
+
+# --- diagnostic logging (opt-in) ---
+
+
+def test_diagnostic_log_is_off_by_default(app):
+    """Opt-in on purpose: a log in an app like this is a usage trace, so it only exists
+    when the user has asked for one."""
+    assert app.diagnostic_log is False
+    assert applog.log_file_paths(app.data_store.base_dir) == []
+
+
+def test_enabling_the_diagnostic_log_starts_writing(app):
+    app.set_diagnostic_log(True)
+
+    applog.get_logger("src.Test").info("now recording")
+
+    assert "now recording" in applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
+
+
+def test_disabling_the_diagnostic_log_stops_writing(app):
+    app.set_diagnostic_log(True)
+    applog.get_logger("src.Test").info("kept")
+    app.set_diagnostic_log(False)
+
+    applog.get_logger("src.Test").info("dropped")
+
+    contents = applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
+    assert "kept" in contents
+    assert "dropped" not in contents
+
+
+def test_the_diagnostic_log_setting_is_persisted(app):
+    app.set_diagnostic_log(True)
+
+    assert app.settings.value("GoonerApp/diagnostic_log", type=bool) is True
+
+
+def test_a_saved_diagnostic_log_setting_is_restored(qtbot, qsettings, data_store):
+    qsettings.setValue("GoonerApp/diagnostic_log", True)
+
+    window = GoonerApp(settings=qsettings, data_store=data_store)
+    qtbot.addWidget(window)
+
+    assert window.diagnostic_log is True
+    window.set_diagnostic_log(False)
+
+
+def test_media_paths_never_reach_the_log(app, monkeypatch, tmp_path):
+    """The one rule this log has to keep: it may name a file that failed, never the folder
+    it came from - that would put the location of the collection on disk."""
+    app.set_diagnostic_log(True)
+    secret = tmp_path / "very-private-folder"
+    secret.mkdir()
+    files = [secret / "clip.mp4"]
+    monkeypatch.setattr(
+        "src.GoonerApp.MediaFolderPickerDialog", _fake_picker_dialog(QDialog.DialogCode.Accepted, files)
+    )
+
+    app.open_folder()
+
+    contents = applog.log_file_path(app.data_store.base_dir).read_text(encoding="utf-8")
+    assert "very-private-folder" not in contents
+
+
+def test_the_diagnostic_log_level_defaults_to_info(app):
+    assert app.diagnostic_log_level == applog.DEFAULT_LEVEL
+
+
+def test_a_saved_diagnostic_log_level_is_restored(qtbot, qsettings, data_store):
+    qsettings.setValue("GoonerApp/diagnostic_log_level", "ERROR")
+
+    window = GoonerApp(settings=qsettings, data_store=data_store)
+    qtbot.addWidget(window)
+
+    assert window.diagnostic_log_level == "ERROR"

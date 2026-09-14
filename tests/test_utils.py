@@ -58,3 +58,68 @@ def test_format_duration(seconds, expected):
 )
 def test_format_clock(seconds, expected):
     assert format_clock(seconds) == expected
+
+
+# --- image loading ---
+
+
+def _write_large_png(tmp_path, width, height):
+    from PyQt6.QtCore import Qt as _Qt
+    from PyQt6.QtGui import QImage
+
+    image = QImage(width, height, QImage.Format.Format_RGB32)
+    image.fill(_Qt.GlobalColor.red)
+    path = tmp_path / "big.png"
+    assert image.save(str(path))
+    return path
+
+
+def test_load_scaled_pixmap_fits_the_target_and_keeps_the_aspect_ratio(qapp, tmp_path):
+    from PyQt6.QtCore import QSize
+
+    path = _write_large_png(tmp_path, 2000, 1000)
+
+    pixmap = utils.load_scaled_pixmap(str(path), QSize(200, 200))
+
+    assert pixmap.width() == 200
+    assert pixmap.height() == 100
+
+
+def test_load_scaled_pixmap_decodes_at_the_target_size(qapp, tmp_path, monkeypatch):
+    """QPixmap(path).scaled() decodes the full image first - 134ms for a 24MP JPEG versus
+    22ms when the decoder is told the target size up front."""
+    from PyQt6.QtCore import QSize
+    from PyQt6.QtGui import QImageReader
+
+    path = _write_large_png(tmp_path, 2000, 1000)
+    requested = []
+
+    class SpyReader(QImageReader):
+        def setScaledSize(self, size):
+            requested.append(size)
+            super().setScaledSize(size)
+
+    monkeypatch.setattr("src.utils.QImageReader", SpyReader)
+
+    utils.load_scaled_pixmap(str(path), QSize(200, 200))
+
+    assert requested == [QSize(200, 100)]
+
+
+def test_load_scaled_pixmap_returns_a_null_pixmap_for_an_unreadable_file(qapp, tmp_path):
+    from PyQt6.QtCore import QSize
+
+    broken = tmp_path / "not-an-image.png"
+    broken.write_bytes(b"nope")
+
+    assert utils.load_scaled_pixmap(str(broken), QSize(100, 100)).isNull()
+
+
+def test_load_scaled_pixmap_handles_an_invalid_target_size(qapp, tmp_path):
+    from PyQt6.QtCore import QSize
+
+    path = _write_large_png(tmp_path, 400, 200)
+
+    pixmap = utils.load_scaled_pixmap(str(path), QSize(0, 0))
+
+    assert not pixmap.isNull()

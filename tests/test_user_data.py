@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QSettings, QStandardPaths
 
 from src.user_data import LEGACY_DEAD_KEYS, UserDataStore
 
@@ -203,3 +203,155 @@ def test_dead_keys_list_does_not_name_anything_still_read_by_the_app(store):
 def test_defaults_to_a_real_app_data_directory():
     store = UserDataStore()
     assert store.base_dir.is_absolute()
+
+
+# --- write failures must not take the app down with them ---
+
+
+def test_save_returns_true_on_success(store):
+    assert store.save("history", [1, 2, 3]) is True
+
+
+def test_save_returns_false_instead_of_raising_when_the_write_fails(store, monkeypatch):
+    def boom(*_args, **_kwargs):
+        raise PermissionError("locked by antivirus")
+
+    monkeypatch.setattr("pathlib.Path.write_text", boom)
+
+    assert store.save("history", [1, 2, 3]) is False
+
+
+def test_a_failed_save_leaves_the_previous_file_intact(store, monkeypatch):
+    store.save("history", ["original"])
+
+    def boom(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("pathlib.Path.write_text", boom)
+    assert store.save("history", ["replacement"]) is False
+
+    monkeypatch.undo()
+    assert store.load("history", []) == ["original"]
+
+
+def test_migration_keeps_the_registry_copy_when_the_write_fails(store, settings, monkeypatch):
+    settings.setValue("legacy/thing", json.dumps(["kept"]))
+
+    def boom(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("pathlib.Path.write_text", boom)
+
+    assert store.load("thing", [], settings, "legacy/thing") == ["kept"]
+    # The registry value is the only surviving copy - dropping it here would lose the data.
+    assert settings.value("legacy/thing") is not None
+
+
+# --- the data directory moved from Roaming to Local ---
+
+
+def _fake_standard_paths(monkeypatch, roaming, local):
+    class FakeStandardPaths:
+        StandardLocation = QStandardPaths.StandardLocation
+
+        @staticmethod
+        def writableLocation(location):
+            if location == QStandardPaths.StandardLocation.AppLocalDataLocation:
+                return str(local)
+            return str(roaming)
+
+    monkeypatch.setattr("src.user_data.QStandardPaths", FakeStandardPaths)
+
+
+def test_defaults_to_the_non_roaming_location(tmp_path, monkeypatch):
+    roaming = tmp_path / "Roaming" / "GoonerApp"
+    local = tmp_path / "Local" / "GoonerApp"
+    _fake_standard_paths(monkeypatch, roaming, local)
+
+    assert UserDataStore().base_dir == local
+
+
+def test_data_files_move_out_of_roaming(tmp_path, monkeypatch):
+    roaming = tmp_path / "Roaming" / "GoonerApp"
+    local = tmp_path / "Local" / "GoonerApp"
+    roaming.mkdir(parents=True)
+    (roaming / "session_history.json").write_text('[{"total_dur_sec": 12}]', encoding="utf-8")
+    _fake_standard_paths(monkeypatch, roaming, local)
+
+    store = UserDataStore()
+    store.migrate_legacy_location()
+
+    assert store.load("session_history", []) == [{"total_dur_sec": 12}]
+    assert not (roaming / "session_history.json").exists()
+
+
+def test_roaming_migration_is_idempotent(tmp_path, monkeypatch):
+    roaming = tmp_path / "Roaming" / "GoonerApp"
+    local = tmp_path / "Local" / "GoonerApp"
+    roaming.mkdir(parents=True)
+    (roaming / "session_history.json").write_text("[1]", encoding="utf-8")
+    _fake_standard_paths(monkeypatch, roaming, local)
+
+    store = UserDataStore()
+    store.migrate_legacy_location()
+    store.migrate_legacy_location()
+
+    assert store.load("session_history", []) == [1]
+
+
+def test_roaming_migration_never_clobbers_a_newer_local_file(tmp_path, monkeypatch):
+    roaming = tmp_path / "Roaming" / "GoonerApp"
+    local = tmp_path / "Local" / "GoonerApp"
+    roaming.mkdir(parents=True)
+    local.mkdir(parents=True)
+    (roaming / "session_history.json").write_text('["old"]', encoding="utf-8")
+    (local / "session_history.json").write_text('["current"]', encoding="utf-8")
+    _fake_standard_paths(monkeypatch, roaming, local)
+
+    store = UserDataStore()
+    store.migrate_legacy_location()
+
+    assert store.load("session_history", []) == ["current"]
+
+
+def test_roaming_migration_is_a_noop_for_an_injected_store(tmp_path):
+    # Tests inject base_dir - such a store has no legacy location and must never go
+    # hunting for one in the developer's real AppData.
+    store = UserDataStore(base_dir=tmp_path / "injected")
+    store.migrate_legacy_location()
+
+    assert store.base_dir == tmp_path / "injected"
+
+
+# --- deleting data on the user's request ---
+
+
+def test_delete_removes_the_file(store):
+    store.save("history", [1])
+    assert store.delete("history") is True
+    assert not store.path_for("history").exists()
+
+
+def test_delete_is_a_noop_when_there_is_nothing_to_remove(store):
+    assert store.delete("history") is False
+
+
+def test_delete_also_removes_corrupt_and_temp_siblings(store):
+    store.save("history", [1])
+    path = store.path_for("history")
+    path.with_suffix(".json.corrupt").write_text("[]", encoding="utf-8")
+    path.with_suffix(".json.tmp").write_text("[]", encoding="utf-8")
+
+    store.delete("history")
+
+    assert not path.with_suffix(".json.corrupt").exists()
+    assert not path.with_suffix(".json.tmp").exists()
+
+
+def test_delete_leaves_other_files_alone(store):
+    store.save("history", [1])
+    store.save("patterns", {"a": [1]})
+
+    store.delete("history")
+
+    assert store.path_for("patterns").exists()

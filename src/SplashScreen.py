@@ -18,6 +18,10 @@ class SplashScreen(QWidget):
     """
 
     finished = pyqtSignal()
+    # Emitted once the logo is fully faded in. main.py builds the main window on this, so
+    # the expensive construction overlaps the splash's own hold instead of running before
+    # the splash is ever shown - it used to add its full 1.8s on top of the load, not hide it.
+    fade_in_finished = pyqtSignal()
 
     def __init__(self, fade_in_ms=400, hold_ms=1000, fade_out_ms=400, parent=None):
         super().__init__(parent)
@@ -87,6 +91,9 @@ class SplashScreen(QWidget):
         self._fade_in.start()
 
     def _on_fade_in_finished(self):
+        # Listeners run synchronously here, so a slow one simply eats into the hold rather
+        # than delaying anything - which is exactly the point.
+        self.fade_in_finished.emit()
         QTimer.singleShot(self._hold_ms, self._start_fade_out)
 
     def _start_fade_out(self):

@@ -1,10 +1,13 @@
 import json
-import os
 import random
-import sys
 from pathlib import Path
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
+
+from src.applog import get_logger
+from src.utils import get_project_root
+
+log = get_logger(__name__)
 
 TRIGGER_KEYS = [
     "beat_change_general",
@@ -22,35 +25,33 @@ TRIGGER_KEYS = [
 ]
 
 
-def get_resource_path(relative_path):
-    """ Liefert den absoluten Pfad zur Ressource, passend für Entwicklung und PyInstaller-EXE """
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.abspath(relative_path)
-
-
 class CalloutHandler(QObject):
+    SETTINGS_GROUP = "CalloutHandler"  # see BeatHandler.SETTINGS_GROUP
 
     new_tease_event = pyqtSignal(str)
     hide_tease_event = pyqtSignal()
 
-    # Keep in sync with the literal defaults set in __init__ below - single source of truth
-    # for the SettingsDialog "Reset to defaults" button.
+    # Single source of truth: __init__ reads these as its fallbacks, and the
+    # SettingsDialog "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
         "active_callout": False,
         "talking_chance": 0.5,
         "lang": "en",
     }
 
-    def __init__(self, settings=None, data_store=None):
+    def __init__(self, settings=None, data_store=None, callout_dir=None):
         super().__init__()
         self.settings = settings
         self.data_store = data_store
         self.tease_active_timer = QTimer()
         self.tease_active_timer.timeout.connect(self._tease_timer_handler)
         self.tease_time = 7000
-        self.lang = "en"
-        self.callout_dir = Path(get_resource_path("res/callouts"))
+        self.lang = self.DEFAULTS["lang"]
+        # get_project_root() rather than a cwd-relative path (CLAUDE.md requires it for
+        # every res/ read): this module used to carry its own copy of get_resource_path
+        # built on os.path.abspath, so launching from any other working directory pointed
+        # at a res/callouts that doesn't exist. Injectable for tests.
+        self.callout_dir = Path(callout_dir) if callout_dir else get_project_root() / "res" / "callouts"
 
         self.is_teasing = False
 
@@ -59,14 +60,22 @@ class CalloutHandler(QObject):
         self.custom_phrase_files: list[dict] = []
 
         self._load_available_languages()
-        self.active_callout = False
-        self.talking_chance = 0.5
+        self.active_callout = self.DEFAULTS["active_callout"]
+        self.talking_chance = self.DEFAULTS["talking_chance"]
         self.cur_freq = 0
 
         if settings is not None:
-            self.active_callout = bool(self.settings.value('CalloutHandler/active_callout', type=bool))
-            self.set_lang(str(self.settings.value("CalloutHandler/selected_lang")))
-            self.talking_chance = float(self.settings.value("CalloutHandler/talking_chance", type=float))
+            # Pass the current value as the default for each: QSettings.value() with a
+            # type= but no default returns a default-constructed value for a missing key,
+            # so a fresh profile used to load talking_chance as 0.0 - gating every ambient
+            # callout behind a 0% chance - and selected_lang as the literal string "None".
+            self.active_callout = bool(
+                self.settings.value("CalloutHandler/active_callout", self.active_callout, type=bool)
+            )
+            self.set_lang(str(self.settings.value("CalloutHandler/selected_lang", self.lang)))
+            self.talking_chance = float(
+                self.settings.value("CalloutHandler/talking_chance", self.talking_chance)
+            )
 
         # Which phrase files the user added is their own data, so it lives in a JSON file
         # rather than the registry (see src/user_data.py).
@@ -77,10 +86,16 @@ class CalloutHandler(QObject):
             self._apply_stored_custom_files()
 
     def _load_available_languages(self):
-        assert self.callout_dir.is_dir()
-
         self.available_languages = []
         self.callout_data = {}
+
+        if not self.callout_dir.is_dir():
+            # Was an `assert`, which killed startup with no window and no message - and got
+            # stripped entirely under python -O, silently booting into this same state
+            # instead. Degrading here matches how an *empty* callout dir already behaved,
+            # and how user_data.py treats unreadable data: never stop the app from starting.
+            log.error("No callout directory at %s - callouts are disabled", self.callout_dir)
+            return
 
         for json_file in self.callout_dir.glob("*.json"):
             lang_code = json_file.stem
@@ -91,7 +106,7 @@ class CalloutHandler(QObject):
                 with open(json_file, encoding='utf-8') as f:
                     self.callout_data[lang_code] = json.load(f)
             except Exception as e:
-                print(f"Error loading the callout file {json_file}: {e}")
+                log.warning("Could not load the callout file %s: %s", json_file.name, e)
 
         if self.available_languages and (
             self.lang not in self.callout_data or self.lang not in self.available_languages
@@ -100,10 +115,15 @@ class CalloutHandler(QObject):
 
 
     def set_lang(self, lang):
-        if lang in self.callout_data and self.lang in self.available_languages:
+        # Both clauses check the *incoming* language. The second used to read self.lang,
+        # i.e. the value being replaced, which meant _load_available_languages' fallback
+        # could never fire in exactly the case it exists for: the configured language
+        # having no file, so self.lang is not in available_languages and every assignment
+        # gets rejected, pinning the handler to a language it has no data for.
+        if lang in self.callout_data and lang in self.available_languages:
             self.lang = lang
         else:
-            print(f"Tried setting {lang}. That language is not available.")
+            log.warning("Language %r is not available", lang)
 
     def _read_custom_file(self, path: str) -> dict:
         try:
@@ -135,7 +155,7 @@ class CalloutHandler(QObject):
             try:
                 self._merge_phrases(entry["lang"], self._read_custom_file(entry["path"]))
             except ValueError as e:
-                print(f"Skipping custom callout file: {e}")
+                log.warning("Skipping a custom callout file: %s", e)
 
     def load_custom_file(self, path: str, lang: str):
         if lang not in self.available_languages:
@@ -152,6 +172,14 @@ class CalloutHandler(QObject):
         self._load_available_languages()  # reset to shipped-only state
         self._apply_stored_custom_files()  # reapply whatever custom files remain
         self._save_custom_phrase_files()
+
+    def clear_custom_phrase_files(self):
+        """Forgets every added phrase file, including the phrases already merged in - a
+        reload back to the shipped-only state, same as unload_custom_file does."""
+        self.custom_phrase_files = []
+        self._load_available_languages()
+        if self.data_store:
+            self.data_store.delete("custom_phrase_files")
 
     def _save_custom_phrase_files(self):
         if not self.data_store:
@@ -198,7 +226,7 @@ class CalloutHandler(QObject):
             self.is_teasing = True
             self.tease_active_timer.start(self.tease_time)
         except (KeyError, IndexError):
-            print(f"Category {category} is empty or not present.")
+            log.warning("No %r phrases available for language %r", category, self.lang)
 
     def force_output_sentence(self, category):
         """Emits a phrase from `category` unconditionally, skipping the active_callout/
@@ -208,7 +236,7 @@ class CalloutHandler(QObject):
         try:
             tease = random.choice(self.callout_data[self.lang][category])
         except (KeyError, IndexError):
-            print(f"Category {category} is empty or not present.")
+            log.warning("No %r phrases available for language %r", category, self.lang)
             return
         self.new_tease_event.emit(tease)
         self.is_teasing = True

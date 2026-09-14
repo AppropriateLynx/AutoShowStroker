@@ -1,6 +1,9 @@
 import time
 
 from src import utils
+from src.applog import get_logger
+
+log = get_logger(__name__)
 
 
 class ScoreTracker:
@@ -68,16 +71,17 @@ class ScoreTracker:
         self.climax_outcome = outcome
 
     def beat_paused(self):
-        print("Beat Paused")
+        log.info("Beat paused")
         self.number_of_pauses += 1
         if not self.cur_pause_start_time:
             self.cur_pause_start_time = time.time()
         else:
-            print("ERROR! Pause Start Time not Resetted!")
+            log.warning("Pause start time was not reset - pause bookkeeping may be off")
 
     def beat_resumed(self):
-        print("Resume!")
-        self.total_duration_of_pauses += time.time() - self.cur_pause_start_time
+        pause_duration = time.time() - self.cur_pause_start_time
+        log.info("Beat resumed after %ds", round(pause_duration))
+        self.total_duration_of_pauses += pause_duration
         self.cur_pause_start_time = None
 
     def media_skipped(self):
@@ -87,7 +91,7 @@ class ScoreTracker:
         self.repeats += 1
 
     def session_started(self):
-        print("Session Started")
+        log.info("Score tracking started")
         self.session_start_time = time.time()
         self.number_of_pauses = 0
         self.total_duration_of_pauses = 0
@@ -103,7 +107,13 @@ class ScoreTracker:
         self.fakeout_count = 0
 
     def session_ended(self):
-        print("Session Ended")
+        log.info("Score tracking ended")
+        # session_start_time is None if this fires without a matching session_started -
+        # which GoonerApp.closeEvent made reachable, since it ends whatever it finds
+        # running when the window closes. Treat it as a zero-length session rather than
+        # raising out of the close handler.
+        if self.session_start_time is None:
+            self.session_start_time = time.time()
         self.total_run_time = time.time() - self.session_start_time
         if self.number_of_pauses > 0:
             self.average_pause_duration = self.total_duration_of_pauses / self.number_of_pauses
@@ -190,6 +200,13 @@ class ScoreTracker:
             return None
         metric, current, best, _ = best_match
         return metric, current, best
+
+    def clear_history(self):
+        """Forgets every recorded session. In-memory too, or the next session end would
+        write the old list straight back out."""
+        self.history = []
+        if self.data_store:
+            self.data_store.delete("session_history")
 
     def get_history(self) -> list:
         return list(self.history)

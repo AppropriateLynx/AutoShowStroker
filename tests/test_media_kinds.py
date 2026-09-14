@@ -72,3 +72,25 @@ def test_find_supported_files_survives_permission_error(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "rglob", raising_rglob)
 
     assert media_kinds.find_supported_files(str(tmp_path)) == []
+
+
+def test_find_supported_files_does_not_stat_non_media_files(tmp_path, monkeypatch):
+    """The suffix check has to come first: is_file() is a stat syscall, and running it on
+    every entry in the tree costs ~3x on a local SSD and far more on a network share."""
+    (tmp_path / "keep.png").write_bytes(b"x")
+    for i in range(5):
+        (tmp_path / f"junk{i}.txt").write_bytes(b"x")
+
+    statted = []
+    original_is_file = Path.is_file
+
+    def counting_is_file(self):
+        statted.append(self.name)
+        return original_is_file(self)
+
+    monkeypatch.setattr(Path, "is_file", counting_is_file)
+
+    found = media_kinds.find_supported_files(str(tmp_path))
+
+    assert [p.name for p in found] == ["keep.png"]
+    assert not [name for name in statted if name.endswith(".txt")]

@@ -1,21 +1,22 @@
-import os
 import random
-import sys
 import time
-from pathlib import Path
 
-from PyQt6.QtCore import QMutex, QObject, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import QMutex, QObject, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QSoundEffect
 
+from src.applog import get_logger
+from src.utils import get_project_root
 
-def get_resource_path(relative_path):
-    """ Liefert den absoluten Pfad zur Ressource, passend für Entwicklung und PyInstaller-EXE """
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.abspath(relative_path)
+log = get_logger(__name__)
 
 
 class BeatHandler(QObject):
+    # The QSettings group these settings persist under. Explicit rather than derived
+    # from __class__.__name__ (which SettingsDialog used to do): the read sides all
+    # hardcode the same literal, so a class rename would silently orphan every saved
+    # value with nothing to grep for.
+    SETTINGS_GROUP = "BeatHandler"
+
     # Hard cap on upcoming_beats() output - at the top of the frequency range with the
     # shortest steps a long horizon would otherwise build a pointlessly huge list.
     MAX_LOOKAHEAD_NOTES = 64
@@ -47,8 +48,8 @@ class BeatHandler(QObject):
         "Suspense Build": [2, -4, -3, -2, -1, 3],
     }
 
-    # Keep in sync with the literal defaults set in __init__ below - single source of truth
-    # for the SettingsDialog "Reset to defaults" buttons.
+    # Single source of truth: __init__ applies these directly, and the SettingsDialog
+    # "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
         "max_beat_dur": 45.0,
         "min_beat_dur": 15,
@@ -84,27 +85,19 @@ class BeatHandler(QObject):
         self.cur_pause_dur = None
         self.is_red = False
 
-        self.settings = settings  # QSettings Instanz speichern
+        self.settings = settings
 
-        # --- Standardwerte definieren ---
-        self.max_beat_dur = 45.0
-        self.min_beat_dur = 15
-        self.max_beat_freq = 5.0
-        self.min_beat_freq = 0.5
-        self.min_pause_dur = 5
-        self.max_pause_dur = 20
-        self.pause_chance = 0.05
-        self.beat_change_chance = 0.1
-
-        self.ramping_active = True
-        self.min_ramp_duration = 600.0
-        self.max_ramp_duration = 1800.0
-        self.ramp_window_width = 0.4
+        # Every DEFAULTS entry is the attribute's starting value - the settings block below
+        # then overrides whatever the user has saved. Driven from the dict rather than
+        # repeated as literals, which is what the "keep in sync" comment used to ask a
+        # reader to do by hand.
+        for _key, _value in self.DEFAULTS.items():
+            setattr(self, _key, _value)
 
         self.session_start_time = 0.0
         self.ramp_target_duration = 0.0
 
-        # --- Laden, falls QSettings existieren ---
+        # Whatever the user has saved wins over the defaults above.
         if self.settings:
             self.max_beat_dur = float(self.settings.value("BeatHandler/max_beat_dur", self.max_beat_dur))
             self.min_beat_dur = float(self.settings.value("BeatHandler/min_beat_dur", self.min_beat_dur))
@@ -130,10 +123,10 @@ class BeatHandler(QObject):
             )
             loaded_patterns = self.settings.value("BeatHandler/selected_beat_patterns")
             if loaded_patterns:
-                # Das geladene Muster ist eine Liste von Strings (Namen)
+                # What comes back is a list of pattern names
                 self.selected_beat_patterns = loaded_patterns
             else:
-                # Standard: Alle Muster aktiv
+                # Nothing saved yet: every built-in rhythm starts active
                 self.selected_beat_patterns = list(self.BEAT_PATTERNS_MAP.keys())
 
         else:
@@ -145,17 +138,27 @@ class BeatHandler(QObject):
         self.custom_beat_patterns = self._load_custom_patterns()
 
         self.beat_meter_timer = QTimer()
+        # Qt defaults to CoarseTimer (5% tolerance, and on Windows it rides the ~15.6ms
+        # system tick). At the top of the frequency range that is ~16ms of jitter on a
+        # 200ms interval - audible slop on the one signal whose whole job is to be exact.
+        self.beat_meter_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self.beat_meter_timer.timeout.connect(self.beat)
         self.cur_freq = 0
         self.target_beat_dur = 0
         self.cur_beat_start_time = 0
 
         self.sound_effect = None
-        self.beat_loudness = 1.0
+        if self.settings:
+            # Read here rather than up in the settings block: init_beat_sound() below
+            # applies it, so it has to be resolved before the QSoundEffect is built.
+            self.beat_loudness = float(
+                self.settings.value("BeatHandler/beat_loudness", self.beat_loudness)
+            )
         self.is_muted = False
 
         if beat_file is None:
-            beat_file = Path(get_resource_path("res/mixkit-cool-interface-click-tone-2568.wav"))
+            # get_project_root(), not a cwd-relative path - see CalloutHandler.callout_dir.
+            beat_file = get_project_root() / "res" / "mixkit-cool-interface-click-tone-2568.wav"
         self.init_beat_sound(str(beat_file.absolute()))
 
         self.current_beat_pattern = None
@@ -185,10 +188,12 @@ class BeatHandler(QObject):
                     return
                 self.recalc_beat()
         self.beat_pattern_mutex.lock()
-        base_step_sec = self._base_step_sec()
-        beat_time_ms = int(base_step_sec * 1000 / abs(self.current_beat_pattern[self.current_beat_position]))
-        self.current_beat_position = (self.current_beat_position + 1) % len(self.current_beat_pattern)
-        self.beat_pattern_mutex.unlock()
+        try:
+            base_step_sec = self._base_step_sec()
+            beat_time_ms = int(base_step_sec * 1000 / abs(self.current_beat_pattern[self.current_beat_position]))
+            self.current_beat_position = (self.current_beat_position + 1) % len(self.current_beat_pattern)
+        finally:
+            self.beat_pattern_mutex.unlock()
         self.beat_meter_timer.start(beat_time_ms)
 
     def _base_step_sec(self):
@@ -257,20 +262,41 @@ class BeatHandler(QObject):
         window_min = self.min_beat_freq + progress * (corridor - width)
         return window_min, window_min + width
 
+    def _usable_pattern_names(self):
+        """Selected pattern names that actually have a definition - never empty.
+
+        recalc_beat() has to pick *something*: an empty or stale selection used to raise
+        IndexError/KeyError out of a Qt slot, which aborts the process. Three ways to get
+        there, all reachable without touching the code: unticking every rhythm in Settings,
+        deleting the last selected custom pattern in the editor, and a custom_patterns.json
+        that no longer defines a name BeatHandler/selected_beat_patterns still lists.
+
+        Read-only on purpose - a name whose definition is temporarily missing stays selected
+        and starts working again on its own once the pattern is back.
+        """
+        selected = self.selected_beat_patterns
+        if isinstance(selected, str):
+            # QSettings can hand a one-element QStringList back as a bare str.
+            selected = [selected]
+        elif not isinstance(selected, list):
+            selected = list(selected)
+        usable = [name for name in selected if name in self.available_beat_patterns]
+        return usable or list(self.BEAT_PATTERNS_MAP.keys())
+
     def recalc_beat(self):
         window_min, window_max = self._current_freq_range()
         self.cur_freq = random.uniform(window_min, window_max)
         self.cur_beat_start_time = time.time()
         self.target_beat_dur = random.uniform(self.min_beat_dur, self.max_beat_dur)
         self.beat_pattern_mutex.lock()
-        self.current_beat_position = 0
-        if not isinstance(self.selected_beat_patterns, list):
-            self.selected_beat_patterns = list(self.selected_beat_patterns)
-        self.current_beat_pattern_name = random.choice(self.selected_beat_patterns)
-        self.current_beat_pattern = self.available_beat_patterns[self.current_beat_pattern_name]
-        self._pattern_audible_count = sum(1 for v in self.current_beat_pattern if v > 0)
-        self._pattern_inv_sum = sum(1 / abs(v) for v in self.current_beat_pattern)
-        self.beat_pattern_mutex.unlock()
+        try:
+            self.current_beat_position = 0
+            self.current_beat_pattern_name = random.choice(self._usable_pattern_names())
+            self.current_beat_pattern = self.available_beat_patterns[self.current_beat_pattern_name]
+            self._pattern_audible_count = sum(1 for v in self.current_beat_pattern if v > 0)
+            self._pattern_inv_sum = sum(1 / abs(v) for v in self.current_beat_pattern)
+        finally:
+            self.beat_pattern_mutex.unlock()
 
         # Mark a new beat or speed with a different color for one beat:
         self.beat_meter_update_event.emit(f"New Beat! {self.current_beat_pattern}", "new_beat")
@@ -302,8 +328,10 @@ class BeatHandler(QObject):
 
     def beat(self):
         self.beat_pattern_mutex.lock()
-        play_beat = self.current_beat_pattern[self.current_beat_position] > 0
-        self.beat_pattern_mutex.unlock()
+        try:
+            play_beat = self.current_beat_pattern[self.current_beat_position] > 0
+        finally:
+            self.beat_pattern_mutex.unlock()
 
         if play_beat:
             self.play_beat_sound()
@@ -317,9 +345,17 @@ class BeatHandler(QObject):
         self.reset_beat_timer()
 
 
+    def is_paused(self) -> bool:
+        """True while a rhythm pause is counting down (the beat timer is stopped)."""
+        return self.beat_meter_pause_timer.isActive()
+
     def start_pause(self):
         self.beat_meter_timer.stop()
-        self.cur_pause_dur = random.randint(self.min_pause_dur, self.max_pause_dur)
+        # sorted() because randint - unlike the uniform() calls everywhere else - raises on an
+        # inverted range. SettingsDialog refuses to save min above max, but a registry written
+        # by an older build still can, and that must not kill a running session.
+        low, high = sorted((self.min_pause_dur, self.max_pause_dur))
+        self.cur_pause_dur = random.randint(low, high)
         self.beat_meter_pause_timer.start(1000)
         self.beat_meter_update_event.emit(f"Pause: {self.cur_pause_dur} seconds left.", "pause")
         self.beat_paused_event.emit()
@@ -372,6 +408,7 @@ class BeatHandler(QObject):
             raise ValueError(f"'{name}' collides with a built-in pattern name.")
         self._validate_pattern_steps(steps)
 
+        log.info("Custom pattern %r saved with %d steps", name, len(steps))
         self.custom_beat_patterns[name] = list(steps)
         self.available_beat_patterns = {**self.BEAT_PATTERNS_MAP, **self.custom_beat_patterns}
         if name not in self.selected_beat_patterns:
@@ -379,18 +416,66 @@ class BeatHandler(QObject):
         self._save_custom_patterns()
 
     def delete_custom_pattern(self, name):
+        log.info("Custom pattern %r deleted", name)
         self.custom_beat_patterns.pop(name, None)
         self.available_beat_patterns = {**self.BEAT_PATTERNS_MAP, **self.custom_beat_patterns}
         if name in self.selected_beat_patterns:
             self.selected_beat_patterns.remove(name)
         self._save_custom_patterns()
 
+    def clear_custom_patterns(self):
+        """Forgets every user-authored pattern. The built-ins are untouched - this is a
+        data deletion, not a rhythm reset."""
+        log.info("Clearing %d custom pattern(s)", len(self.custom_beat_patterns))
+        self.custom_beat_patterns = {}
+        self.available_beat_patterns = dict(self.BEAT_PATTERNS_MAP)
+        self.selected_beat_patterns = [
+            name for name in self._usable_pattern_names() if name in self.BEAT_PATTERNS_MAP
+        ]
+        if self.data_store:
+            self.data_store.delete("custom_patterns")
+        if self.settings:
+            self.settings.setValue("BeatHandler/selected_beat_patterns", self.selected_beat_patterns)
+
     def _load_custom_patterns(self) -> dict:
         if not self.data_store:
             return {}
-        return self.data_store.load(
-            "custom_patterns", {}, self.settings, "BeatHandler/custom_patterns"
+        return self._sanitize_custom_patterns(
+            self.data_store.load("custom_patterns", {}, self.settings, "BeatHandler/custom_patterns")
         )
+
+    @classmethod
+    def _sanitize_custom_patterns(cls, raw) -> dict:
+        """Keep only entries add_or_update_custom_pattern would have accepted.
+
+        UserDataStore guarantees the file parses, not that it holds what we expect - and
+        src/user_data.py deliberately advertises these files as inspectable and hand-editable.
+        Unchecked, a zero step divides by zero, an empty list indexes out of range and a
+        non-numeric step raises TypeError, all inside recalc_beat()'s locked region.
+
+        Bad entries are dropped rather than repaired: a pattern we can't read is not a pattern
+        we can guess at, and dropping it keeps the rest of the file usable.
+        """
+        if not isinstance(raw, dict):
+            log.warning("Ignoring custom patterns: expected an object, got %s", type(raw).__name__)
+            return {}
+
+        clean = {}
+        for name, steps in raw.items():
+            if not isinstance(name, str) or not isinstance(steps, list):
+                log.warning("Skipping custom pattern %r: not a list of steps", name)
+                continue
+            # bool is an int subclass - exclude it so True/False can't pose as weights.
+            if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in steps):
+                log.warning("Skipping custom pattern %r: every step must be a number", name)
+                continue
+            try:
+                cls._validate_pattern_steps(steps)
+            except ValueError as error:
+                log.warning("Skipping custom pattern %r: %s", name, error)
+                continue
+            clean[name] = steps
+        return clean
 
     def _save_custom_patterns(self):
         if self.data_store:

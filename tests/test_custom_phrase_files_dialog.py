@@ -17,11 +17,9 @@ def callout_dir(tmp_path):
 
 
 @pytest.fixture
-def callout_handler(qapp, callout_dir, monkeypatch, tmp_path):
-    import src.CalloutHandler as callout_module
-    monkeypatch.setattr(callout_module, "get_resource_path", lambda _relative_path: str(callout_dir))
+def callout_handler(qapp, callout_dir, tmp_path):
     settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
-    return CalloutHandler(settings=settings)
+    return CalloutHandler(settings=settings, callout_dir=callout_dir)
 
 
 @pytest.fixture

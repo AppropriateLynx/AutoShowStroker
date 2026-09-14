@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import QSettings, Qt, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QMovie, QPixmap
+from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QMovie
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import (
@@ -21,24 +21,34 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src import changelog, media_kinds, theme
+from src import applog, changelog, media_kinds, theme
 from src.BeatHandler import BeatHandler
 from src.BeatTrackWidget import BeatTrackWidget
 from src.CalloutHandler import CalloutHandler
 from src.ClimaxHandler import ClimaxHandler
 from src.HelpDialog import HelpDialog
-from src.LongTermStatisticsDialog import LongTermStatisticsDialog
 from src.MediaFolderPickerDialog import MediaFolderPickerDialog
+from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
 from src.SettingsDialog import SettingsDialog
 from src.StatisticsDialog import StatisticsDialog
 from src.UpdateChecker import UpdateChecker
 from src.user_data import UserDataStore
-from src.utils import format_clock, get_current_version, get_project_root
+from src.utils import format_clock, get_current_version, get_project_root, load_scaled_pixmap
 from src.WhatsNewDialog import WhatsNewDialog
+
+# How long the "denied" banner stays up before the session is ended for the user.
+DENIED_STOP_DELAY_MS = 5000
+# Delay before skipping past media that will never finish playing - long enough that an
+# entirely unplayable playlist cycles visibly instead of spinning.
+MEDIA_ERROR_ADVANCE_MS = 1000
+
+log = applog.get_logger(__name__)
 
 
 class GoonerApp(QMainWindow):
+    SETTINGS_GROUP = "GoonerApp"  # see BeatHandler.SETTINGS_GROUP
+
     DISCORD_INVITE_URL = "https://discord.gg/qqkcxvq37Z"
 
     session_started_event = pyqtSignal()
@@ -46,8 +56,8 @@ class GoonerApp(QMainWindow):
     media_repeated_event = pyqtSignal()
     media_skipped_event = pyqtSignal()
 
-    # Keep in sync with the literal defaults set in __init__ below - single source of truth
-    # for the SettingsDialog "Reset to defaults" button.
+    # Single source of truth: __init__ reads these as its fallbacks, and the
+    # SettingsDialog "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
         "min_dur": 0.5,
         "max_dur": 4.0,
@@ -56,6 +66,8 @@ class GoonerApp(QMainWindow):
         "show_startup_splash": True,
         "show_record_chase": True,
         "show_session_timer": True,
+        "diagnostic_log": False,
+        "diagnostic_log_level": applog.DEFAULT_LEVEL,
     }
 
     def __init__(self, settings: QSettings | None = None, data_store=None):
@@ -63,13 +75,24 @@ class GoonerApp(QMainWindow):
 
         self.settings = settings if settings is not None else QSettings("GoonerCock", "GoonerApp")
         self.data_store = data_store if data_store is not None else UserDataStore()
+        # Configured before anything else runs, so the very first warnings (a failed
+        # migration, a missing callout directory) land in the log rather than being lost.
+        self.diagnostic_log = bool(
+            self.settings.value("GoonerApp/diagnostic_log", self.DEFAULTS["diagnostic_log"], type=bool)
+        )
+        self.diagnostic_log_level = str(
+            self.settings.value("GoonerApp/diagnostic_log_level", self.DEFAULTS["diagnostic_log_level"])
+        )
+        applog.configure(self.diagnostic_log, self.data_store.base_dir, self.diagnostic_log_level)
+        log.info("GoonerApp %s starting", get_current_version())
+        self.data_store.migrate_legacy_location()
         self.data_store.prune_legacy_registry_keys(self.settings)
 
         self.setWindowTitle("Auto Hero Generation")
 
         self.current_movie = None
 
-        project_root = get_project_root()  # Siehe Funktion oben
+        project_root = get_project_root()
 
         icon_path = project_root / 'res' / 'icons' / 'favicon.ico'
 
@@ -78,7 +101,7 @@ class GoonerApp(QMainWindow):
         if icon_path.exists():
             self.setWindowIcon(QIcon(str_icon_path))
         else:
-            print(f"Fehler: Icon nicht gefunden unter: {str_icon_path}")
+            log.warning("Window icon not found at %s", str_icon_path)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -112,6 +135,7 @@ class GoonerApp(QMainWindow):
         self.media_stack.addWidget(self.video_widget)
 
         self.media_player.mediaStatusChanged.connect(self.video_status_changed)
+        self.media_player.errorOccurred.connect(self._on_media_error)
 
         self.callout_label = QLabel("")
         self.callout_label.setWordWrap(True)
@@ -241,12 +265,23 @@ class GoonerApp(QMainWindow):
         self.auto_play_timer = QTimer()
         self.auto_play_timer.timeout.connect(self.next_img_timer)
 
+        # Held rather than a fire-and-forget QTimer.singleShot so start() can cancel it -
+        # and so a test can check it without monkeypatching QTimer itself.
+        self._denied_stop_timer = QTimer(self)
+        self._denied_stop_timer.setSingleShot(True)
+        self._denied_stop_timer.timeout.connect(self.stop)
+
         self.session_timer_tick = QTimer()
         self.session_timer_tick.timeout.connect(self._update_session_timer)
 
-        self.max_dur = float(self.settings.value("GoonerApp/max_dur", 4.0))
-        self.min_dur = float(self.settings.value("GoonerApp/min_dur", 0.5))
-        self.video_min_dur = float(self.settings.value("GoonerApp/video_min_dur", 1.5))
+        # Fallbacks come from DEFAULTS, not from repeated literals - these three used to
+        # carry their own copies of 4.0/0.5/1.5 while the lines right below already read
+        # the dict.
+        self.max_dur = float(self.settings.value("GoonerApp/max_dur", self.DEFAULTS["max_dur"]))
+        self.min_dur = float(self.settings.value("GoonerApp/min_dur", self.DEFAULTS["min_dur"]))
+        self.video_min_dur = float(
+            self.settings.value("GoonerApp/video_min_dur", self.DEFAULTS["video_min_dur"])
+        )
         self.show_startup_splash = bool(
             self.settings.value("GoonerApp/show_startup_splash", self.DEFAULTS["show_startup_splash"], type=bool)
         )
@@ -296,16 +331,17 @@ class GoonerApp(QMainWindow):
 
         self.video_start_time = 0
 
-        self.btn_settings = QPushButton("Settings")
 
-        self.main_splitter.setSizes([950, 50, 50])
+        # No setSizes() here: footer_container is setFixedHeight(110) above, so the
+        # splitter cannot size it at all and any numbers here would be inert.
 
         layout.addWidget(self.main_splitter)
-        self.btn_settings.clicked.connect(self.open_settings)
 
         self.create_menu_bar()
 
-        self.vid_loudness = 1.0
+        self.vid_loudness = self.DEFAULTS["vid_loudness"]
+        if self.settings:
+            self.vid_loudness = float(self.settings.value("GoonerApp/vid_loudness", self.vid_loudness))
 
         self.is_running = False
         self._was_maximized_before_fullscreen = False
@@ -455,6 +491,10 @@ class GoonerApp(QMainWindow):
         guide_action.triggered.connect(self.show_help_dialog)
         help_menu.addAction(guide_action)
 
+        privacy_data_action = QAction("Privacy && Data...", self)
+        privacy_data_action.triggered.connect(self.show_privacy_data_dialog)
+        help_menu.addAction(privacy_data_action)
+
         help_menu.addSeparator()
         check_updates_action = QAction("Check for Updates...", self)
         check_updates_action.triggered.connect(self.check_for_updates)
@@ -479,15 +519,41 @@ class GoonerApp(QMainWindow):
         if entries:
             dialog = WhatsNewDialog(entries, parent=self)
             dialog.exec()
+            dialog.deleteLater()
         self.settings.setValue("GoonerApp/last_seen_version", current_version)
 
     def show_whats_new_dialog(self):
         dialog = WhatsNewDialog(changelog.CHANGELOG, parent=self)
         dialog.exec()
+        dialog.deleteLater()
 
     def show_help_dialog(self):
         dialog = HelpDialog(parent=self)
         dialog.exec()
+        dialog.deleteLater()
+
+    def set_diagnostic_log(self, enabled: bool, level: str | None = None):
+        """Applies and persists the opt-in diagnostic log settings.
+
+        Lives on the window rather than in the dialog because flipping either of these has
+        to reconfigure the live logger, not just write a key.
+        """
+        self.diagnostic_log = bool(enabled)
+        if level is not None:
+            self.diagnostic_log_level = level
+        self.settings.setValue("GoonerApp/diagnostic_log", self.diagnostic_log)
+        self.settings.setValue("GoonerApp/diagnostic_log_level", self.diagnostic_log_level)
+        applog.configure(self.diagnostic_log, self.data_store.base_dir, self.diagnostic_log_level)
+        log.info(
+            "Diagnostic log %s at level %s",
+            "enabled" if self.diagnostic_log else "disabled",
+            self.diagnostic_log_level,
+        )
+
+    def show_privacy_data_dialog(self):
+        dialog = PrivacyDataDialog(self, parent=self)
+        dialog.exec()
+        dialog.deleteLater()
 
     def open_discord_invite(self):
         QDesktopServices.openUrl(QUrl(self.DISCORD_INVITE_URL))
@@ -495,6 +561,23 @@ class GoonerApp(QMainWindow):
     def check_for_updates(self):
         if self._confirm_update_check():
             self.update_checker.check_now()
+
+    @staticmethod
+    def _update_check_consent_text() -> str:
+        """Spells out everything that actually goes over the wire.
+
+        This used to say "nothing else is sent" flat out, which wasn't quite true: the
+        request carries a User-Agent identifying the app, so GitHub's access logs tie an IP
+        to "runs GoonerApp". Small, but a privacy promise is worth nothing unless it's exact.
+        """
+        return (
+            "This will send one request to GitHub.com to check the latest release version.\n\n"
+            'It carries your IP address (unavoidable for any web request) and a User-Agent of '
+            '"GoonerApp-UpdateChecker", which identifies the app to GitHub. Nothing else is '
+            "sent - no folders, no filenames, no statistics, nothing identifying you or your "
+            "machine - and this never runs on its own.\n\n"
+            "Continue?"
+        )
 
     def _confirm_update_check(self) -> bool:
         # Built via explicit QMessageBox(...) + exec() rather than the static .question()
@@ -504,11 +587,7 @@ class GoonerApp(QMainWindow):
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
         box.setWindowTitle("Check for Updates?")
-        box.setText(
-            "This will send one request to GitHub.com to check the latest release version. "
-            "Nothing else is sent, and nothing else about your machine or usage leaves it.\n\n"
-            "Continue?"
-        )
+        box.setText(self._update_check_consent_text())
         box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         box.setDefaultButton(QMessageBox.StandardButton.No)
         box.exec()
@@ -522,7 +601,21 @@ class GoonerApp(QMainWindow):
         box.addButton("Close", QMessageBox.ButtonRole.RejectRole)
         box.exec()
         if box.clickedButton() is open_button:
-            QDesktopServices.openUrl(QUrl(release_url))
+            self._open_external_url(release_url)
+
+    @staticmethod
+    def _open_external_url(url_string):
+        """Opens a URL only if it is http(s).
+
+        release_url is whatever the GitHub API response said. If that response is ever
+        attacker-influenced, a file:// or custom-scheme URL would be handed to the default
+        Windows handler on a single click.
+        """
+        url = QUrl(url_string)
+        if url.scheme() not in ("http", "https"):
+            log.warning("Refusing to open a non-web URL: %r", url_string)
+            return
+        QDesktopServices.openUrl(url)
 
     def _show_up_to_date_dialog(self):
         box = QMessageBox(self)
@@ -547,6 +640,15 @@ class GoonerApp(QMainWindow):
         self.media_repeated_event.emit()
 
     def video_status_changed(self, status):
+        if not self.is_running:
+            # stop() leaves the player alone no more, but a status can still land just
+            # after it - advancing here would restart the slideshow with no session.
+            return
+
+        if status == QMediaPlayer.MediaStatus.InvalidMedia:
+            self._recover_from_stuck_video("the backend can't decode it")
+            return
+
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             elapsed_time = time.time() - self.video_start_time
             if elapsed_time < self.video_min_dur:
@@ -555,27 +657,49 @@ class GoonerApp(QMainWindow):
 
             self.show_next()
 
+    def _on_media_error(self, error, error_string=""):
+        if not self.is_running:
+            return
+        self._recover_from_stuck_video(error_string or str(error))
+
+    def _recover_from_stuck_video(self, reason):
+        """Gets the session off a video that will never finish.
+
+        load_media() stops the autoplay timer for videos and waits on EndOfMedia, which
+        never arrives for a file the backend cannot open (an exotic codec, a deleted file,
+        an unplugged drive) - the session sat on a black frame until the user pressed an
+        arrow key. Advancing on a timer rather than calling show_next() directly bounds the
+        damage to one file a second if the whole playlist turns out to be unplayable.
+        """
+        log.warning("Skipping unplayable media: %s", reason)
+        self.auto_play_timer.start(MEDIA_ERROR_ADVANCE_MS)
+
     def next_img_timer(self):
         self.show_next()
 
     def recalc_autoplay_timer(self):
         self.auto_play_timer.start(int(random.uniform(self.min_dur, self.max_dur) * 1000))
 
-    def finde_unterstützte_dateien(self, verzeichnis_pfad: str) -> list[Path]:
-        return media_kinds.find_supported_files(verzeichnis_pfad)
-
     def open_folder(self):
+        # deleteLater() on every dialog below: none of them are kept in an attribute, so
+        # without it the C++ object survives as a child of the window and one instance
+        # accumulates per open. Harmless for most, but this one retains the full recursive
+        # file list of every selected folder.
         dialog = MediaFolderPickerDialog(parent=self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        files = list(dialog.selected_files)  # read before releasing the dialog
+        dialog.deleteLater()
+        if accepted:
             self._update_climax_status_label("neutral")
-            files = dialog.selected_files
+            # Counts only - never the folder paths. See applog's module docstring.
+            log.info("Playlist loaded: %d files", len(files))
             if files:
                 random.shuffle(files)
                 self.playlist = files
                 self.current_index = 0
                 self.start()
             else:
-                self.image_label.setText("Keine Dateien gefunden.")
+                self.image_label.setText("No supported files found.")
                 self.stop()
 
     def show_next(self):
@@ -634,46 +758,78 @@ class GoonerApp(QMainWindow):
 
         elif kind == "image":
             self.media_stack.setCurrentWidget(self.image_label)
-            pixmap = QPixmap(file_path)
-            scaled_pixmap = pixmap.scaled(self.image_label.size(),
-                                          Qt.AspectRatioMode.KeepAspectRatio,
-                                          Qt.TransformationMode.SmoothTransformation)
-            self.image_label.setPixmap(scaled_pixmap)
+            self.image_label.setPixmap(load_scaled_pixmap(file_path, self.image_label.size()))
             self.recalc_autoplay_timer()
 
-    # Neue Methode zur GoonerApp-Klasse hinzufügen
     def open_settings(self):
         settings_dialog = SettingsDialog(parent=self)
         settings_dialog.exec()
+        settings_dialog.deleteLater()
 
     def stop(self):
         if self.is_running:
-            self.auto_play_timer.stop()
-            self.beat_handler.stop()
-            self.btn_load.setText("Set Gooning Folder and Start.")
-            self.is_running = False
-            self.btn_next.setEnabled(False)
-            self.btn_prev.setEnabled(False)
-            self.btn_stop.setEnabled(False)
-            self._freeze_climax_blink()
-            self.session_ended_event.emit()
+            self._end_session(show_statistics=True)
+
+    def closeEvent(self, event):
+        """Records a session still in progress before the window goes away.
+
+        Quitting mid-session used to drop it entirely - no history entry, no personal
+        records, as if it never happened. stop() isn't reusable here because it ends in a
+        modal recap, which is the last thing someone who just hit the X wants to see.
+        """
+        if self.is_running:
+            self._end_session(show_statistics=False)
+        super().closeEvent(event)
+
+    def _end_session(self, show_statistics: bool):
+        self.auto_play_timer.stop()
+        # Playback was left running: the video kept playing (with sound) behind the
+        # modal statistics dialog, and its EndOfMedia then restarted the whole
+        # slideshow with no session, no beat and the controls greyed out.
+        self.media_player.stop()
+        if self.current_movie:
+            self.current_movie.stop()
+        self._denied_stop_timer.stop()
+        self.beat_handler.stop()
+        self.btn_load.setText("Set Gooning Folder and Start.")
+        self.is_running = False
+        self.btn_next.setEnabled(False)
+        self.btn_prev.setEnabled(False)
+        self.btn_stop.setEnabled(False)
+        self._freeze_climax_blink()
+        log.info(
+            "Session ended after %s (statistics shown: %s)",
+            format_clock(self.score_tracker.live_metrics().get("total_dur_sec", 0)),
+            show_statistics,
+        )
+        self.session_ended_event.emit()
+        if show_statistics:
             self.show_statistics()
 
     def start(self):
         if not self.is_running:
+            # A denied outcome from the previous session may still have a stop pending -
+            # 5 seconds is comfortably enough to stop, close the stats and start again,
+            # and it would then kill the fresh session instead.
+            self._denied_stop_timer.stop()
+            # Set before the signal: handlers reacting to "a session started" should see a
+            # running session. _start_session_timer/_start_record_chase both now check it,
+            # and would have hidden their overlays the moment they were meant to appear.
+            self.is_running = True
+            log.info("Session started")
             self.session_started_event.emit()
             self.btn_next.setEnabled(True)
             self.btn_prev.setEnabled(True)
             self.btn_stop.setEnabled(True)
             self.beat_handler.start_beat()
-            self.is_running = True
             self.btn_load.setText("Change Gooning Folder.")
         self.load_current_index()
         self.recalc_autoplay_timer()
 
     def _on_climax_outcome(self, outcome):
+        log.info("Climax outcome: %s", outcome)
         if outcome == "denied":
-            QTimer.singleShot(5000, self.stop)
+            self._denied_stop_timer.start(DENIED_STOP_DELAY_MS)
 
     CLIMAX_STATUS_COLORS = {
         "cum": (theme.ACCENT, theme.ACCENT_HOVER),
@@ -726,7 +882,9 @@ class GoonerApp(QMainWindow):
         self.record_chase_label.hide()
 
     def _update_record_chase(self):
-        if not self.show_record_chase:
+        # SettingsDialog calls this on every save, including outside a session, where
+        # live_metrics() still reports the *previous* session's numbers.
+        if not self.is_running or not self.show_record_chase:
             self.record_chase_label.hide()
             return
         status = self.score_tracker.record_chase_status(self._session_start_bests)
@@ -753,7 +911,9 @@ class GoonerApp(QMainWindow):
         self.session_timer_label.hide()
 
     def _update_session_timer(self):
-        if not self.show_session_timer:
+        # Same reasoning as _update_record_chase: without this, saving settings after a
+        # session put a frozen clock back on screen, counting from the old start time.
+        if not self.is_running or not self.show_session_timer:
             self.session_timer_label.hide()
             return
         elapsed = self.score_tracker.live_metrics().get("total_dur_sec", 0)
@@ -779,11 +939,19 @@ class GoonerApp(QMainWindow):
             parent=self,
         )
         dialog.exec()
+        dialog.deleteLater()
 
     def show_long_term_statistics(self):
+        # Imported here, not at module scope: LongTermStatisticsDialog pulls in pyqtgraph and
+        # numpy, ~0.5s warm and ~1.6s cold (the realistic case for a --onefile build, which
+        # extracts to a temp dir on every run). That was roughly half of cold startup, spent
+        # on a chart library for a screen most sessions never open.
+        from src.LongTermStatisticsDialog import LongTermStatisticsDialog
+
         dialog = LongTermStatisticsDialog(
             self.score_tracker.get_history(),
             self.score_tracker.get_all_time_bests(),
             parent=self,
         )
         dialog.exec()
+        dialog.deleteLater()

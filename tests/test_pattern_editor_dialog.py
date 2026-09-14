@@ -169,3 +169,26 @@ def test_preview_tick_schedules_interval_inversely_proportional_to_weight(dialog
     assert interval_for_weight_1 == PREVIEW_BASE_STEP_MS
     assert interval_for_weight_4 == PREVIEW_BASE_STEP_MS // 4
     assert interval_for_weight_4 < interval_for_weight_1
+
+
+def test_escape_stops_the_preview(app, qtbot):
+    """reject() routes through done() and never delivers closeEvent, so the preview timer
+    kept firing play_beat_sound() for the life of the app."""
+    dialog = PatternEditorDialog(app.beat_handler, parent=app)
+    qtbot.addWidget(dialog)
+    dialog._start_preview()
+    assert dialog._preview_timer.isActive()
+
+    dialog.reject()
+
+    assert not dialog._preview_timer.isActive()
+
+
+def test_closing_via_done_stops_the_preview(app, qtbot):
+    dialog = PatternEditorDialog(app.beat_handler, parent=app)
+    qtbot.addWidget(dialog)
+    dialog._start_preview()
+
+    dialog.done(0)
+
+    assert not dialog._preview_timer.isActive()

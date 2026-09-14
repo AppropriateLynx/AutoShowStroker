@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QTabWidget,
@@ -14,9 +15,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src import theme
+from src import applog, theme
 from src.CustomPhraseFilesDialog import CustomPhraseFilesDialog
 from src.PatternEditorDialog import PatternEditorDialog
+
+log = applog.get_logger(__name__)
 
 
 class SettingsDialog(QDialog):
@@ -213,6 +216,14 @@ class SettingsDialog(QDialog):
         header.setStyleSheet(f"font-size: 14px; margin-top: 10px; color: {theme.ACCENT}; font-weight: bold;")
         self._current_layout.addWidget(header)
 
+    @staticmethod
+    def _decimals_for(step) -> int:
+        """Enough decimal places to represent `step` exactly, with Qt's default of 2 as the
+        floor so the ordinary 0.1/0.01 fields keep looking the way they always have."""
+        text = f"{float(step):.10f}".rstrip("0")
+        fractional = text.split(".")[1] if "." in text else ""
+        return max(2, len(fractional))
+
     def add_setting(self, label_text, var_name, target_object, var_type, min_val, max_val, step):
         h_layout = QHBoxLayout()
 
@@ -220,6 +231,10 @@ class SettingsDialog(QDialog):
         h_layout.addWidget(label, stretch=1)
 
         spinbox = QDoubleSpinBox()
+        # Decimals before range/step: QDoubleSpinBox defaults to 2, and setValue() rounds to
+        # that. "Pause chance" steps by 0.001, so every arrow click was rounded straight back
+        # to where it started and the declared 0.001 minimum was unreachable.
+        spinbox.setDecimals(self._decimals_for(step))
         spinbox.setRange(min_val, max_val)
         spinbox.setSingleStep(step)
 
@@ -235,7 +250,43 @@ class SettingsDialog(QDialog):
             'type': var_type
         }
 
+    # Spinbox pairs where the first must not exceed the second, with the label used in the
+    # rejection message. Only min_pause_dur/max_pause_dur actually crashes (random.randint),
+    # but every one of these produces an inverted, meaningless range if saved that way.
+    MIN_MAX_PAIRS = (
+        ("min_dur", "max_dur", "Slideshow duration"),
+        ("min_beat_freq", "max_beat_freq", "Beat frequency"),
+        ("min_beat_dur", "max_beat_dur", "Beat duration"),
+        ("min_pause_dur", "max_pause_dur", "Pause duration"),
+        ("min_ramp_duration", "max_ramp_duration", "Ramp duration"),
+        ("min_fake_climax_delay", "max_fake_climax_delay", "Fake climax reveal delay"),
+    )
+
+    def _validation_error(self):
+        """First reason these settings can't be saved, or None if they're fine."""
+        if not any(checkbox.isChecked() for checkbox in self.beat_checkboxes.values()):
+            return "At least one rhythm has to stay active under 'Active Rhythms'."
+        for min_name, max_name, label in self.MIN_MAX_PAIRS:
+            if self.settings_fields[min_name]['widget'].value() > self.settings_fields[max_name]['widget'].value():
+                return f"{label}: the minimum must not be higher than the maximum."
+        return None
+
+    def _show_validation_error(self, message):
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Can't save these settings")
+        box.setText(message)
+        box.exec()
+
     def accept_settings(self):
+        # Checked before anything is written: accept_settings applies values straight to the
+        # live handlers, so a half-applied invalid set would take effect even after a refusal.
+        error = self._validation_error()
+        if error:
+            log.info("Settings rejected: %s", error)
+            self._show_validation_error(error)
+            return
+
         settings = self.main_app.settings
 
         for var_name, data in self.settings_fields.items():
@@ -247,7 +298,7 @@ class SettingsDialog(QDialog):
                 setattr(data['object'], var_name, new_value)
 
 
-            key = f"{data['object'].__class__.__name__}/{var_name}"
+            key = f"{data['object'].SETTINGS_GROUP}/{var_name}"
             settings.setValue(key, new_value)
 
         self.beat_handler.sound_effect.setVolume(self.settings_fields['beat_loudness']['widget'].value())
@@ -291,8 +342,12 @@ class SettingsDialog(QDialog):
         settings.setValue("CalloutHandler/selected_lang", self.callout_selected_lang.currentText())
         self.callout_handler.set_lang(self.callout_selected_lang.currentText())
 
-        if self.main_app.is_running:
+        # Not during a pause: recalc_beat() would announce a new beat over the pause
+        # caption and roll the climax dice, and pause_loop() throws the new pattern away
+        # the moment the pause ends anyway.
+        if self.main_app.is_running and not self.beat_handler.is_paused():
             self.beat_handler.recalc_beat()
+        log.info("Settings saved (%d active rhythms)", len(new_selected_patterns))
         self.accept()
 
     def add_beat_selection(self):

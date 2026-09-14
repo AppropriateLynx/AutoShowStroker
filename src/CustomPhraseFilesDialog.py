@@ -16,7 +16,8 @@ class CustomPhraseFilesDialog(QDialog):
     """Manages user-chosen external callout phrase files (same {trigger_key: [phrases]}
     schema as res/callouts/<lang>.json), merged onto the built-in phrases for an explicitly
     picked language. The dialog only calls CalloutHandler mutators - CalloutHandler itself
-    self-persists to QSettings on every add/remove, same split as PatternEditorDialog."""
+    self-persists on every add/remove (to a JSON file via UserDataStore, not to QSettings),
+    same split as PatternEditorDialog."""
 
     def __init__(self, callout_handler, parent=None):
         super().__init__(parent)

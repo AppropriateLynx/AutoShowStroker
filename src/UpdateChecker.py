@@ -3,7 +3,9 @@ import json
 from PyQt6.QtCore import QObject, QUrl, pyqtSignal
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
-from src import changelog
+from src import applog, changelog
+
+log = applog.get_logger(__name__)
 
 
 class UpdateChecker(QObject):
@@ -27,12 +29,14 @@ class UpdateChecker(QObject):
         # GitHub's API rejects requests with no User-Agent.
         request.setRawHeader(b"User-Agent", b"GoonerApp-UpdateChecker")
         request.setTransferTimeout(10000)
+        log.info("Update check: requesting %s", self.GITHUB_RELEASES_API_URL)
         reply = self._manager.get(request)
         reply.finished.connect(lambda: self._handle_reply(reply))
 
     def _handle_reply(self, reply):
         reply.deleteLater()
         if reply.error() != QNetworkReply.NetworkError.NoError:
+            log.warning("Update check failed: %s", reply.errorString())
             self.check_failed.emit(reply.errorString())
             return
         self._process_body(bytes(reply.readAll()))
@@ -45,8 +49,10 @@ class UpdateChecker(QObject):
             latest = changelog.parse_version(tag.lstrip("v"))
             current = changelog.parse_version(self.current_version)
         except (ValueError, KeyError, UnicodeDecodeError, json.JSONDecodeError):
+            log.warning("Update check: could not parse GitHub's response")
             self.check_failed.emit("Couldn't understand GitHub's response.")
             return
+        log.info("Update check: latest is %s, running %s", tag, self.current_version)
         if latest > current:
             self.update_available.emit(tag, release_url)
         else:

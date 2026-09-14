@@ -1,7 +1,9 @@
 import json
 import shutil
+import time
+from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import QApplication, QDialog, QFileDialog, QLabel
 
@@ -126,18 +128,30 @@ def test_on_start_sets_selected_files_as_union_of_all_folders(app, qtbot, tmp_pa
     assert dialog.result() == QDialog.DialogCode.Accepted
 
 
-def test_on_start_persists_folders_to_settings(app, qtbot, tmp_path):
+def test_on_start_persists_folders_to_the_data_store(app, qtbot, tmp_path):
     folder_a = _make_folder_with_files(tmp_path, "a", 1)
 
     dialog = MediaFolderPickerDialog(parent=app, initial_folders=[folder_a])
     qtbot.addWidget(dialog)
     dialog._on_start()
 
-    persisted = json.loads(app.settings.value("GoonerApp/last_selected_folders"))
-    assert persisted == [folder_a]
+    assert app.data_store.load("last_selected_folders", []) == [folder_a]
+    # These are absolute paths into the user's porn collection. They are user data, and
+    # they must not be left sitting in HKCU where nothing the app offers can clear them.
+    assert app.settings.value("GoonerApp/last_selected_folders") is None
 
 
 def test_reopening_dialog_prefills_persisted_folders(app, qtbot, tmp_path):
+    folder_a = _make_folder_with_files(tmp_path, "a", 1)
+    app.data_store.save("last_selected_folders", [folder_a])
+
+    dialog = MediaFolderPickerDialog(parent=app)
+    qtbot.addWidget(dialog)
+
+    assert dialog.folders == [folder_a]
+
+
+def test_persisted_folders_migrate_out_of_the_registry(app, qtbot, tmp_path):
     folder_a = _make_folder_with_files(tmp_path, "a", 1)
     app.settings.setValue("GoonerApp/last_selected_folders", json.dumps([folder_a]))
 
@@ -145,6 +159,8 @@ def test_reopening_dialog_prefills_persisted_folders(app, qtbot, tmp_path):
     qtbot.addWidget(dialog)
 
     assert dialog.folders == [folder_a]
+    assert app.data_store.load("last_selected_folders", []) == [folder_a]
+    assert app.settings.value("GoonerApp/last_selected_folders") is None
 
 
 def test_cancel_does_not_persist_folders(app, qtbot, tmp_path):
@@ -154,6 +170,7 @@ def test_cancel_does_not_persist_folders(app, qtbot, tmp_path):
     qtbot.addWidget(dialog)
     dialog.reject()
 
+    assert app.data_store.load("last_selected_folders", None) is None
     assert app.settings.value("GoonerApp/last_selected_folders") is None
 
 
@@ -722,3 +739,91 @@ def test_rescan_invalidates_cache_for_a_folder_that_disappeared(app, qtbot, tmp_
     dialog._rescan_and_refresh()
 
     assert dialog._per_folder_files[folder_a] == []
+
+
+# --- P2: the video thumbnail grab must not freeze the window ---
+
+
+def test_closing_mid_rebuild_leaves_no_live_cells(app, qtbot, tmp_path, monkeypatch):
+    """_grab_video_frame pumps the event loop, so the native close button can be dispatched
+    while a rebuild is still appending cells - those never reach _discard_cell and keep
+    decoding after the dialog is gone."""
+    folder = _make_folder_with_files(tmp_path, "a", 10)
+    dialog = MediaFolderPickerDialog(parent=app, initial_folders=[folder])
+    qtbot.addWidget(dialog)
+
+    original = dialog._make_thumbnail_cell
+    made = []
+
+    def closing_make(path):
+        made.append(path)
+        if len(made) == 2:
+            dialog.done(QDialog.DialogCode.Rejected)
+        return original(path)
+
+    monkeypatch.setattr(dialog, "_make_thumbnail_cell", closing_make)
+
+    dialog._refresh_thumbnails()
+
+    assert dialog._thumbnail_cells == []
+
+
+def test_wait_for_gives_up_immediately_once_the_dialog_is_closing(app, qtbot, tmp_path):
+    dialog = MediaFolderPickerDialog(parent=app)
+    qtbot.addWidget(dialog)
+    dialog._is_closing = True
+
+    started = time.monotonic()
+    result = dialog._wait_for(lambda: False, 5.0)
+
+    assert result is False
+    assert time.monotonic() - started < 0.5
+
+
+def test_wait_for_returns_as_soon_as_the_predicate_holds(app, qtbot):
+    dialog = MediaFolderPickerDialog(parent=app)
+    qtbot.addWidget(dialog)
+    flag = {"ready": False}
+    QTimer.singleShot(20, lambda: flag.__setitem__("ready", True))
+
+    started = time.monotonic()
+    result = dialog._wait_for(lambda: flag["ready"], 5.0)
+
+    assert result is True
+    # Event-driven, so it returns on the timer rather than padding out the timeout.
+    assert time.monotonic() - started < 1.0
+
+
+def test_video_grab_is_skipped_once_the_build_budget_is_spent(app, qtbot, tmp_path):
+    folder = _make_folder_with_videos(tmp_path, "vids", 1)
+    dialog = MediaFolderPickerDialog(parent=app)
+    qtbot.addWidget(dialog)
+    dialog._video_budget_deadline = time.monotonic() - 1.0
+
+    started = time.monotonic()
+    result = dialog._grab_video_frame(Path(folder) / "clip0.mp4")
+
+    assert result is None
+    assert time.monotonic() - started < 0.5
+
+
+def test_each_rebuild_starts_with_a_fresh_video_budget(app, qtbot, tmp_path, monkeypatch):
+    """The budget is armed per grid build, so a spent one never carries over and starves
+    the next build of its thumbnails."""
+    folder = _make_folder_with_files(tmp_path, "a", 2)
+    dialog = MediaFolderPickerDialog(parent=app, initial_folders=[folder])
+    qtbot.addWidget(dialog)
+
+    observed = []
+    original = dialog._make_thumbnail_cell
+    monkeypatch.setattr(
+        dialog, "_make_thumbnail_cell",
+        lambda path: (observed.append(dialog._video_budget_remaining()), original(path))[1],
+    )
+    dialog._video_budget_deadline = time.monotonic() - 1.0
+
+    dialog._refresh_thumbnails()
+
+    assert observed and all(remaining > 0 for remaining in observed)
+    # Released again afterwards, so a grab outside a rebuild gets the full budget.
+    assert dialog._video_budget_deadline is None

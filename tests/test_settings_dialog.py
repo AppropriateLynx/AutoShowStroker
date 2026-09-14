@@ -339,3 +339,124 @@ def test_reset_buttons_do_not_persist_until_save(app, dialog):
     dialog.playback_reset_button.click()
 
     assert app.min_dur == original
+
+
+# --- P0: settings that would crash the beat engine must not be saveable ---
+
+
+@pytest.fixture
+def rejected(dialog, monkeypatch):
+    """Captures the validation message and whether the dialog closed."""
+    seen = {}
+    monkeypatch.setattr(dialog, "_show_validation_error", lambda msg: seen.setdefault("msg", msg))
+    monkeypatch.setattr(dialog, "accept", lambda: seen.setdefault("accepted", True))
+    return seen
+
+
+def test_accept_settings_rejects_an_empty_rhythm_selection(app, dialog, rejected):
+    before = list(app.beat_handler.selected_beat_patterns)
+    for checkbox in dialog.beat_checkboxes.values():
+        checkbox.setChecked(False)
+
+    dialog.accept_settings()
+
+    assert "msg" in rejected
+    assert "accepted" not in rejected
+    assert app.beat_handler.selected_beat_patterns == before
+
+
+def test_accept_settings_rejects_inverted_pause_bounds(app, dialog, rejected):
+    dialog.settings_fields["min_pause_dur"]["widget"].setValue(30)
+    dialog.settings_fields["max_pause_dur"]["widget"].setValue(5)
+
+    dialog.accept_settings()
+
+    assert "msg" in rejected
+    assert "accepted" not in rejected
+    assert app.beat_handler.min_pause_dur != 30
+
+
+@pytest.mark.parametrize(
+    ("min_name", "max_name"),
+    [
+        ("min_dur", "max_dur"),
+        ("min_beat_freq", "max_beat_freq"),
+        ("min_beat_dur", "max_beat_dur"),
+        ("min_pause_dur", "max_pause_dur"),
+        ("min_ramp_duration", "max_ramp_duration"),
+        ("min_fake_climax_delay", "max_fake_climax_delay"),
+    ],
+)
+def test_accept_settings_rejects_every_inverted_min_max_pair(dialog, rejected, min_name, max_name):
+    max_widget = dialog.settings_fields[max_name]["widget"]
+    max_widget.setValue(max_widget.minimum())
+    min_widget = dialog.settings_fields[min_name]["widget"]
+    min_widget.setValue(min_widget.maximum())
+
+    dialog.accept_settings()
+
+    assert "accepted" not in rejected
+
+
+def test_accept_settings_allows_min_equal_to_max(app, dialog, rejected):
+    dialog.settings_fields["min_pause_dur"]["widget"].setValue(7)
+    dialog.settings_fields["max_pause_dur"]["widget"].setValue(7)
+
+    dialog.accept_settings()
+
+    assert "msg" not in rejected
+    assert app.beat_handler.min_pause_dur == 7
+    assert app.beat_handler.max_pause_dur == 7
+
+
+def test_settings_are_persisted_under_the_owner_group_constant(app, dialog):
+    """The key used to come from __class__.__name__, with every read side hardcoding the
+    same string separately - which is how two settings ended up written but never read."""
+    dialog.settings_fields["min_pause_dur"]["widget"].setValue(9)
+    dialog.settings_fields["max_pause_dur"]["widget"].setValue(11)
+
+    dialog.accept_settings()
+
+    # The literal keys, not f"{SETTINGS_GROUP}/..." - asserting against the constant would
+    # hold no matter what the constant said, which is the thing being guarded.
+    assert app.settings.value("BeatHandler/min_pause_dur") is not None
+    assert app.settings.value("GoonerApp/min_dur") is not None
+
+
+# --- P4: spinbox precision, and not disturbing a running pause ---
+
+
+def test_every_spinbox_can_actually_reach_its_own_step(dialog):
+    """QDoubleSpinBox defaults to 2 decimals. 'Pause chance' had a 0.001 step, so setValue
+    rounded every arrow click straight back to where it started."""
+    for var_name, data in dialog.settings_fields.items():
+        widget = data["widget"]
+        step = widget.singleStep()
+        rounded = round(step, widget.decimals())
+        assert rounded == step, f"{var_name}: step {step} is finer than {widget.decimals()} decimals"
+
+
+def test_saving_during_a_pause_does_not_force_a_new_beat(app, dialog, tmp_path):
+    """recalc_beat() mid-pause announced a new beat over the pause caption and rolled the
+    climax dice, then threw the pattern away when the pause ended anyway."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.beat_handler.start_pause()
+    assert app.beat_handler.is_paused()
+    before = app.beat_handler.current_beat_pattern_name
+
+    dialog.accept_settings()
+
+    assert app.beat_handler.current_beat_pattern_name == before
+    assert app.beat_handler.is_paused()
+
+
+def test_saving_during_a_running_beat_still_recalculates(app, dialog, tmp_path, monkeypatch):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    called = {}
+    monkeypatch.setattr(app.beat_handler, "recalc_beat", lambda: called.setdefault("called", True))
+
+    dialog.accept_settings()
+
+    assert called.get("called") is True

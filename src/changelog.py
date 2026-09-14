@@ -193,6 +193,34 @@ CHANGELOG = {
         "</ul>"
         "Watch them come at you now. See how long you keep up."
     ),
+    "0.9.0": (
+        "Every corner of GoonerApp got picked apart and put back together. It takes more, "
+        "breaks less, and finally tells you what it knows about you."
+        "<ul>"
+        "<li>The crashes are gone. Leaving yourself no active rhythm, setting a pause "
+        "minimum above its maximum, or a damaged pattern file used to end your session on "
+        "the spot - now the app either talks you out of it or simply carries on</li>"
+        "<li>Stopping actually stops. A video used to keep playing behind your stats and "
+        "then start the slideshow up again on its own, with no session behind it</li>"
+        "<li>Walking out counts. Closing the window mid-session records it instead of "
+        "throwing the whole thing away</li>"
+        "<li>A clip your machine can't decode gets skipped instead of leaving you staring "
+        "at black until you take over</li>"
+        "<li>Everything is quicker: picking folders no longer locks up for seconds while "
+        "it previews your clips, big collections scan several times faster, large photos "
+        "land sooner, and the beat itself keeps stricter time</li>"
+        "<li>Callouts actually talk to you on a fresh install, and turning the volume down "
+        "finally survives a restart</li>"
+        "<li><b>New - Help &gt; Privacy &amp; Data:</b> exactly where everything about you "
+        "is kept, a button straight to the folder, and deletion by category. The folders "
+        "you pick no longer linger in the Windows registry, and your data moved off the "
+        "roaming half of your profile, where a work laptop could quietly copy it</li>"
+        "<li><b>New - an optional diagnostic log,</b> off unless you switch it on, so a "
+        "problem you report can be traced. It never writes down the folders you play "
+        "from</li>"
+        "</ul>"
+        "Go on then. See if you can still find the seams."
+    ),
 }
 
 

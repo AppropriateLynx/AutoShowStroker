@@ -232,6 +232,11 @@ class PatternEditorDialog(QDialog):
         self._preview_position = (self._preview_position + 1) % len(self._step_widgets)
         self._preview_timer.start(step_ms)
 
-    def closeEvent(self, event):
+    def done(self, result):
+        """accept(), reject() (Escape) and the native close button all funnel through this;
+        closeEvent does not - reject() only hides the widget. The dialog is constructed as a
+        child of SettingsDialog with no Python reference kept, so a preview left running
+        here kept calling play_beat_sound() for the rest of the app's life. Same reasoning,
+        and same fix, as MediaFolderPickerDialog.done()."""
         self._stop_preview()
-        super().closeEvent(event)
+        super().done(result)

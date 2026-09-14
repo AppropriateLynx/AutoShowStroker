@@ -4,13 +4,15 @@ from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 
 class ClimaxHandler(QObject):
+    SETTINGS_GROUP = "ClimaxHandler"  # see BeatHandler.SETTINGS_GROUP
+
 
     outcome_decided_event = pyqtSignal(str)  # "real" | "ruined" | "denied"
     status_changed_event = pyqtSignal(str)  # "cum" | "ruined" | "denied" | "neutral" - for UI display
     fake_climax_triggered_event = pyqtSignal()
 
-    # Keep in sync with the literal defaults set in __init__ below - single source of truth
-    # for the SettingsDialog "Reset to defaults" buttons.
+    # Single source of truth: __init__ applies these directly, and the SettingsDialog
+    # "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
         "climax_active": True,
         "climax_chance": 0.15,
@@ -30,19 +32,12 @@ class ClimaxHandler(QObject):
         self.callout_handler = callout_handler
         self.settings = settings
 
-        self.climax_active = True
-        self.climax_chance = 0.15
-
-        self.ruined_orgasm_active = False
-        self.ruined_orgasm_chance = 0.5
-
-        self.denied_orgasm_active = False
-        self.denied_orgasm_chance = 0.5
-
-        self.fake_climax_active = True
-        self.fake_climax_chance = 0.05
-        self.min_fake_climax_delay = 3.0
-        self.max_fake_climax_delay = 8.0
+        # Every DEFAULTS entry is the attribute's starting value - the settings block
+        # below then overrides whatever the user has saved. Driven from the dict rather
+        # than repeated as literals, which is what the "keep in sync" comment used to ask
+        # a reader to do by hand.
+        for _key, _value in self.DEFAULTS.items():
+            setattr(self, _key, _value)
 
         if self.settings:
             self.climax_active = bool(
