@@ -283,7 +283,7 @@ class SettingsDialog(QDialog):
                 setattr(data['object'], var_name, new_value)
 
 
-            key = f"{data['object'].__class__.__name__}/{var_name}"
+            key = f"{data['object'].SETTINGS_GROUP}/{var_name}"
             settings.setValue(key, new_value)
 
         self.beat_handler.sound_effect.setVolume(self.settings_fields['beat_loudness']['widget'].value())

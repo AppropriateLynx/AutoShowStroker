@@ -1,21 +1,19 @@
-import os
 import random
-import sys
 import time
-from pathlib import Path
 
 from PyQt6.QtCore import QMutex, QObject, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QSoundEffect
 
-
-def get_resource_path(relative_path):
-    """ Liefert den absoluten Pfad zur Ressource, passend für Entwicklung und PyInstaller-EXE """
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.abspath(relative_path)
+from src.utils import get_project_root
 
 
 class BeatHandler(QObject):
+    # The QSettings group these settings persist under. Explicit rather than derived
+    # from __class__.__name__ (which SettingsDialog used to do): the read sides all
+    # hardcode the same literal, so a class rename would silently orphan every saved
+    # value with nothing to grep for.
+    SETTINGS_GROUP = "BeatHandler"
+
     # Hard cap on upcoming_beats() output - at the top of the frequency range with the
     # shortest steps a long horizon would otherwise build a pointlessly huge list.
     MAX_LOOKAHEAD_NOTES = 64
@@ -165,7 +163,8 @@ class BeatHandler(QObject):
         self.is_muted = False
 
         if beat_file is None:
-            beat_file = Path(get_resource_path("res/mixkit-cool-interface-click-tone-2568.wav"))
+            # get_project_root(), not a cwd-relative path - see CalloutHandler.callout_dir.
+            beat_file = get_project_root() / "res" / "mixkit-cool-interface-click-tone-2568.wav"
         self.init_beat_sound(str(beat_file.absolute()))
 
         self.current_beat_pattern = None

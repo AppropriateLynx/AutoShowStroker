@@ -10,6 +10,18 @@ from PyQt6.QtWidgets import QDialog
 from src.BeatTrackWidget import BeatTrackWidget
 from src.GoonerApp import GoonerApp
 
+
+class _FakeDialogBase:
+    """Base for stand-in dialogs.
+
+    GoonerApp releases every dialog it opens with deleteLater() so instances don't pile up
+    as children of the window - a fake without it just raises AttributeError.
+    """
+
+    def deleteLater(self):
+        pass
+
+
 # --- fullscreen ---
 
 
@@ -151,7 +163,7 @@ def test_finde_unterstuetzte_dateien_searches_recursively(app, tmp_path):
 
 
 def _fake_picker_dialog(exec_result, selected_files=None):
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, parent=None):
             self.selected_files = selected_files or []
 
@@ -309,6 +321,7 @@ def test_load_media_video_extension_switches_to_video_widget(app, monkeypatch, t
 def test_video_status_changed_replays_if_below_min_duration(app, monkeypatch):
     fake_player = MagicMock()
     monkeypatch.setattr(app, "media_player", fake_player)
+    app.is_running = True
     app.video_min_dur = 5.0
     app.video_start_time = 100.0
     monkeypatch.setattr(time, "time", lambda: 102.0)
@@ -319,6 +332,7 @@ def test_video_status_changed_replays_if_below_min_duration(app, monkeypatch):
 
 
 def test_video_status_changed_advances_if_above_min_duration(app, monkeypatch):
+    app.is_running = True
     app.video_min_dur = 1.0
     app.video_start_time = 100.0
     monkeypatch.setattr(time, "time", lambda: 105.0)
@@ -468,24 +482,20 @@ def test_hide_last_tease_hides_and_clears_label(app):
 # --- climax outcome ---
 
 
-def test_on_climax_outcome_denied_schedules_stop(app, monkeypatch):
-    called = {}
-    monkeypatch.setattr("src.GoonerApp.QTimer.singleShot", lambda ms, fn: called.update(ms=ms, fn=fn))
+def test_on_climax_outcome_denied_schedules_stop(app):
+    from src.GoonerApp import DENIED_STOP_DELAY_MS
 
     app._on_climax_outcome("denied")
 
-    assert called["ms"] == 5000
-    assert called["fn"] == app.stop
+    assert app._denied_stop_timer.isActive()
+    assert app._denied_stop_timer.interval() == DENIED_STOP_DELAY_MS
 
 
 @pytest.mark.parametrize("outcome", ["real", "ruined"])
-def test_on_climax_outcome_non_denied_does_not_schedule_stop(app, monkeypatch, outcome):
-    called = {}
-    monkeypatch.setattr("src.GoonerApp.QTimer.singleShot", lambda ms, fn: called.update(ms=ms, fn=fn))
-
+def test_on_climax_outcome_non_denied_does_not_schedule_stop(app, outcome):
     app._on_climax_outcome(outcome)
 
-    assert called == {}
+    assert not app._denied_stop_timer.isActive()
 
 
 # --- climax status banner ---
@@ -794,7 +804,7 @@ def test_show_statistics_passes_new_records(app, monkeypatch):
     app.score_tracker.last_session_new_records = {"total_dur_sec": 42.0}
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, stats_data, new_records=None, parent=None):
             captured["new_records"] = new_records
 
@@ -813,7 +823,7 @@ def test_statistics_menu_has_long_term_statistics_action(app, monkeypatch):
 
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, history, all_time_bests, parent=None):
             captured["shown"] = True
 
@@ -835,7 +845,7 @@ def test_statistics_menu_has_long_term_statistics_action(app, monkeypatch):
 def test_show_long_term_statistics_passes_history_and_bests(app, monkeypatch):
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, history, all_time_bests, parent=None):
             captured["history"] = history
             captured["all_time_bests"] = all_time_bests
@@ -885,7 +895,7 @@ def test_maybe_show_whats_new_shows_dialog_when_new_entries_exist(app, monkeypat
 
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, entries, parent=None):
             captured["entries"] = entries
             captured["parent"] = parent
@@ -910,7 +920,7 @@ def test_maybe_show_whats_new_skips_dialog_when_no_new_entries(app, monkeypatch)
 
     called = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, *a, **kw):
             called["constructed"] = True
 
@@ -928,7 +938,7 @@ def test_maybe_show_whats_new_skips_dialog_when_no_new_entries(app, monkeypatch)
 def test_show_whats_new_dialog_shows_full_changelog(app, monkeypatch):
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, entries, parent=None):
             captured["entries"] = entries
 
@@ -949,7 +959,7 @@ def test_help_menu_has_whats_new_action(app, monkeypatch):
 
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, entries, parent=None):
             captured["shown"] = True
 
@@ -971,7 +981,7 @@ def test_help_menu_has_guide_action(app, monkeypatch):
 
     captured = {}
 
-    class FakeDialog:
+    class FakeDialog(_FakeDialogBase):
         def __init__(self, parent=None):
             captured["shown"] = True
 

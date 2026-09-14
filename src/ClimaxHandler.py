@@ -4,6 +4,8 @@ from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 
 class ClimaxHandler(QObject):
+    SETTINGS_GROUP = "ClimaxHandler"  # see BeatHandler.SETTINGS_GROUP
+
 
     outcome_decided_event = pyqtSignal(str)  # "real" | "ruined" | "denied"
     status_changed_event = pyqtSignal(str)  # "cum" | "ruined" | "denied" | "neutral" - for UI display

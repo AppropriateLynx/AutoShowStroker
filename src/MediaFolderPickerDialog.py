@@ -462,7 +462,8 @@ class MediaFolderPickerDialog(QDialog):
             return pixmap.scaled(
                 size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
             )
-        except Exception:
+        except Exception as error:
+            print(f"Could not build a thumbnail for {Path(path).name}: {error}")
             return None
 
     def _make_gif_cell(self, path) -> QWidget:
@@ -488,7 +489,8 @@ class MediaFolderPickerDialog(QDialog):
             label.setMovie(movie)
             movie.start()
             label._movie = movie  # keep alive - see _discard_cell
-        except Exception:
+        except Exception as error:
+            print(f"Could not animate {Path(path).name}: {error}")
             label.setText(Path(path).name)
         return label
 
@@ -620,7 +622,11 @@ class MediaFolderPickerDialog(QDialog):
                     best_brightness = brightness
                 if brightness >= VIDEO_BLACK_FRAME_BRIGHTNESS_THRESHOLD:
                     break
-        except Exception:
+        except Exception as error:
+            # Broad on purpose - this wraps a nested event loop, so a slot dispatched while
+            # we wait can surface here too. Logged rather than swallowed: a real bug used to
+            # be indistinguishable from "this file has no thumbnail".
+            print(f"Could not grab a frame from {Path(path).name}: {error!r}")
             return None
         finally:
             player.stop()

@@ -1,10 +1,10 @@
 import json
-import os
 import random
-import sys
 from pathlib import Path
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
+
+from src.utils import get_project_root
 
 TRIGGER_KEYS = [
     "beat_change_general",
@@ -22,14 +22,8 @@ TRIGGER_KEYS = [
 ]
 
 
-def get_resource_path(relative_path):
-    """ Liefert den absoluten Pfad zur Ressource, passend für Entwicklung und PyInstaller-EXE """
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.abspath(relative_path)
-
-
 class CalloutHandler(QObject):
+    SETTINGS_GROUP = "CalloutHandler"  # see BeatHandler.SETTINGS_GROUP
 
     new_tease_event = pyqtSignal(str)
     hide_tease_event = pyqtSignal()
@@ -42,15 +36,19 @@ class CalloutHandler(QObject):
         "lang": "en",
     }
 
-    def __init__(self, settings=None, data_store=None):
+    def __init__(self, settings=None, data_store=None, callout_dir=None):
         super().__init__()
         self.settings = settings
         self.data_store = data_store
         self.tease_active_timer = QTimer()
         self.tease_active_timer.timeout.connect(self._tease_timer_handler)
         self.tease_time = 7000
-        self.lang = "en"
-        self.callout_dir = Path(get_resource_path("res/callouts"))
+        self.lang = self.DEFAULTS["lang"]
+        # get_project_root() rather than a cwd-relative path (CLAUDE.md requires it for
+        # every res/ read): this module used to carry its own copy of get_resource_path
+        # built on os.path.abspath, so launching from any other working directory pointed
+        # at a res/callouts that doesn't exist. Injectable for tests.
+        self.callout_dir = Path(callout_dir) if callout_dir else get_project_root() / "res" / "callouts"
 
         self.is_teasing = False
 
@@ -85,10 +83,16 @@ class CalloutHandler(QObject):
             self._apply_stored_custom_files()
 
     def _load_available_languages(self):
-        assert self.callout_dir.is_dir()
-
         self.available_languages = []
         self.callout_data = {}
+
+        if not self.callout_dir.is_dir():
+            # Was an `assert`, which killed startup with no window and no message - and got
+            # stripped entirely under python -O, silently booting into this same state
+            # instead. Degrading here matches how an *empty* callout dir already behaved,
+            # and how user_data.py treats unreadable data: never stop the app from starting.
+            print(f"No callout directory at {self.callout_dir} - callouts are disabled.")
+            return
 
         for json_file in self.callout_dir.glob("*.json"):
             lang_code = json_file.stem
@@ -108,7 +112,12 @@ class CalloutHandler(QObject):
 
 
     def set_lang(self, lang):
-        if lang in self.callout_data and self.lang in self.available_languages:
+        # Both clauses check the *incoming* language. The second used to read self.lang,
+        # i.e. the value being replaced, which meant _load_available_languages' fallback
+        # could never fire in exactly the case it exists for: the configured language
+        # having no file, so self.lang is not in available_languages and every assignment
+        # gets rejected, pinning the handler to a language it has no data for.
+        if lang in self.callout_data and lang in self.available_languages:
             self.lang = lang
         else:
             print(f"Tried setting {lang}. That language is not available.")

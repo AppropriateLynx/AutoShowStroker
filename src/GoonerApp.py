@@ -37,8 +37,16 @@ from src.user_data import UserDataStore
 from src.utils import format_clock, get_current_version, get_project_root, load_scaled_pixmap
 from src.WhatsNewDialog import WhatsNewDialog
 
+# How long the "denied" banner stays up before the session is ended for the user.
+DENIED_STOP_DELAY_MS = 5000
+# Delay before skipping past media that will never finish playing - long enough that an
+# entirely unplayable playlist cycles visibly instead of spinning.
+MEDIA_ERROR_ADVANCE_MS = 1000
+
 
 class GoonerApp(QMainWindow):
+    SETTINGS_GROUP = "GoonerApp"  # see BeatHandler.SETTINGS_GROUP
+
     DISCORD_INVITE_URL = "https://discord.gg/qqkcxvq37Z"
 
     session_started_event = pyqtSignal()
@@ -113,6 +121,7 @@ class GoonerApp(QMainWindow):
         self.media_stack.addWidget(self.video_widget)
 
         self.media_player.mediaStatusChanged.connect(self.video_status_changed)
+        self.media_player.errorOccurred.connect(self._on_media_error)
 
         self.callout_label = QLabel("")
         self.callout_label.setWordWrap(True)
@@ -241,6 +250,12 @@ class GoonerApp(QMainWindow):
 
         self.auto_play_timer = QTimer()
         self.auto_play_timer.timeout.connect(self.next_img_timer)
+
+        # Held rather than a fire-and-forget QTimer.singleShot so start() can cancel it -
+        # and so a test can check it without monkeypatching QTimer itself.
+        self._denied_stop_timer = QTimer(self)
+        self._denied_stop_timer.setSingleShot(True)
+        self._denied_stop_timer.timeout.connect(self.stop)
 
         self.session_timer_tick = QTimer()
         self.session_timer_tick.timeout.connect(self._update_session_timer)
@@ -486,19 +501,23 @@ class GoonerApp(QMainWindow):
         if entries:
             dialog = WhatsNewDialog(entries, parent=self)
             dialog.exec()
+            dialog.deleteLater()
         self.settings.setValue("GoonerApp/last_seen_version", current_version)
 
     def show_whats_new_dialog(self):
         dialog = WhatsNewDialog(changelog.CHANGELOG, parent=self)
         dialog.exec()
+        dialog.deleteLater()
 
     def show_help_dialog(self):
         dialog = HelpDialog(parent=self)
         dialog.exec()
+        dialog.deleteLater()
 
     def show_privacy_data_dialog(self):
         dialog = PrivacyDataDialog(self, parent=self)
         dialog.exec()
+        dialog.deleteLater()
 
     def open_discord_invite(self):
         QDesktopServices.openUrl(QUrl(self.DISCORD_INVITE_URL))
@@ -558,6 +577,15 @@ class GoonerApp(QMainWindow):
         self.media_repeated_event.emit()
 
     def video_status_changed(self, status):
+        if not self.is_running:
+            # stop() leaves the player alone no more, but a status can still land just
+            # after it - advancing here would restart the slideshow with no session.
+            return
+
+        if status == QMediaPlayer.MediaStatus.InvalidMedia:
+            self._recover_from_stuck_video("the backend can't decode it")
+            return
+
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             elapsed_time = time.time() - self.video_start_time
             if elapsed_time < self.video_min_dur:
@@ -565,6 +593,23 @@ class GoonerApp(QMainWindow):
                 return
 
             self.show_next()
+
+    def _on_media_error(self, error, error_string=""):
+        if not self.is_running:
+            return
+        self._recover_from_stuck_video(error_string or str(error))
+
+    def _recover_from_stuck_video(self, reason):
+        """Gets the session off a video that will never finish.
+
+        load_media() stops the autoplay timer for videos and waits on EndOfMedia, which
+        never arrives for a file the backend cannot open (an exotic codec, a deleted file,
+        an unplugged drive) - the session sat on a black frame until the user pressed an
+        arrow key. Advancing on a timer rather than calling show_next() directly bounds the
+        damage to one file a second if the whole playlist turns out to be unplayable.
+        """
+        print(f"Skipping unplayable media: {reason}")
+        self.auto_play_timer.start(MEDIA_ERROR_ADVANCE_MS)
 
     def next_img_timer(self):
         self.show_next()
@@ -576,10 +621,16 @@ class GoonerApp(QMainWindow):
         return media_kinds.find_supported_files(verzeichnis_pfad)
 
     def open_folder(self):
+        # deleteLater() on every dialog below: none of them are kept in an attribute, so
+        # without it the C++ object survives as a child of the window and one instance
+        # accumulates per open. Harmless for most, but this one retains the full recursive
+        # file list of every selected folder.
         dialog = MediaFolderPickerDialog(parent=self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        files = list(dialog.selected_files)  # read before releasing the dialog
+        dialog.deleteLater()
+        if accepted:
             self._update_climax_status_label("neutral")
-            files = dialog.selected_files
             if files:
                 random.shuffle(files)
                 self.playlist = files
@@ -652,10 +703,18 @@ class GoonerApp(QMainWindow):
     def open_settings(self):
         settings_dialog = SettingsDialog(parent=self)
         settings_dialog.exec()
+        settings_dialog.deleteLater()
 
     def stop(self):
         if self.is_running:
             self.auto_play_timer.stop()
+            # Playback was left running: the video kept playing (with sound) behind the
+            # modal statistics dialog, and its EndOfMedia then restarted the whole
+            # slideshow with no session, no beat and the controls greyed out.
+            self.media_player.stop()
+            if self.current_movie:
+                self.current_movie.stop()
+            self._denied_stop_timer.stop()
             self.beat_handler.stop()
             self.btn_load.setText("Set Gooning Folder and Start.")
             self.is_running = False
@@ -668,6 +727,10 @@ class GoonerApp(QMainWindow):
 
     def start(self):
         if not self.is_running:
+            # A denied outcome from the previous session may still have a stop pending -
+            # 5 seconds is comfortably enough to stop, close the stats and start again,
+            # and it would then kill the fresh session instead.
+            self._denied_stop_timer.stop()
             self.session_started_event.emit()
             self.btn_next.setEnabled(True)
             self.btn_prev.setEnabled(True)
@@ -680,7 +743,7 @@ class GoonerApp(QMainWindow):
 
     def _on_climax_outcome(self, outcome):
         if outcome == "denied":
-            QTimer.singleShot(5000, self.stop)
+            self._denied_stop_timer.start(DENIED_STOP_DELAY_MS)
 
     CLIMAX_STATUS_COLORS = {
         "cum": (theme.ACCENT, theme.ACCENT_HOVER),
@@ -786,6 +849,7 @@ class GoonerApp(QMainWindow):
             parent=self,
         )
         dialog.exec()
+        dialog.deleteLater()
 
     def show_long_term_statistics(self):
         # Imported here, not at module scope: LongTermStatisticsDialog pulls in pyqtgraph and
@@ -800,3 +864,4 @@ class GoonerApp(QMainWindow):
             parent=self,
         )
         dialog.exec()
+        dialog.deleteLater()
