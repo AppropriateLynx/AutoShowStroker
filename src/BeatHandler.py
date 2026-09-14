@@ -322,16 +322,21 @@ class BeatHandler(QObject):
         """Puts the next planned segment on the air and tops the plan back up."""
         if not self._plan:
             self._extend_plan()
-        segment = self._plan.popleft()
+        planned = self._plan.popleft()
         now = time.time()
         # Re-check against reality: a segment only ends at the first beat tick after its
         # planned end, so the plan runs a little late and a segment planned as ordinary can
         # have drifted into the finale window by the time it actually starts.
-        segment = self._apply_finale_rule(segment, now)
+        segment = self._apply_finale_rule(planned, now)
 
         self._current_segment = segment
         self.cur_beat_start_time = now
         self._current_segment_end = now + segment.duration_sec
+        if segment != planned:
+            # The re-check moved this segment's boundaries, so everything queued behind it
+            # was planned against a timeline that no longer holds - including, once, a
+            # second finale left sitting there after this one already covered the climax.
+            self._plan.clear()
         # Re-anchor the plan clock to the real start, or the drift above would accumulate
         # across the whole session.
         self._plan_end_time = self._current_segment_end + sum(s.duration_sec for s in self._plan)

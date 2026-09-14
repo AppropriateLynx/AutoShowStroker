@@ -251,6 +251,25 @@ def test_only_one_finale_is_planned(handler, monkeypatch):
     assert [s.kind for s in planned].count("finale") == 1
 
 
+def test_a_late_starting_segment_that_becomes_the_finale_drops_the_stale_one(handler, monkeypatch):
+    """Segments start at the first beat tick past their planned end, so they run late. When
+    that drift turns an ordinary segment into the run-in, everything queued behind it was
+    planned against a timeline that no longer holds - including, once, a second finale
+    still sitting in the queue after the climax had already been covered."""
+    freeze(monkeypatch, 1000.0)
+    pin(handler, beat_dur=4.0)
+    handler.min_beat_dur = handler.max_beat_dur = 4.0
+    handler.start_beat()
+    handler.set_finale_at(1015.0)
+
+    freeze(monkeypatch, 1010.0)  # the next segment starts six seconds late
+    handler._begin_next_segment()
+
+    planned = [handler.current_segment, *handler.planned_segments]
+    assert handler.current_segment.kind == "finale"
+    assert [s.kind for s in planned].count("finale") == 1
+
+
 def test_planning_continues_normally_past_the_finale(handler, monkeypatch):
     freeze(monkeypatch, 1000.0)
     pin(handler, beat_dur=20.0)

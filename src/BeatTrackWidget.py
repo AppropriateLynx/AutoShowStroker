@@ -21,7 +21,8 @@ TRACK_INSET = 4
 
 # A pattern change re-seeds the whole prediction, so every note on screen jumps at once.
 # A sweep of light across the track plus the notes fading back in covers that reset - a
-# hard cut would just read as a glitch.
+# hard cut would just read as a glitch. Kept now that the plan can see past the change
+# and the jump is smaller: it reads as marking the new rhythm, not as hiding a seam.
 CHANGE_FLASH_MS = 420
 SWEEP_WIDTH_RATIO = 0.18
 
@@ -52,8 +53,9 @@ class BeatTrackWidget(QWidget):
 
     Rendering is stateless - every frame asks BeatHandler.upcoming_beats() fresh rather
     than maintaining a spawned-note list. Nothing can drift out of sync, and a mid-flight
-    pattern change (recalc_beat picks a new random pattern, so the prediction beyond it
-    was never knowable) simply corrects itself on the next frame.
+    pattern change simply corrects itself on the next frame. Since the session is planned
+    ahead the prediction now runs past the next pattern change too, so the track shows the
+    rhythm genuinely arriving rather than stopping at the edge of what is known.
 
     The only thing it needs from the handler is upcoming_beats(horizon_sec).
     """
