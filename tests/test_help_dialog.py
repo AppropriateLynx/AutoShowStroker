@@ -27,13 +27,31 @@ def test_beats_tab_explains_pattern_number_meaning(dialog):
     assert "4 is the shortest" in text
 
 
-def test_languages_tab_explains_adding_a_language(dialog):
+def _languages_tab_text(dialog):
     titles = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
-    languages_tab = dialog.tabs.widget(titles.index("Adding Languages"))
-    text = " ".join(w.text() for w in languages_tab.findChildren(QLabel))
+    tab = dialog.tabs.widget(titles.index("Languages && Tones"))
+    return " ".join(w.text() for w in tab.findChildren(QLabel))
+
+
+def test_languages_tab_explains_adding_a_language(dialog):
+    text = _languages_tab_text(dialog)
     assert "res/callouts/" in text
     assert "Trigger Key" in text
     assert "Manage Custom Phrase Files" in text
+
+
+def test_languages_tab_explains_the_tone_axis(dialog):
+    """The folder-per-language/file-per-tone layout is the one thing a phrase author has to
+    get right, and the Guide is the only place in the app that says what it is."""
+    text = _languages_tab_text(dialog)
+    assert "tone" in text.lower()
+    assert "Girlfriend Experience" in text
+    assert "Degrading" in text
+
+
+def test_languages_tab_says_tones_can_be_mixed(dialog):
+    text = _languages_tab_text(dialog)
+    assert "mix" in text.lower()
 
 
 def test_on_screen_display_tab_documents_the_overlays(dialog):
