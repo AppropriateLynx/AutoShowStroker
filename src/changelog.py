@@ -240,6 +240,21 @@ CHANGELOG = {
         "</ul>"
         "Nothing left in your way. Go on."
     ),
+    "0.8.4": (
+        "When you say stop, it stops. When it can't give you what you asked for, it moves on."
+        "<ul>"
+        "<li>Ending a session now actually ends it - a video used to keep playing behind "
+        "your stats, and then quietly start the whole slideshow up again without you</li>"
+        "<li>A clip your machine can't decode no longer leaves you staring at a black "
+        "screen until you take over. It gives up on that one and gives you the next</li>"
+        "<li>Being denied can't cut short a session you already started again</li>"
+        "<li>The pattern editor's preview stops clicking away in the background once you "
+        "close it with Escape</li>"
+        "<li>And a damaged install no longer refuses to open at all - it tells you what's "
+        "missing and lets you use everything else</li>"
+        "</ul>"
+        "Fewer surprises. Unless you asked for those."
+    ),
 }
 
 
