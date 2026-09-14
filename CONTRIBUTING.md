@@ -21,9 +21,10 @@ res/callouts/
     shy.json
     dominant.json
     degrading.json
+    hard_degrading.json
     girlfriend.json
-  de/  ... same five
-  fr/  ... same five
+  de/  ... same six
+  fr/  ... same six
 ```
 
 **Language and tone are two independent axes.** The user picks exactly one language and any
@@ -75,6 +76,7 @@ The tones that ship today:
 | Shy          | `shy.json`      | Timid, blushing, hesitant — apologises for being bossy.                           |
 | Dominant     | `dominant.json` | Commanding and certain. Imperatives, no negotiation.                              |
 | Degrading    | `degrading.json`| Humiliation play: mocks the user's neediness and stamina. **Opt-in, never default.** |
+| Degrading (Hard) | `hard_degrading.json` | The same register turned up: small-penis humiliation and inadequacy throughout. **Opt-in, never default.** |
 | Girlfriend Experience | `girlfriend.json` | Warm, affectionate, present. Ranges from sweet to gently bossy, never degrading. |
 
 #### 3. How to Contribute Phrases
@@ -106,6 +108,7 @@ res/callouts/es/flirty.json
 res/callouts/es/shy.json
 res/callouts/es/dominant.json
 res/callouts/es/degrading.json
+res/callouts/es/hard_degrading.json
 res/callouts/es/girlfriend.json
 ```
 
@@ -141,8 +144,8 @@ python -m pytest tests/test_callout_language_files.py -v
 
 It walks every `res/callouts/*/*.json` and verifies: valid JSON, all required Trigger Keys, no
 unknown/typo'd keys, every value a list of strings, no empty phrase lists, no duplicate phrases
-within a list, every language shipping every tone, and no stray phrase file outside a language
-folder. It does **not** check that your writing reads well — for that, still run the app
+within a list, no phrase shared between two tones of the same language, every language shipping
+every tone, and no stray phrase file outside a language folder. It does **not** check that your writing reads well — for that, still run the app
 (`python main.py`), pick your language and tone in Settings, and play through a session.
 
 ---

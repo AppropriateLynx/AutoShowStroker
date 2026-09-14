@@ -11,7 +11,7 @@ Follow this to add or extend phrase files for `CalloutHandler` (`src/CalloutHand
 and tone are two independent axes: the user picks exactly one language and any number of tones,
 and the handler mixes the ticked tones evenly (it draws a tone first, then a line from it).
 
-Shipped today: `en`, `de`, `fr` × `flirty`, `shy`, `dominant`, `degrading`, `girlfriend`.
+Shipped today: `en`, `de`, `fr` × `flirty`, `shy`, `dominant`, `degrading`, `hard_degrading`, `girlfriend`.
 
 Every file holds the same schema, `{trigger_key: [phrases]}`, with all of these keys present and
 non-empty — a missing or typo'd key does not raise, the app just goes silent for that event:
@@ -38,6 +38,8 @@ non-empty — a missing or typo'd key does not raise, the app just goes silent f
    - `shy` — timid, hesitant, apologetic about being bossy
    - `dominant` — commanding, imperative, no negotiation
    - `degrading` — humiliation play, mocking the user's neediness and stamina
+   - `hard_degrading` — the same register at full strength: small-penis humiliation and
+     inadequacy running through every line
    - `girlfriend` — warm, affectionate, present; sweet to gently bossy, never degrading
 
    A soft line dropped into `dominant.json` weakens the tone for exactly the people who ticked it
@@ -47,7 +49,7 @@ non-empty — a missing or typo'd key does not raise, the app just goes silent f
 ## Adding a brand-new language
 
 1. Create `res/callouts/<code>/` using the standard two-letter language code (e.g. `es/`).
-2. Add **one file per shipped tone** — all five. The tone selection survives a language switch,
+2. Add **one file per shipped tone** — all six. The tone selection survives a language switch,
    so a language missing a tone silently drops it from the user's mix the moment they switch.
 3. Write in the target language rather than translating the English line for line; a callout that
    reads like a translation breaks the mood faster than a missing one would.
@@ -63,17 +65,18 @@ non-empty — a missing or typo'd key does not raise, the app just goes silent f
    curated and `tests/test_callout_language_files.py` asserts it matches `TONE_LABELS` — that
    assertion is what catches a typo'd file name.
 3. Ask the user before inventing a tone: since several tones can already be ticked at once, a tone
-   that is just "two existing ones blended" costs 5 files and adds no range.
+   that is just "two existing ones blended" costs one file per language and adds no range.
 4. `CalloutHandler.DEFAULT_TONE` (`flirty`) is both the default selection and the fallback for an
    unusable one. Do not widen that fallback to "every available tone" — it is what keeps the
-   harsher `degrading` tone from ever switching itself on.
+   harsher `degrading`/`hard_degrading` tones from ever switching themselves on.
 
 ## Verification
 
 `tests/test_callout_language_files.py` discovers every `res/callouts/*/*.json` and checks: valid
 JSON, all required trigger keys, no unknown/typo'd keys, values are lists of strings, no empty
-phrase list, no duplicate phrase inside a list, every language shipping every tone, no stray
-phrase file left outside a language folder, and that every shipped tone has a declared label.
+phrase list, no duplicate phrase inside a list, no phrase shared between two tones of one
+language, every language shipping every tone, no stray phrase file left outside a language
+folder, and that every shipped tone has a declared label.
 
 ```bash
 python -m pytest tests/test_callout_language_files.py -v

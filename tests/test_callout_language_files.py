@@ -93,3 +93,18 @@ def test_every_shipped_tone_has_a_declared_label():
 
 def test_the_default_tone_is_actually_shipped():
     assert CalloutHandler.DEFAULT_TONE in {path.stem for path in TONE_FILES}
+
+
+def test_no_phrase_is_shared_between_two_tones_of_a_language():
+    """Tones are mixed by drawing a tone and then a line from it, so a line copied into two
+    tones is heard about twice as often as its neighbours - and blurs the two tones it sits
+    in, which is the whole thing the axis exists to keep apart."""
+    for lang_dir in LANGUAGE_DIRS:
+        owners = {}
+        for path in sorted(lang_dir.glob("*.json")):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            for key, phrases in data.items():
+                for phrase in phrases:
+                    owners.setdefault((key, phrase), []).append(path.stem)
+        shared = {ks: tones for ks, tones in owners.items() if len(tones) > 1}
+        assert not shared, f"{lang_dir.name}: phrases appear in several tones: {sorted(shared)[:5]}"

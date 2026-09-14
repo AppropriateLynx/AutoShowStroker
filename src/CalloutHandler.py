@@ -40,6 +40,7 @@ class CalloutHandler(QObject):
         "shy": "Shy",
         "dominant": "Dominant",
         "degrading": "Degrading",
+        "hard_degrading": "Degrading (Hard)",
         "girlfriend": "Girlfriend Experience",
     }
     # What the app used to say with no tone axis at all, so it stays the default for
