@@ -19,10 +19,11 @@ CAPTION_MARGIN = 10
 CAPTION_PADDING = 4
 TRACK_INSET = 4
 
-# A pattern change re-seeds the whole prediction, so every note on screen jumps at once.
-# A sweep of light across the track plus the notes fading back in covers that reset - a
-# hard cut would just read as a glitch. Kept now that the plan can see past the change
-# and the jump is smaller: it reads as marking the new rhythm, not as hiding a seam.
+# A sweep of light runs across the track when the rhythm changes. It used to do a job -
+# the prediction was re-seeded at every change, every note jumped at once, and the notes
+# were faded back in to cover the pop. The session plan removed the pop: upcoming_beats()
+# already knows the next segment, so the notes flow straight through the change and are
+# never faded. The sweep stays purely as an announcement that the rhythm just changed.
 CHANGE_FLASH_MS = 420
 SWEEP_WIDTH_RATIO = 0.18
 
@@ -120,10 +121,6 @@ class BeatTrackWidget(QWidget):
             return None
         return elapsed / (CHANGE_FLASH_MS / 1000)
 
-    def _note_opacity(self) -> float:
-        progress = self._change_progress()
-        return 1.0 if progress is None else progress
-
     # --- geometry ---
 
     def _hit_zone_x(self) -> float:
@@ -214,7 +211,6 @@ class BeatTrackWidget(QWidget):
         center_y = self._note_center_y()
         radius = self._note_radius()
         painter.save()
-        painter.setOpacity(self._note_opacity())
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(theme.ACCENT))
         for seconds_until, _weight in notes:

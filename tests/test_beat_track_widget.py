@@ -177,14 +177,20 @@ def test_change_transition_expires(widget, qtbot):
     assert widget._change_progress() is None
 
 
-def test_notes_fade_in_during_the_change_transition(widget):
-    # Fading the notes in is what actually hides the resync: when recalc_beat picks a new
-    # random pattern the predicted positions jump, and a hard cut would show that pop.
-    assert widget._note_opacity() == 1.0
+def test_the_notes_keep_flowing_through_a_change(handler, qtbot):
+    """The notes used to fade back in over the sweep, to cover the prediction being
+    re-seeded at every change. The plan already holds the next segment, so there is
+    nothing to cover - the notes must stay put and fully drawn through the sweep."""
+    handler.upcoming = [(0.0, True, 1), (0.6, True, 2)]
+    widget = BeatTrackWidget(handler)
+    qtbot.addWidget(widget)
+    widget.resize(400, 80)
+    before = widget._visible_notes()
 
     widget.pulse_change()
 
-    assert widget._note_opacity() < 1.0
+    assert widget._change_progress() is not None  # the sweep is running
+    assert widget._visible_notes() == before
 
 
 def test_painting_during_a_change_transition_does_not_raise(qtbot, handler):

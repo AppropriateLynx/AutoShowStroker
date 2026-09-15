@@ -1,4 +1,5 @@
 import json
+import time
 
 import pytest
 from PyQt6.QtCore import QSettings
@@ -406,6 +407,16 @@ def _arm(handler, pattern, freq=1.0, position=0, remaining_ms=100):
     handler.beat_meter_timer.start(remaining_ms)
 
 
+def _arm_before_a_boundary(handler, next_segment, ends_in=0.4, pattern=None, freq=1.0, remaining_ms=100):
+    """As _arm, plus a running segment that ends in `ends_in` seconds and a plan holding
+    `next_segment` behind it."""
+    _arm(handler, pattern or [1], freq=freq, remaining_ms=remaining_ms)
+    handler._current_segment = Segment("beat", 10.0, freq, "Test", 0)
+    handler._current_segment_end = time.time() + ends_in
+    handler._plan.clear()
+    handler._plan.append(next_segment)
+
+
 def test_upcoming_beats_empty_when_timer_inactive(handler):
     _arm(handler, [1])
     handler.beat_meter_timer.stop()
@@ -483,6 +494,53 @@ def test_upcoming_beats_is_capped_for_pathological_input(handler):
     # A very high frequency over a long horizon must not produce an unbounded list.
     _arm(handler, [4], freq=200.0, remaining_ms=0)
     assert len(handler.upcoming_beats(1000.0)) <= BeatHandler.MAX_LOOKAHEAD_NOTES
+
+
+# --- lookahead across a segment boundary ---
+
+
+def test_upcoming_beats_spaces_the_next_segment_by_its_own_frequency(handler):
+    """The note that ends a segment is the last one at the old spacing; the gap after it
+    already belongs to the next segment."""
+    _arm_before_a_boundary(handler, Segment("beat", 10.0, 4.0, "Standard Beat", 1), ends_in=0.4)
+
+    times = [round(t, 3) for t, _a, _w in handler.upcoming_beats(2.0)]
+
+    # 0.1 and 1.1 at 1 Hz (1.1 is the note that trips the boundary), then 0.25s apart.
+    assert times == [0.1, 1.1, 1.35, 1.6, 1.85]
+
+
+def test_upcoming_beats_keeps_the_boundary_note_on_the_old_pattern(handler):
+    """beat() plays the note using the pattern still on the air and only then moves on, so
+    the note landing on the boundary is the old rhythm's. Reading it off the next segment
+    instead drew a marker on the hit zone for a step that is actually silent."""
+    # [1, -1] at 1 Hz: audible at 0.1, silent at 0.6 - and 0.6 is the boundary note.
+    _arm_before_a_boundary(
+        handler, Segment("beat", 10.0, 1.0, "Standard Beat", 1), ends_in=0.4, pattern=[1, -1], freq=1.0
+    )
+
+    upcoming = handler.upcoming_beats(2.0)
+
+    assert [(round(t, 3), a) for t, a, _w in upcoming] == [(0.1, True), (0.6, False), (1.6, True)]
+
+
+def test_upcoming_beats_stops_at_a_planned_pause(handler):
+    _arm_before_a_boundary(handler, Segment("pause", 5.0, None, None, 1), ends_in=0.4)
+    times = [t for t, _a, _w in handler.upcoming_beats(2.0)]
+    assert times == pytest.approx([0.1, 1.1])
+
+
+def test_upcoming_beats_stops_where_the_plan_runs_out(handler):
+    _arm(handler, [1], freq=1.0)
+    handler._current_segment = Segment("beat", 10.0, 1.0, "Test", 0)
+    handler._current_segment_end = time.time() + 0.4
+    handler._plan.clear()
+    assert [t for t, _a, _w in handler.upcoming_beats(2.0)] == pytest.approx([0.1, 1.1])
+
+
+def test_upcoming_beats_skips_a_segment_whose_pattern_was_deleted(handler):
+    _arm_before_a_boundary(handler, Segment("beat", 10.0, 4.0, "Ghost Pattern", 1), ends_in=0.4)
+    assert [t for t, _a, _w in handler.upcoming_beats(2.0)] == pytest.approx([0.1, 1.1])
 
 
 # --- P0 crash paths: an unusable selection, inverted bounds, a corrupt pattern file ---

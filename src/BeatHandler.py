@@ -433,29 +433,37 @@ class BeatHandler(QObject):
                 return []
             base_step_sec = self._base_step_sec()
             position = self.current_beat_position
-            queued = list(self._plan)
+            queued = deque(self._plan)
             segment_ends_in = (
                 self._current_segment_end - time.time() if self._current_segment is not None else float("inf")
             )
             upcoming = []
             offset = remaining_ms / 1000
             while offset <= horizon_sec and len(upcoming) < self.MAX_LOOKAHEAD_NOTES:
-                while offset >= segment_ends_in:
-                    if not queued:
-                        return upcoming  # predicted past the plan - nothing more is decided yet
-                    segment = queued.pop(0)
-                    segment_ends_in += segment.duration_sec
-                    if segment.kind == "pause":
-                        return upcoming
-                    pattern = self.available_beat_patterns.get(segment.pattern_name)
-                    if not pattern:
-                        return upcoming  # pattern deleted since it was planned
-                    base_step_sec = self._base_step_sec_for(pattern, segment.freq)
-                    position = 0
                 step = pattern[position]
                 upcoming.append((offset, step > 0, abs(step)))
-                offset += base_step_sec / abs(step)
-                position = (position + 1) % len(pattern)
+                if offset < segment_ends_in:
+                    offset += base_step_sec / abs(step)
+                    position = (position + 1) % len(pattern)
+                    continue
+                # This note is the one that ends the segment: beat() plays it off the
+                # pattern still on the air (hence appending it first) and only then moves
+                # on, so the gap after it already belongs to the next segment.
+                if not queued:
+                    break  # predicted past the plan - nothing further is decided yet
+                segment = queued.popleft()
+                if segment.kind == "pause":
+                    break  # nothing to draw through a pause
+                next_pattern = self.available_beat_patterns.get(segment.pattern_name)
+                if not next_pattern:
+                    break  # pattern deleted since it was planned
+                pattern = next_pattern
+                segment_ends_in = offset + segment.duration_sec
+                base_step_sec = self._base_step_sec_for(pattern, segment.freq)
+                # _apply_beat_segment starts the new segment at index 0, whose weight sets
+                # the gap to its first note; that note is then read at index 1.
+                offset += base_step_sec / abs(pattern[0])
+                position = 1 % len(pattern)
             return upcoming
         finally:
             self.beat_pattern_mutex.unlock()
