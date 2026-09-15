@@ -210,3 +210,30 @@ def test_a_timeline_read_mid_session_ends_at_the_moment_it_is_read(recorder):
     timeline = recorder.timeline(now=1020.0)
 
     assert timeline["segments"][0]["end"] == 1020.0
+
+
+# --- fake climaxes ---
+
+
+def test_fake_climaxes_are_recorded_in_order(recorder):
+    recorder.segment_started(beat(0), at=1000.0)
+    recorder.fake_climax_recorded(at=1012.0)
+    recorder.fake_climax_recorded(at=1040.0)
+    recorder.session_ended(at=1060.0)
+
+    assert recorder.timeline()["fake_climaxes"] == [1012.0, 1040.0]
+
+
+def test_a_session_without_fake_climaxes_reports_none(recorder):
+    recorder.segment_started(beat(0), at=1000.0)
+    recorder.session_ended(at=1060.0)
+    assert recorder.timeline()["fake_climaxes"] == []
+
+
+def test_fake_climaxes_do_not_survive_into_the_next_session(recorder):
+    recorder.fake_climax_recorded(at=1012.0)
+    recorder.session_ended(at=1060.0)
+
+    recorder.session_started(at=2000.0)
+
+    assert recorder.timeline(now=2010.0)["fake_climaxes"] == []

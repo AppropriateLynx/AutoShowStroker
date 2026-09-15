@@ -29,6 +29,7 @@ class SessionRecorder:
         self._media = []  # (start_time, path)
         self._climax_at = None
         self._climax_outcome = None
+        self._fake_climaxes = []
 
     # --- recording ---
 
@@ -39,6 +40,7 @@ class SessionRecorder:
         self._media = []
         self._climax_at = None
         self._climax_outcome = None
+        self._fake_climaxes = []
 
     def session_ended(self, at=None):
         self._ended_at = time.time() if at is None else at
@@ -48,6 +50,9 @@ class SessionRecorder:
 
     def media_shown(self, path, at=None):
         self._media.append((time.time() if at is None else at, str(path)))
+
+    def fake_climax_recorded(self, at=None):
+        self._fake_climaxes.append(time.time() if at is None else at)
 
     def climax_recorded(self, outcome, at=None):
         self._climax_at = time.time() if at is None else at
@@ -88,6 +93,7 @@ class SessionRecorder:
             "ended_at": end_of_session,
             "climax_at": self._climax_at,
             "climax_outcome": self._climax_outcome,
+            "fake_climaxes": list(self._fake_climaxes),
             "segments": segments,
         }
 

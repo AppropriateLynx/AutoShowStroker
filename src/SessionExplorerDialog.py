@@ -27,6 +27,9 @@ KIND_COLORS = {"beat": theme.SECONDARY, "pause": theme.PAUSE, "finale": theme.AC
 # Same colours the climax banner uses in GoonerApp, so an outcome reads the same in both.
 OUTCOME_COLORS = {"real": theme.ACCENT, "ruined": theme.RUINED, "denied": theme.DENIED}
 OUTCOME_LABELS = {"real": "Climax", "ruined": "Ruined climax", "denied": "Denied"}
+# How close the playhead has to be to a fake-out for the caption to name it. A fake lasts
+# only until its reveal a few seconds later, so this is the window it was "happening" in.
+FAKE_WINDOW_SEC = 4.0
 
 
 class SessionTimelineBar(QFrame):
@@ -47,6 +50,7 @@ class SessionTimelineBar(QFrame):
         self._outcome = timeline.get("climax_outcome")
         climax_at = timeline.get("climax_at")
         self.climax_offset = None if climax_at is None else climax_at - self._start
+        self.fake_offsets = [at - self._start for at in timeline.get("fake_climaxes", [])]
         self.playhead_offset = None
 
         self.setFixedHeight(BAR_HEIGHT)
@@ -105,6 +109,14 @@ class SessionTimelineBar(QFrame):
             x = int(self.x_for_time(data["start"] - self._start))
             painter.drawLine(x, 0, x, self.height())
 
+        # Fake-outs first, so the real climax is drawn over one that landed on top of it.
+        for offset in self.fake_offsets:
+            x = int(self.x_for_time(offset))
+            painter.setPen(QPen(QColor(theme.SURFACE_DARKEST), 5))
+            painter.drawLine(x, 0, x, self.height())
+            painter.setPen(QPen(QColor(theme.TEXT), 2, Qt.PenStyle.DashLine))
+            painter.drawLine(x, 0, x, self.height())
+
         if self.climax_offset is not None:
             x = int(self.x_for_time(self.climax_offset))
             # Outlined, because the marker sits on the finale block and a "real" outcome is
@@ -146,6 +158,7 @@ class SessionExplorerDialog(QDialog):
         self._media = self._flatten_media(timeline)
         self._climax_at = timeline.get("climax_at")
         self._outcome = timeline.get("climax_outcome")
+        self._fake_climaxes = timeline.get("fake_climaxes", [])
         # Scrubbing crosses the same clip over and over; decoding it each time would make
         # the bar stutter on exactly the move it is built for.
         self._video_frames = {}
@@ -177,6 +190,9 @@ class SessionExplorerDialog(QDialog):
     def _build_heading(self, timeline):
         duration = max(0.0, (timeline.get("ended_at") or 0.0) - self._session_start)
         parts = [f"{len(self._segments)} segments over {format_clock(duration)}"]
+        if self._fake_climaxes:
+            count = len(self._fake_climaxes)
+            parts.append(f"{count} fake-out{'s' if count > 1 else ''} survived")
         if self._outcome:
             parts.append(OUTCOME_LABELS.get(self._outcome, self._outcome))
         label = QLabel("  -  ".join(parts))
@@ -235,6 +251,8 @@ class SessionExplorerDialog(QDialog):
             parts.append(f"{segment['freq']:.2f} Hz")
         if segment["pattern"]:
             parts.append(segment["pattern"])
+        if any(abs(moment - at) <= FAKE_WINDOW_SEC for at in self._fake_climaxes):
+            parts.append("- Fake-out")
         if self._climax_at is not None and segment["start"] <= self._climax_at < segment["end"]:
             parts.append(f"- {OUTCOME_LABELS.get(self._outcome, self._outcome)} landed here")
         return "   ".join(parts)

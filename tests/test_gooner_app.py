@@ -1449,3 +1449,12 @@ def test_the_timeline_reaches_the_statistics_dialog(app, tmp_path, monkeypatch):
     app._end_session(show_statistics=True)
 
     assert captured["timeline"]["segments"]
+
+
+def test_a_fake_climax_is_recorded_for_the_timeline(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app.climax_handler.fake_climax_triggered_event.emit()
+
+    assert app.session_recorder.timeline()["fake_climaxes"]

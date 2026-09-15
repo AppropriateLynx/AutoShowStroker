@@ -444,6 +444,7 @@ class GoonerApp(QMainWindow):
         self.beat_handler.segment_started_event.connect(self.session_recorder.segment_started)
         self.media_shown_event.connect(self.session_recorder.media_shown)
         self.climax_handler.register_outcome_event(self.session_recorder.climax_recorded)
+        self.climax_handler.register_fake_climax_event(self.session_recorder.fake_climax_recorded)
         self.climax_handler.register_outcome_event(self.score_tracker.climax_decided)
         self.climax_handler.register_outcome_event(self._on_climax_outcome)
         self.climax_handler.register_status_event(self._update_climax_status_label)

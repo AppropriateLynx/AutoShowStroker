@@ -31,6 +31,7 @@ def timeline(segments=None, **overrides):
         "ended_at": 1100.0,
         "climax_at": None,
         "climax_outcome": None,
+        "fake_climaxes": [],
         "segments": segments if segments is not None else [segment()],
     }
     base.update(overrides)
@@ -243,3 +244,51 @@ def test_a_timeline_with_no_segments_does_not_raise(make_dialog):
     dialog = make_dialog(timeline([]))
     dialog.scrub_to(10.0)
     assert dialog.selected_path is None
+
+
+# --- fake climaxes on the bar ---
+
+
+def test_the_bar_marks_every_fake_climax(make_dialog):
+    dialog = make_dialog(timeline(fake_climaxes=[1020.0, 1065.0]))
+    assert dialog.timeline_bar.fake_offsets == [20.0, 65.0]
+
+
+def test_a_session_without_fake_climaxes_marks_none(make_dialog):
+    dialog = make_dialog(timeline())
+    assert dialog.timeline_bar.fake_offsets == []
+
+
+def test_scrubbing_onto_a_fake_climax_says_so(make_dialog):
+    """Otherwise the bar shows a mark with no way to find out what it was."""
+    dialog = make_dialog(timeline([segment(start=1000.0, end=1100.0)], fake_climaxes=[1050.0]))
+
+    dialog.scrub_to(50.5)
+
+    assert "Fake-out" in dialog.moment_label.text()
+
+
+def test_scrubbing_away_from_a_fake_climax_stops_saying_so(make_dialog):
+    dialog = make_dialog(timeline([segment(start=1000.0, end=1100.0)], fake_climaxes=[1050.0]))
+
+    dialog.scrub_to(20.0)
+
+    assert "Fake-out" not in dialog.moment_label.text()
+
+
+def test_a_fake_climax_is_not_confused_with_the_real_one(make_dialog):
+    dialog = make_dialog(
+        timeline(
+            [segment(start=1000.0, end=1100.0)],
+            fake_climaxes=[1020.0],
+            climax_at=1080.0,
+            climax_outcome="real",
+        )
+    )
+
+    dialog.scrub_to(20.0)
+    assert "Fake-out" in dialog.moment_label.text()
+
+    dialog.scrub_to(80.0)
+    assert "Fake-out" not in dialog.moment_label.text()
+    assert "Climax landed here" in dialog.moment_label.text()
