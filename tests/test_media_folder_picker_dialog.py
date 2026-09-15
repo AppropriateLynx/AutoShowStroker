@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import QApplication, QDialog, QFileDialog, QLabel
 
 from src import media_kinds
@@ -540,15 +539,6 @@ def test_video_cap_enforced_after_growing_via_resize(app, qtbot, monkeypatch, tm
 
     video_count = sum(1 for p in dialog._current_thumbnails if dialog._is_video(p))
     assert video_count <= 4
-
-
-# --- black-frame detection (real QImage objects - no multimedia backend involved) ---
-
-
-def _solid_image(color):
-    image = QImage(16, 16, QImage.Format.Format_RGB32)
-    image.fill(color)
-    return image
 
 
 def test_refresh_thumbnails_is_noop_while_already_rebuilding(app, qtbot, tmp_path):
