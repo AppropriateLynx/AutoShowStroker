@@ -72,9 +72,12 @@ def test_caption_band_is_zero_without_a_caption(widget):
     assert widget._caption_height() == 0
 
 
-def test_notes_hidden_while_paused(widget):
+def test_notes_still_drawn_while_paused(widget):
+    """The segment behind the pause is already planned, so its notes fly in across the
+    last seconds of the countdown instead of appearing halfway down the track the moment
+    the beat comes back."""
     widget.set_status("Pause: 7 seconds left.", "pause")
-    assert widget._notes_visible() is False
+    assert widget._notes_visible() is True
 
 
 def test_notes_hidden_while_idle(widget):
@@ -145,10 +148,10 @@ def test_silent_steps_are_not_drawn(widget, handler):
     assert [seconds for seconds, _weight in visible] == [0.0, 1.0]
 
 
-def test_visible_notes_empty_while_paused(widget, handler):
-    handler.upcoming = [(0.0, True, 1)]
+def test_visible_notes_are_shown_while_paused(widget, handler):
+    handler.upcoming = [(2.1, True, 1)]
     widget.set_status("Pause: 3 seconds left.", "pause")
-    assert widget._visible_notes() == []
+    assert widget._visible_notes() == [(2.1, 1)]
 
 
 # --- beat-change transition ---

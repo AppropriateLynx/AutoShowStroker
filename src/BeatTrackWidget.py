@@ -27,9 +27,12 @@ TRACK_INSET = 4
 CHANGE_FLASH_MS = 420
 SWEEP_WIDTH_RATIO = 0.18
 
-# Kinds with nothing in flight to draw - upcoming_beats() is empty for both anyway
-# (start_pause stops the beat timer), so the track shows just its caption.
-_NOTELESS_KINDS = ("idle", "pause")
+# Only the idle track has nothing to draw - upcoming_beats() is empty there anyway, so it
+# shows just its caption. "pause" is deliberately NOT here: the segment waiting behind the
+# pause is already planned, so its notes fly in across the last couple of seconds of the
+# countdown. Suppressing them meant the track sat empty and then had notes appear halfway
+# down it the instant the beat came back.
+_NOTELESS_KINDS = ("idle",)
 
 # (track background, caption color) per beat_meter_update_event kind. The track keeps a
 # stable backdrop and only the accents move - unlike the old QLabel, which flashed its

@@ -274,6 +274,28 @@ def test_a_real_outcome_emits_the_cum_status(handler, qtbot):
     assert blocker.args == ["cum"]
 
 
+def test_the_climax_holds_the_rhythm_it_was_announced_over(handler, beat_handler):
+    """No new beat, no pause and no beat-change callout on top of the moment the whole
+    session was built towards."""
+    handler.climax_active = True
+    handler.on_session_planned(time.time() + 100)
+
+    handler._on_climax_due()
+
+    beat_handler.hold_final_segment.assert_called_once_with()
+
+
+def test_a_fake_climax_does_not_hold_the_rhythm(handler, beat_handler):
+    """The session carries on after the reveal, so the plan has to carry on too."""
+    handler.fake_climax_active = True
+    handler.fake_climax_chance = 1.0
+    handler.on_plan_extended(beats(7))
+
+    handler.on_segment_started(7)
+
+    beat_handler.hold_final_segment.assert_not_called()
+
+
 # --- fake climaxes ---
 
 

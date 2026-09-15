@@ -271,22 +271,49 @@ def test_only_one_finale_is_planned(handler, monkeypatch):
     assert [s.kind for s in planned].count("finale") == 1
 
 
-def test_a_late_starting_segment_that_becomes_the_finale_drops_the_stale_one(handler, monkeypatch):
-    """Segments start at the first beat tick past their planned end, so they run late. When
-    that drift turns an ordinary segment into the run-in, everything queued behind it was
-    planned against a timeline that no longer holds - including, once, a second finale
-    still sitting in the queue after the climax had already been covered."""
+def test_a_segment_starts_exactly_as_it_was_planned(handler, monkeypatch):
+    """Segments start at the first beat tick past their planned end, so they run late.
+    Re-deriving the segment to account for that used to re-draw its pattern and frequency -
+    and the beat track had already painted several of its notes, so the whole rhythm
+    visibly jumped the instant the segment began."""
     freeze(monkeypatch, 1000.0)
     pin(handler, beat_dur=4.0)
-    handler.min_beat_dur = handler.max_beat_dur = 4.0
+    handler.start_beat()
+    handler.set_finale_at(1015.0)
+    next_planned = handler.planned_segments[0]
+
+    freeze(monkeypatch, 1010.0)  # six seconds late
+    handler._begin_next_segment()
+
+    assert handler.current_segment == next_planned
+
+
+def test_the_finale_segment_also_starts_exactly_as_it_was_planned(handler, monkeypatch):
+    freeze(monkeypatch, 1000.0)
+    pin(handler, beat_dur=4.0)
+    handler.start_beat()
+    handler.set_finale_at(1015.0)
+    planned_finale = next(s for s in handler.planned_segments if s.kind == "finale")
+
+    freeze(monkeypatch, 1010.0)
+    handler._begin_next_segment()
+    freeze(monkeypatch, 1016.0)
+    handler._begin_next_segment()
+
+    assert handler.current_segment == planned_finale
+    assert handler.current_beat_pattern_name == planned_finale.pattern_name
+
+
+def test_only_one_finale_survives_a_late_start(handler, monkeypatch):
+    freeze(monkeypatch, 1000.0)
+    pin(handler, beat_dur=4.0)
     handler.start_beat()
     handler.set_finale_at(1015.0)
 
-    freeze(monkeypatch, 1010.0)  # the next segment starts six seconds late
+    freeze(monkeypatch, 1010.0)
     handler._begin_next_segment()
 
     planned = [handler.current_segment, *handler.planned_segments]
-    assert handler.current_segment.kind == "finale"
     assert [s.kind for s in planned].count("finale") == 1
 
 
@@ -359,3 +386,73 @@ def test_ramp_complete_at_is_none_while_ramping_is_switched_off(handler, monkeyp
     handler.min_ramp_duration = handler.max_ramp_duration = 600.0
     handler.start_beat()
     assert handler.ramp_complete_at is None
+
+
+# --- holding the last segment once the climax has landed ---
+
+
+def test_holding_the_final_segment_stops_segment_changes(handler, monkeypatch):
+    """Once she has told you to cum, the rhythm she said it over is the one that stays.
+    A new beat - or worse, a pause - landing on top of the climax reads as the app
+    having moved on without you."""
+    freeze(monkeypatch, 1000.0)
+    pin(handler, beat_dur=20.0)
+    handler.start_beat()
+    running = handler.current_segment
+
+    handler.hold_final_segment()
+    freeze(monkeypatch, 1000.0 + 600.0)  # long past when the segment would have ended
+    handler.reset_beat_timer()
+
+    assert handler.current_segment is running
+    assert handler.beat_meter_timer.isActive()
+
+
+def test_holding_the_final_segment_empties_the_plan(handler):
+    """Nothing further is decided, so nothing further is announced - which is what stops
+    fake climaxes being rolled onto segments that will never start."""
+    pin(handler)
+    handler.start_beat()
+    assert handler.planned_segments
+
+    handler.hold_final_segment()
+
+    assert handler.planned_segments == ()
+
+
+def test_holding_the_final_segment_plans_no_further_pause(handler, monkeypatch):
+    freeze(monkeypatch, 1000.0)
+    pin(handler, beat_dur=20.0, pause_chance=1.0)
+    handler.start_beat()
+
+    handler.hold_final_segment()
+    freeze(monkeypatch, 1000.0 + 600.0)
+    handler.reset_beat_timer()
+
+    assert not handler.is_paused()
+
+
+def test_a_new_session_lifts_the_hold(handler):
+    pin(handler)
+    handler.start_beat()
+    handler.hold_final_segment()
+
+    handler.start_beat()
+
+    assert handler.planned_segments
+
+
+def test_the_track_stays_full_while_the_final_segment_is_held(handler, monkeypatch):
+    """A held segment runs past its planned end, which made the lookahead treat every note
+    as a segment boundary it could not cross - so the beat track emptied out to a single
+    note for the whole rest of the session, right when the climax was on screen."""
+    freeze(monkeypatch, 1000.0)
+    pin(handler, beat_dur=20.0, freq=4.0)
+    handler.start_beat()
+    before = len(handler.upcoming_beats(2.5))
+    assert before > 1
+
+    handler.hold_final_segment()
+    freeze(monkeypatch, 1000.0 + 600.0)  # long past where the segment would have ended
+
+    assert len(handler.upcoming_beats(2.5)) == before

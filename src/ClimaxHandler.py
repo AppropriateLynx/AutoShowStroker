@@ -254,6 +254,9 @@ class ClimaxHandler(QObject):
 
     def _trigger_real_climax(self):
         self.climax_triggered = True
+        # The rhythm she said it over is the one that stays. Without this a new beat, a
+        # pause or a beat-change callout would land on top of the climax.
+        self.beat_handler.hold_final_segment()
         outcome = self.outcome or self._resolve_outcome()
         category = {"real": "climax_real", "ruined": "climax_ruined", "denied": "climax_denied"}[outcome]
         status = {"real": "cum", "ruined": "ruined", "denied": "denied"}[outcome]
