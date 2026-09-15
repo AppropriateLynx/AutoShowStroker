@@ -428,7 +428,12 @@ class GoonerApp(QMainWindow):
         self.beat_handler.register_beat_change_event(self.callout_handler.beat_change_general)
         self.beat_handler.register_beat_change_event(self.beat_track.pulse_change)
 
-        self.beat_handler.register_beat_change_event(self.climax_handler.on_beat_change)
+        # The climax reads the session plan instead of rolling dice per beat change: it
+        # places itself when the session is planned, pins its fakes to boundaries as they
+        # are planned, and fires them when those boundaries arrive.
+        self.beat_handler.session_planned_event.connect(self.climax_handler.on_session_planned)
+        self.beat_handler.plan_extended_event.connect(self.climax_handler.on_plan_extended)
+        self.beat_handler.segment_started_event.connect(self.climax_handler.on_segment_started)
         self.climax_handler.register_outcome_event(self.score_tracker.climax_decided)
         self.climax_handler.register_outcome_event(self._on_climax_outcome)
         self.climax_handler.register_status_event(self._update_climax_status_label)

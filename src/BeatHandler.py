@@ -1,5 +1,7 @@
 import random
 import time
+from collections import deque
+from typing import NamedTuple
 
 from PyQt6.QtCore import QMutex, QObject, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QSoundEffect
@@ -8,6 +10,26 @@ from src.applog import get_logger
 from src.utils import get_project_root
 
 log = get_logger(__name__)
+
+
+class Segment(NamedTuple):
+    """One stretch of the session, decided before it happens.
+
+    A session is a sequence of these: a rhythm to follow, a pause to endure, or the
+    "finale" run-in that covers the moment the climax is announced. Deciding them ahead
+    of time is the whole point - it is what lets the app say anything about its own
+    future, from the beat track painting past a pattern change to guaranteeing a fast
+    rhythm going into the climax.
+
+    freq/pattern_name are None on a pause. index is a monotonic counter that survives
+    replanning, so a consumer can pin something to a specific upcoming boundary.
+    """
+
+    kind: str  # "beat" | "pause" | "finale"
+    duration_sec: float
+    freq: float | None
+    pattern_name: str | None
+    index: int
 
 
 class BeatHandler(QObject):
@@ -20,6 +42,12 @@ class BeatHandler(QObject):
     # Hard cap on upcoming_beats() output - at the top of the frequency range with the
     # shortest steps a long horizon would otherwise build a pointlessly huge list.
     MAX_LOOKAHEAD_NOTES = 64
+
+    # How many segments are held ready beyond the running one. Deep enough that the
+    # finale is always placed while it is still unstarted (and so still editable), and
+    # that upcoming_beats() can see past the current segment; shallow enough that a
+    # settings change never invalidates much work.
+    PLAN_BUFFER_SEGMENTS = 5
 
     BEAT_PATTERNS_MAP = {
         # --- Standard & Simple ---
@@ -58,7 +86,6 @@ class BeatHandler(QObject):
         "min_pause_dur": 5,
         "max_pause_dur": 20,
         "pause_chance": 0.05,
-        "beat_change_chance": 0.1,
         "ramping_active": True,
         "min_ramp_duration": 600.0,
         "max_ramp_duration": 1800.0,
@@ -74,6 +101,14 @@ class BeatHandler(QObject):
     # widget (see GoonerApp._update_beat_meter) - it only describes what the meter should show,
     # same pattern CalloutHandler/ClimaxHandler already use for their GoonerApp-owned labels.
     beat_meter_update_event = pyqtSignal(str, str)
+    # The session plan, announced to whoever wants to shape or read it.
+    # session_planned_event carries the session's start time, and is emitted before the
+    # first segment is planned so a listener can still place a finale into it (see
+    # set_finale_at). plan_extended_event carries the newly planned segments;
+    # segment_started_event the index of the one now on the air.
+    session_planned_event = pyqtSignal(float)
+    plan_extended_event = pyqtSignal(list)
+    segment_started_event = pyqtSignal(int)
 
     def __init__(self, beat_file=None, settings=None, data_store=None):
         super().__init__()
@@ -97,6 +132,17 @@ class BeatHandler(QObject):
         self.session_start_time = 0.0
         self.ramp_target_duration = 0.0
 
+        # The plan. _plan holds the segments queued behind the running one;
+        # _plan_end_time is the wall clock at which the last of them ends, and is
+        # re-anchored to reality every time a segment actually starts.
+        self._plan = deque()
+        self._plan_end_time = 0.0
+        self._next_index = 0
+        self._finale_at = None
+        self._current_segment = None
+        self._current_segment_end = 0.0
+        self._holding = False
+
         # Whatever the user has saved wins over the defaults above.
         if self.settings:
             self.max_beat_dur = float(self.settings.value("BeatHandler/max_beat_dur", self.max_beat_dur))
@@ -106,9 +152,6 @@ class BeatHandler(QObject):
             self.min_pause_dur = int(float(self.settings.value("BeatHandler/min_pause_dur", self.min_pause_dur)))
             self.max_pause_dur = int(float(self.settings.value("BeatHandler/max_pause_dur", self.max_pause_dur)))
             self.pause_chance = float(self.settings.value("BeatHandler/pause_chance", self.pause_chance))
-            self.beat_change_chance = float(
-                self.settings.value("BeatHandler/beat_change_chance", self.beat_change_chance)
-            )
             self.ramping_active = bool(
                 self.settings.value("BeatHandler/ramping_active", self.ramping_active, type=bool)
             )
@@ -170,23 +213,209 @@ class BeatHandler(QObject):
         self._pattern_inv_sum = 1.0
 
 
+    # --- the plan ---
+
+    @property
+    def planned_segments(self):
+        """The segments queued behind the running one, oldest first. Read-only."""
+        return tuple(self._plan)
+
+    @property
+    def current_segment(self):
+        return self._current_segment
+
+    def hold_final_segment(self):
+        """Stops planning: the segment on the air now runs until the session ends.
+
+        Called once the climax has actually been announced. Everything downstream of a
+        segment change - a new rhythm, a pause, the beat_change callouts - would otherwise
+        carry on talking over the moment the whole session was built towards. Nothing
+        further is planned either, so no fake climax can be rolled onto a boundary that
+        will never arrive.
+        """
+        self._holding = True
+        self._plan.clear()
+
+    def set_finale_at(self, when):
+        """Asks the planner to guarantee a fast rhythm across the given moment.
+
+        This is how the climax reaches the planner without BeatHandler having to know
+        what a climax is: it is told "be fast here", not "the orgasm is here". Pass None
+        to withdraw it. Replans whatever is already queued, so it takes effect even when
+        called mid-session.
+        """
+        self._finale_at = when
+        if self._current_segment is not None:
+            self.replan_from_next_segment()
+
+    def replan_from_next_segment(self):
+        """Rebuilds the queued plan from the current settings.
+
+        The running segment plays out untouched - a settings save should not cut the beat
+        the user is currently following out from under them. The finale stays where it
+        was drawn: re-rolling it would turn "open Settings and save" into a lever for a
+        different climax.
+        """
+        if self._current_segment is None or self._holding:
+            return  # no session running, or nothing further will be planned
+        self._plan.clear()
+        self._plan_end_time = self._current_segment_end
+        self._extend_plan()
+
+    def _extend_plan(self):
+        if self._holding:
+            return
+        added = []
+        while len(self._plan) < self.PLAN_BUFFER_SEGMENTS:
+            segment = self._plan_one_segment(self._plan_end_time)
+            self._plan.append(segment)
+            self._plan_end_time += segment.duration_sec
+            self._next_index += 1
+            added.append(segment)
+        if added:
+            self.plan_extended_event.emit(added)
+
+    def _last_planned_kind(self):
+        if self._plan:
+            return self._plan[-1].kind
+        if self._current_segment is not None:
+            return self._current_segment.kind
+        return None
+
+    def _plan_one_segment(self, start):
+        """Draws the segment that begins at wall-clock `start`.
+
+        A session never opens on a pause, and two pauses never follow each other. Neither
+        was reachable before either: the first thing start_beat() did was pick a beat, and
+        pause_loop() always recalculated a fresh one on the way out.
+        """
+        index = self._next_index
+        if self._last_planned_kind() not in (None, "pause") and random.uniform(0, 1) < self.pause_chance:
+            # sorted() because randint - unlike the uniform() calls everywhere else - raises on
+            # an inverted range. SettingsDialog refuses to save min above max, but a registry
+            # written by an older build still can, and that must not kill a running session.
+            low, high = sorted((self.min_pause_dur, self.max_pause_dur))
+            candidate = Segment("pause", random.randint(low, high), None, None, index)
+        else:
+            window_min, window_max = self._current_freq_range(at_time=start)
+            candidate = Segment(
+                "beat",
+                random.uniform(self.min_beat_dur, self.max_beat_dur),
+                random.uniform(window_min, window_max),
+                random.choice(self._usable_pattern_names()),
+                index,
+            )
+        return self._apply_finale_rule(candidate, start)
+
+    def _covers_finale(self, start, duration):
+        """Whether a segment of `duration` starting at `start` is the run-in to the climax.
+
+        True when less than min_beat_dur would be left between its end and the finale
+        moment - which covers both the segment that already spans the moment and the one
+        that stops just short of it. Side-effect free, so it can be used to *check* a
+        planned segment without re-drawing anything.
+        """
+        if self._finale_at is None or start >= self._finale_at:
+            return False
+        return self._finale_at - (start + duration) < self.min_beat_dur
+
+    def _revalidate_finale(self):
+        """Fixes a queued segment that drift has moved into or out of the finale window.
+
+        Segments end at the first beat tick past their planned end, so the plan runs a
+        little late and a segment planned as ordinary can become the run-in (or the other
+        way round). Corrected here, while it is still queued and nothing of it is on
+        screen, rather than as it starts - see _begin_next_segment.
+        """
+        if self._finale_at is None:
+            return
+        start = self._current_segment_end
+        kept = deque()
+        for segment in self._plan:
+            if self._covers_finale(start, segment.duration_sec) != (segment.kind == "finale"):
+                self._plan = kept
+                self._plan_end_time = start
+                return  # _extend_plan() refills from here with the rule applied
+            kept.append(segment)
+            start += segment.duration_sec
+
+    def _apply_finale_rule(self, candidate, start):
+        """Turns the segment leading into the finale moment into the finale itself.
+
+        A segment becomes the finale when less than min_beat_dur would be left between its
+        end and the finale moment - which covers both the segment that already spans the
+        moment and the one that stops just short of it. It is then stretched to run
+        min_beat_dur past the moment, so the fast rhythm is still going when the climax is
+        announced rather than handing over to a fresh (possibly slow, possibly silent)
+        segment at exactly the wrong instant.
+
+        Extending rather than clipping is deliberate: clipping would leave a stub too short
+        to be a rhythm at all right where the rhythm matters most.
+        """
+        if not self._covers_finale(start, candidate.duration_sec):
+            return candidate
+        _window_min, window_max = self._current_freq_range(at_time=start)
+        return Segment(
+            "finale",
+            max(candidate.duration_sec, self._finale_at + self.min_beat_dur - start),
+            window_max,
+            random.choice(self._usable_pattern_names()),
+            candidate.index,
+        )
+
+    def _begin_next_segment(self):
+        """Puts the next planned segment on the air and tops the plan back up."""
+        if not self._plan:
+            self._extend_plan()
+        segment = self._plan.popleft()
+        now = time.time()
+        # Started exactly as planned, deliberately. Re-deriving it here used to re-draw its
+        # pattern and frequency, which the beat track had already painted several notes of
+        # - so the whole rhythm visibly jumped the instant the segment began. Drift is
+        # handled by revalidating what is still *queued* instead, where nothing is on
+        # screen yet.
+        self._current_segment = segment
+        self.cur_beat_start_time = now
+        self._current_segment_end = now + segment.duration_sec
+        # Re-anchor the plan clock to the real start, or the drift would accumulate across
+        # the whole session.
+        self._plan_end_time = self._current_segment_end + sum(s.duration_sec for s in self._plan)
+        self._revalidate_finale()
+        self._extend_plan()
+
+        if segment.kind == "pause":
+            self.start_pause()
+        else:
+            self._apply_beat_segment(segment)
+        self.segment_started_event.emit(segment.index)
+
+    # --- running the beat ---
+
     def start_beat(self):
         self.session_start_time = time.time()
         self.ramp_target_duration = random.uniform(self.min_ramp_duration, self.max_ramp_duration)
-        self.reset_beat_timer()
-
+        self._plan.clear()
+        self._next_index = 0
+        self._finale_at = None
+        self._current_segment = None
+        self._holding = False
+        self._plan_end_time = self.session_start_time
+        # Before the plan is built, so a listener still gets to place a finale into it.
+        self.session_planned_event.emit(self.session_start_time)
+        self._extend_plan()
+        self._begin_next_segment()
 
     def reset_beat_timer(self):
-        if self.cur_freq == 0:  # Choose a frequency. None has been selected yet. This references 1-1-1-1 beats
-            self.recalc_beat()
-        if self.target_beat_dur < time.time() - self.cur_beat_start_time:
-            if random.uniform(0, 1) < self.beat_change_chance:
-                # The current beat reached its target duration. Check if a new one should be selected.
-                if random.uniform(0, 1) < self.pause_chance:
-                    # Pauses can happen at this time.
-                    self.start_pause()
-                    return
-                self.recalc_beat()
+        """Schedules the next note, moving on to the next segment when this one is spent."""
+        if self._current_segment is None:
+            self._begin_next_segment()
+            return
+        if not self._holding and time.time() >= self._current_segment_end:
+            self._begin_next_segment()
+            return
+        self._schedule_next_note()
+
+    def _schedule_next_note(self):
         self.beat_pattern_mutex.lock()
         try:
             base_step_sec = self._base_step_sec()
@@ -208,54 +437,160 @@ class BeatHandler(QObject):
             return self._pattern_audible_count / (self.cur_freq * self._pattern_inv_sum)
         return 1 / self.cur_freq  # defensive fallback, no current pattern lacks a beat
 
+    @staticmethod
+    def _base_step_sec_for(pattern, freq):
+        """_base_step_sec() for a pattern that is not the running one - what upcoming_beats()
+        needs to predict into a segment that has not started yet."""
+        audible = sum(1 for v in pattern if v > 0)
+        inv_sum = sum(1 / abs(v) for v in pattern)
+        if audible > 0 and inv_sum > 0:
+            return audible / (freq * inv_sum)
+        return 1 / freq
+
     def upcoming_beats(self, horizon_sec):
         """Predicted steps landing within the next horizon_sec, as (seconds_from_now,
         is_audible, weight) tuples - what the animated beat track paints each frame.
 
-        Read-only: never touches current_beat_position or the timers. Only valid until
-        the next recalc_beat()/pause, both of which are random rolls in reset_beat_timer()
-        and so genuinely unpredictable - consumers resync on beat_change_event instead.
+        Read-only: never touches current_beat_position or the timers. Predicts across
+        segment boundaries, because the next segments already exist in the plan before
+        they start - a pattern change is no longer an unknowable reset. It also predicts
+        *through* a running pause, so the notes of the segment waiting behind it fly in
+        towards the moment the beat returns instead of appearing on top of it. A pause
+        still ends the prediction when it is the segment being predicted into: there is
+        nothing to draw across it.
 
-        Mirrors reset_beat_timer()'s indexing exactly: the note landing at t takes its
+        The exact boundary can still shift by up to one note, since a segment only ends at
+        the first tick after its planned end. That self-corrects on the next frame.
+
+        Mirrors _schedule_next_note()'s indexing exactly: the note landing at t takes its
         audibility from pattern[pos], and the gap to the next note from that same index.
         """
-        remaining_ms = self.beat_meter_timer.remainingTime()
-        if remaining_ms < 0 or not self.beat_meter_timer.isActive():
-            return []  # stopped, or mid-pause (start_pause stops this timer)
-        if self.cur_freq <= 0:
-            return []
-
         self.beat_pattern_mutex.lock()
         try:
-            pattern = self.current_beat_pattern
-            if not pattern:
+            start = self._lookahead_start()
+            if start is None:
                 return []
-            base_step_sec = self._base_step_sec()
-            position = self.current_beat_position
+            offset, pattern, position, base_step_sec, segment_ends_in, queued = start
             upcoming = []
-            offset = remaining_ms / 1000
             while offset <= horizon_sec and len(upcoming) < self.MAX_LOOKAHEAD_NOTES:
                 step = pattern[position]
                 upcoming.append((offset, step > 0, abs(step)))
-                offset += base_step_sec / abs(step)
-                position = (position + 1) % len(pattern)
+                if offset < segment_ends_in:
+                    offset += base_step_sec / abs(step)
+                    position = (position + 1) % len(pattern)
+                    continue
+                # This note is the one that ends the segment: beat() plays it off the
+                # pattern still on the air (hence appending it first) and only then moves
+                # on, so the gap after it already belongs to the next segment.
+                if not queued:
+                    break  # predicted past the plan - nothing further is decided yet
+                segment = queued.popleft()
+                if segment.kind == "pause":
+                    break  # nothing to draw through a pause
+                next_pattern = self.available_beat_patterns.get(segment.pattern_name)
+                if not next_pattern:
+                    break  # pattern deleted since it was planned
+                pattern = next_pattern
+                segment_ends_in = offset + segment.duration_sec
+                base_step_sec = self._base_step_sec_for(pattern, segment.freq)
+                # _apply_beat_segment starts the new segment at index 0, whose weight sets
+                # the gap to its first note; that note is then read at index 1.
+                offset += base_step_sec / abs(pattern[0])
+                position = 1 % len(pattern)
             return upcoming
         finally:
             self.beat_pattern_mutex.unlock()
 
-    def is_ramp_complete(self):
-        progress = self._ramp_progress()
-        return progress is not None and progress >= 1.0
+    def _pause_remaining(self):
+        """Seconds until the beat comes back, or 0 when no pause is running.
 
-    def _ramp_progress(self):
+        cur_pause_dur counts whole seconds and the timer ticks them down one at a time, so
+        the sub-second part has to come from the timer itself.
+        """
+        if not self.is_paused():
+            return 0.0
+        whole_seconds_left = max(0, (self.cur_pause_dur or 0) - 1)
+        return whole_seconds_left + max(0, self.beat_meter_pause_timer.remainingTime()) / 1000
+
+    def _lookahead_start(self):
+        """Where upcoming_beats() begins: (offset, pattern, position, base_step_sec,
+        segment_ends_in, queued), or None when there is nothing to predict.
+
+        Two ways in. Mid-beat it carries on from the note already scheduled. Mid-pause
+        nothing is in flight, but the segment waiting behind the pause is already planned,
+        so the prediction starts from the moment the beat returns - which is what keeps the
+        notes from popping into existence halfway down the track when it does.
+        """
+        queued = deque(self._plan)
+        if self.is_paused():
+            if not queued:
+                return None
+            segment = queued.popleft()
+            if segment.kind == "pause":
+                return None
+            pattern = self.available_beat_patterns.get(segment.pattern_name)
+            if not pattern or not segment.freq:
+                return None
+            base_step_sec = self._base_step_sec_for(pattern, segment.freq)
+            resumes_in = self._pause_remaining()
+            # Same indexing as a segment boundary: _apply_beat_segment starts at index 0,
+            # whose weight sets the gap to the first note, which is then read at index 1.
+            return (
+                resumes_in + base_step_sec / abs(pattern[0]),
+                pattern,
+                1 % len(pattern),
+                base_step_sec,
+                resumes_in + segment.duration_sec,
+                queued,
+            )
+
+        remaining_ms = self.beat_meter_timer.remainingTime()
+        if remaining_ms < 0 or not self.beat_meter_timer.isActive():
+            return None  # stopped
+        if self.cur_freq <= 0 or not self.current_beat_pattern:
+            return None
+        if self._current_segment is None or self._holding:
+            # A held segment runs past its planned end and has nothing queued behind it -
+            # treating that end as a boundary would cut the prediction off at the first
+            # note and leave the track all but empty for the rest of the session.
+            segment_ends_in = float("inf")
+        else:
+            segment_ends_in = self._current_segment_end - time.time()
+        return (
+            remaining_ms / 1000,
+            self.current_beat_pattern,
+            self.current_beat_position,
+            self._base_step_sec(),
+            segment_ends_in,
+            queued,
+        )
+
+    @property
+    def ramp_complete_at(self):
+        """Wall clock at which the difficulty ramp tops out, or None when there is no ramp
+        to wait for - either because the session has not started or because ramping is
+        switched off. Returning None for the latter is the point: it is what stops the Ramp
+        duration sliders from influencing anything while their own checkbox is unticked.
+        """
+        if not self.ramping_active or self.ramp_target_duration <= 0:
+            return None
+        return self.session_start_time + self.ramp_target_duration
+
+    def _ramp_progress(self, at_time=None):
+        """Ramp progress at `at_time` (default: now).
+
+        The planner passes a segment's *planned start*, which is what turns ramping from a
+        corridor sampled whenever the dice happened to fall into a curve the plan walks
+        along.
+        """
         if self.ramp_target_duration <= 0:
-            return None  # ramping not initialized (e.g. recalc_beat() called before start_beat())
-        elapsed = time.time() - self.session_start_time
+            return None  # ramping not initialized (start_beat() has not run yet)
+        elapsed = (time.time() if at_time is None else at_time) - self.session_start_time
         return min(1.0, max(0.0, elapsed / self.ramp_target_duration))
 
-    def _current_freq_range(self):
+    def _current_freq_range(self, at_time=None):
         corridor = self.max_beat_freq - self.min_beat_freq
-        progress = self._ramp_progress()
+        progress = self._ramp_progress(at_time)
         if not self.ramping_active or progress is None or corridor <= 0:
             return self.min_beat_freq, self.max_beat_freq
         width = corridor * self.ramp_window_width
@@ -283,16 +618,23 @@ class BeatHandler(QObject):
         usable = [name for name in selected if name in self.available_beat_patterns]
         return usable or list(self.BEAT_PATTERNS_MAP.keys())
 
-    def recalc_beat(self):
-        window_min, window_max = self._current_freq_range()
-        self.cur_freq = random.uniform(window_min, window_max)
-        self.cur_beat_start_time = time.time()
-        self.target_beat_dur = random.uniform(self.min_beat_dur, self.max_beat_dur)
+    def _apply_beat_segment(self, segment):
+        """Puts a planned beat segment on the air. Rolls nothing - the segment already
+        holds every value that used to be drawn here."""
+        self.cur_freq = segment.freq
+        self.target_beat_dur = segment.duration_sec
         self.beat_pattern_mutex.lock()
         try:
             self.current_beat_position = 0
-            self.current_beat_pattern_name = random.choice(self._usable_pattern_names())
-            self.current_beat_pattern = self.available_beat_patterns[self.current_beat_pattern_name]
+            self.current_beat_pattern_name = segment.pattern_name
+            pattern = self.available_beat_patterns.get(self.current_beat_pattern_name)
+            if pattern is None:
+                # The pattern was deleted in the editor after this segment was planned.
+                # Planning ahead is what makes that possible at all, and a KeyError here
+                # would come straight out of a Qt slot and take the process with it.
+                self.current_beat_pattern_name = random.choice(self._usable_pattern_names())
+                pattern = self.available_beat_patterns[self.current_beat_pattern_name]
+            self.current_beat_pattern = pattern
             self._pattern_audible_count = sum(1 for v in self.current_beat_pattern if v > 0)
             self._pattern_inv_sum = sum(1 / abs(v) for v in self.current_beat_pattern)
         finally:
@@ -303,6 +645,7 @@ class BeatHandler(QObject):
         self.just_changed_beat = True
         self.beat_changed_counter = 5
         self.beat_change_event.emit(self.cur_freq, self.current_beat_pattern_name)
+        self._schedule_next_note()
 
     def init_beat_sound(self, file_path):
         self.sound_effect = QSoundEffect()
@@ -351,11 +694,13 @@ class BeatHandler(QObject):
 
     def start_pause(self):
         self.beat_meter_timer.stop()
-        # sorted() because randint - unlike the uniform() calls everywhere else - raises on an
-        # inverted range. SettingsDialog refuses to save min above max, but a registry written
-        # by an older build still can, and that must not kill a running session.
-        low, high = sorted((self.min_pause_dur, self.max_pause_dur))
-        self.cur_pause_dur = random.randint(low, high)
+        # Length comes from the planned segment - see _plan_one_segment for the guard
+        # against an inverted min/max range written by an older build.
+        if self._current_segment is not None and self._current_segment.kind == "pause":
+            self.cur_pause_dur = int(self._current_segment.duration_sec)
+        else:
+            low, high = sorted((self.min_pause_dur, self.max_pause_dur))
+            self.cur_pause_dur = random.randint(low, high)
         self.beat_meter_pause_timer.start(1000)
         self.beat_meter_update_event.emit(f"Pause: {self.cur_pause_dur} seconds left.", "pause")
         self.beat_paused_event.emit()
@@ -366,9 +711,8 @@ class BeatHandler(QObject):
         self.cur_pause_dur -= 1
         if self.cur_pause_dur <= 0:
             self.beat_resumed_event.emit()
-            self.cur_freq = 0
-            self.reset_beat_timer()
             self.beat_meter_pause_timer.stop()
+            self._begin_next_segment()
             return
         self.beat_meter_pause_timer.start(1000)
         self.beat_meter_update_event.emit(f"Pause: {self.cur_pause_dur} seconds left.", "pause")
@@ -376,6 +720,11 @@ class BeatHandler(QObject):
     def stop(self):
         self.beat_meter_timer.stop()
         self.beat_meter_pause_timer.stop()
+        self._plan.clear()
+        self._current_segment = None
+        self._finale_at = None
+        self._holding = False
+        self.cur_freq = 0
         self.beat_meter_update_event.emit("Strokemeter appears here.", "idle")
 
     def register_beat_pause_events(self, pause_start_event, pause_resume_event):
@@ -422,6 +771,9 @@ class BeatHandler(QObject):
         if name in self.selected_beat_patterns:
             self.selected_beat_patterns.remove(name)
         self._save_custom_patterns()
+        # Queued segments may still name it - drop them rather than let the fallback in
+        # _apply_beat_segment quietly substitute something else later.
+        self.replan_from_next_segment()
 
     def clear_custom_patterns(self):
         """Forgets every user-authored pattern. The built-ins are untouched - this is a
@@ -436,6 +788,7 @@ class BeatHandler(QObject):
             self.data_store.delete("custom_patterns")
         if self.settings:
             self.settings.setValue("BeatHandler/selected_beat_patterns", self.selected_beat_patterns)
+        self.replan_from_next_segment()
 
     def _load_custom_patterns(self) -> dict:
         if not self.data_store:

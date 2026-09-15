@@ -19,15 +19,20 @@ CAPTION_MARGIN = 10
 CAPTION_PADDING = 4
 TRACK_INSET = 4
 
-# A pattern change re-seeds the whole prediction, so every note on screen jumps at once.
-# A sweep of light across the track plus the notes fading back in covers that reset - a
-# hard cut would just read as a glitch.
+# A sweep of light runs across the track when the rhythm changes. It used to do a job -
+# the prediction was re-seeded at every change, every note jumped at once, and the notes
+# were faded back in to cover the pop. The session plan removed the pop: upcoming_beats()
+# already knows the next segment, so the notes flow straight through the change and are
+# never faded. The sweep stays purely as an announcement that the rhythm just changed.
 CHANGE_FLASH_MS = 420
 SWEEP_WIDTH_RATIO = 0.18
 
-# Kinds with nothing in flight to draw - upcoming_beats() is empty for both anyway
-# (start_pause stops the beat timer), so the track shows just its caption.
-_NOTELESS_KINDS = ("idle", "pause")
+# Only the idle track has nothing to draw - upcoming_beats() is empty there anyway, so it
+# shows just its caption. "pause" is deliberately NOT here: the segment waiting behind the
+# pause is already planned, so its notes fly in across the last couple of seconds of the
+# countdown. Suppressing them meant the track sat empty and then had notes appear halfway
+# down it the instant the beat came back.
+_NOTELESS_KINDS = ("idle",)
 
 # (track background, caption color) per beat_meter_update_event kind. The track keeps a
 # stable backdrop and only the accents move - unlike the old QLabel, which flashed its
@@ -52,8 +57,9 @@ class BeatTrackWidget(QWidget):
 
     Rendering is stateless - every frame asks BeatHandler.upcoming_beats() fresh rather
     than maintaining a spawned-note list. Nothing can drift out of sync, and a mid-flight
-    pattern change (recalc_beat picks a new random pattern, so the prediction beyond it
-    was never knowable) simply corrects itself on the next frame.
+    pattern change simply corrects itself on the next frame. Since the session is planned
+    ahead the prediction now runs past the next pattern change too, so the track shows the
+    rhythm genuinely arriving rather than stopping at the edge of what is known.
 
     The only thing it needs from the handler is upcoming_beats(horizon_sec).
     """
@@ -117,10 +123,6 @@ class BeatTrackWidget(QWidget):
             self._change_started_at = None
             return None
         return elapsed / (CHANGE_FLASH_MS / 1000)
-
-    def _note_opacity(self) -> float:
-        progress = self._change_progress()
-        return 1.0 if progress is None else progress
 
     # --- geometry ---
 
@@ -212,7 +214,6 @@ class BeatTrackWidget(QWidget):
         center_y = self._note_center_y()
         radius = self._note_radius()
         painter.save()
-        painter.setOpacity(self._note_opacity())
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(theme.ACCENT))
         for seconds_until, _weight in notes:

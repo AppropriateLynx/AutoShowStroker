@@ -72,9 +72,12 @@ def test_caption_band_is_zero_without_a_caption(widget):
     assert widget._caption_height() == 0
 
 
-def test_notes_hidden_while_paused(widget):
+def test_notes_still_drawn_while_paused(widget):
+    """The segment behind the pause is already planned, so its notes fly in across the
+    last seconds of the countdown instead of appearing halfway down the track the moment
+    the beat comes back."""
     widget.set_status("Pause: 7 seconds left.", "pause")
-    assert widget._notes_visible() is False
+    assert widget._notes_visible() is True
 
 
 def test_notes_hidden_while_idle(widget):
@@ -145,10 +148,10 @@ def test_silent_steps_are_not_drawn(widget, handler):
     assert [seconds for seconds, _weight in visible] == [0.0, 1.0]
 
 
-def test_visible_notes_empty_while_paused(widget, handler):
-    handler.upcoming = [(0.0, True, 1)]
+def test_visible_notes_are_shown_while_paused(widget, handler):
+    handler.upcoming = [(2.1, True, 1)]
     widget.set_status("Pause: 3 seconds left.", "pause")
-    assert widget._visible_notes() == []
+    assert widget._visible_notes() == [(2.1, 1)]
 
 
 # --- beat-change transition ---
@@ -177,14 +180,20 @@ def test_change_transition_expires(widget, qtbot):
     assert widget._change_progress() is None
 
 
-def test_notes_fade_in_during_the_change_transition(widget):
-    # Fading the notes in is what actually hides the resync: when recalc_beat picks a new
-    # random pattern the predicted positions jump, and a hard cut would show that pop.
-    assert widget._note_opacity() == 1.0
+def test_the_notes_keep_flowing_through_a_change(handler, qtbot):
+    """The notes used to fade back in over the sweep, to cover the prediction being
+    re-seeded at every change. The plan already holds the next segment, so there is
+    nothing to cover - the notes must stay put and fully drawn through the sweep."""
+    handler.upcoming = [(0.0, True, 1), (0.6, True, 2)]
+    widget = BeatTrackWidget(handler)
+    qtbot.addWidget(widget)
+    widget.resize(400, 80)
+    before = widget._visible_notes()
 
     widget.pulse_change()
 
-    assert widget._note_opacity() < 1.0
+    assert widget._change_progress() is not None  # the sweep is running
+    assert widget._visible_notes() == before
 
 
 def test_painting_during_a_change_transition_does_not_raise(qtbot, handler):

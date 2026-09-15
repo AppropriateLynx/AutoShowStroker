@@ -175,16 +175,32 @@ def test_prune_removes_the_superseded_loudness_key(store, settings):
     assert settings.value("GoonerApp/loudness") is None
 
 
+def test_prune_removes_the_chances_the_session_plan_replaced(store, settings):
+    settings.setValue("BeatHandler/beat_change_chance", 0.1)
+    settings.setValue("ClimaxHandler/climax_chance", 0.15)
+
+    store.prune_legacy_registry_keys(settings)
+
+    assert settings.value("BeatHandler/beat_change_chance") is None
+    assert settings.value("ClimaxHandler/climax_chance") is None
+
+
 def test_prune_keeps_live_settings(store, settings):
     settings.setValue("GoonerApp/vid_loudness", 0.5)
     settings.setValue("GoonerApp/last_seen_version", "0.7.1")
     settings.setValue("BeatHandler/min_beat_freq", 2.0)
+    settings.setValue("BeatHandler/pause_chance", 0.05)
+    settings.setValue("ClimaxHandler/fake_climax_chance", 0.05)
 
     store.prune_legacy_registry_keys(settings)
 
     assert float(settings.value("GoonerApp/vid_loudness")) == 0.5
     assert settings.value("GoonerApp/last_seen_version") == "0.7.1"
     assert float(settings.value("BeatHandler/min_beat_freq")) == 2.0
+    # The two chances that survived the session plan - they say what the *next* segment
+    # does, which the plan buffer decides ahead of time anyway.
+    assert float(settings.value("BeatHandler/pause_chance")) == 0.05
+    assert float(settings.value("ClimaxHandler/fake_climax_chance")) == 0.05
 
 
 def test_prune_is_safe_when_nothing_is_there(store, settings):
