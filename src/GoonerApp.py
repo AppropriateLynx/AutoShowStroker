@@ -30,6 +30,7 @@ from src.HelpDialog import HelpDialog
 from src.MediaFolderPickerDialog import MediaFolderPickerDialog
 from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
+from src.SessionRecorder import SessionRecorder
 from src.SettingsDialog import SettingsDialog
 from src.StatisticsDialog import StatisticsDialog
 from src.UpdateChecker import UpdateChecker
@@ -55,6 +56,7 @@ class GoonerApp(QMainWindow):
     session_ended_event = pyqtSignal()
     media_repeated_event = pyqtSignal()
     media_skipped_event = pyqtSignal()
+    media_shown_event = pyqtSignal(str)
 
     # Single source of truth: __init__ reads these as its fallbacks, and the
     # SettingsDialog "Reset to defaults" buttons read the same dict.
@@ -350,6 +352,9 @@ class GoonerApp(QMainWindow):
         self.callout_handler = CalloutHandler(self.settings, data_store=self.data_store)
 
         self.score_tracker = ScoreTracker(settings=self.settings, data_store=self.data_store)
+        # Keeps the running session's timeline for the Session Explorer. In memory only -
+        # it holds media paths, which never go near the data directory. See SessionRecorder.
+        self.session_recorder = SessionRecorder()
         self._session_start_bests = {}
 
         self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
@@ -434,12 +439,19 @@ class GoonerApp(QMainWindow):
         self.beat_handler.session_planned_event.connect(self.climax_handler.on_session_planned)
         self.beat_handler.plan_extended_event.connect(self.climax_handler.on_plan_extended)
         self.beat_handler.segment_started_event.connect(self.climax_handler.on_segment_started)
+
+        # What actually played, in order, for the Session Explorer.
+        self.beat_handler.segment_started_event.connect(self.session_recorder.segment_started)
+        self.media_shown_event.connect(self.session_recorder.media_shown)
+        self.climax_handler.register_outcome_event(self.session_recorder.climax_recorded)
+        self.climax_handler.register_fake_climax_event(self.session_recorder.fake_climax_recorded)
         self.climax_handler.register_outcome_event(self.score_tracker.climax_decided)
         self.climax_handler.register_outcome_event(self._on_climax_outcome)
         self.climax_handler.register_status_event(self._update_climax_status_label)
         self.climax_handler.register_fake_climax_event(self.score_tracker.fake_climax_triggered)
 
         self.register_start_event(self.score_tracker.session_started)
+        self.register_start_event(self.session_recorder.session_started)
         self.register_start_event(self.callout_handler.session_started)
         self.register_start_event(self.climax_handler.session_started)
         self.register_start_event(self._start_record_chase)
@@ -723,6 +735,9 @@ class GoonerApp(QMainWindow):
         if not self.playlist:
             return
         file_path = str(self.playlist[self.current_index])
+        # Never logged, only recorded in memory - a media path is exactly what the privacy
+        # rules keep out of the log and the data directory.
+        self.media_shown_event.emit(file_path)
         self.load_media(file_path)
 
     def load_media(self, file_path):
@@ -807,6 +822,7 @@ class GoonerApp(QMainWindow):
             format_clock(self.score_tracker.live_metrics().get("total_dur_sec", 0)),
             show_statistics,
         )
+        self.session_recorder.session_ended()
         self.session_ended_event.emit()
         if show_statistics:
             self.show_statistics()
@@ -941,6 +957,7 @@ class GoonerApp(QMainWindow):
         dialog = StatisticsDialog(
             self.score_tracker.deliver_infos(),
             new_records=self.score_tracker.last_session_new_records,
+            timeline=self.session_recorder.timeline(),
             parent=self,
         )
         dialog.exec()

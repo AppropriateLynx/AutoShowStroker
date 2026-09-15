@@ -81,12 +81,14 @@ def test_plan_extended_event_carries_the_new_segments(handler, qtbot):
     assert len(added) == BeatHandler.PLAN_BUFFER_SEGMENTS
 
 
-def test_segment_started_event_reports_the_index(handler, qtbot):
+def test_segment_started_event_carries_the_segment(handler, qtbot):
+    """The whole Segment, not just its index - a consumer recording what actually played
+    would otherwise have to reach back into the handler for the rest."""
     pin(handler)
     handler.start_beat()
     with qtbot.waitSignal(handler.segment_started_event, timeout=1000) as blocker:
         handler._begin_next_segment()
-    assert blocker.args == [handler.current_segment.index]
+    assert blocker.args == [handler.current_segment]
 
 
 def test_session_planned_event_reports_when_the_session_started(handler, qtbot, monkeypatch):

@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
     QLabel,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -14,7 +15,7 @@ from src.ScoreTracker import ScoreTracker
 
 
 class StatisticsDialog(QDialog):
-    def __init__(self, stats_data: dict, new_records: dict | None = None, parent=None):
+    def __init__(self, stats_data: dict, new_records: dict | None = None, timeline=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Session Statistics")
         self.setModal(True)
@@ -52,11 +53,39 @@ class StatisticsDialog(QDialog):
             main_layout.addWidget(card)
         main_layout.addWidget(self.stats_table)
 
+        # Added before _populate_table() below, which freezes the dialog size - a button
+        # appended afterwards would sit outside it and never be seen.
+        self.explorer_button = self._build_explorer_button(timeline)
+        if self.explorer_button is not None:
+            main_layout.addWidget(self.explorer_button)
+
         # Populated last, once every widget above is already in the layout - _populate_table
         # locks the dialog's size to its current content (adjustSize + setFixedSize), so
         # anything added afterward would never actually become visible.
         self._populate_table(stats_data)
         self._gen_conc_text(stats_data)
+
+    def _build_explorer_button(self, timeline):
+        """The way into the Session Explorer, or None when there is nothing to explore.
+
+        A session stopped before the beat ever started has no segments, and an explorer
+        opening on an empty timeline is worse than no button at all.
+        """
+        if not timeline or not timeline.get("segments"):
+            return None
+        button = QPushButton("Session Explorer")
+        button.setToolTip("Scroll back through this session - every rhythm, and what was on screen during it")
+        button.clicked.connect(lambda: self._open_explorer(timeline))
+        return button
+
+    def _open_explorer(self, timeline):
+        # Imported here rather than at module scope: the explorer pulls in the video
+        # thumbnail machinery, and most sessions close this dialog without opening it.
+        from src.SessionExplorerDialog import SessionExplorerDialog
+
+        dialog = SessionExplorerDialog(timeline, parent=self)
+        dialog.exec()
+        dialog.deleteLater()
 
     def _build_record_cards(self, stats_data: dict, new_records: dict) -> list:
         return [

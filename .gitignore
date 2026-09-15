@@ -10,3 +10,5 @@ dist/
 CLAUDE.local.md
 TODO.md
 Road-to-1.0.md
+# Local test media - never belongs in the repo (the folder name says so).
+files_for_testing_DO_NOT_PUSH/

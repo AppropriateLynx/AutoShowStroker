@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src import media_kinds, theme
+from src import media_kinds, theme, video_thumbnails
 from src.applog import get_logger
 from src.thumbnail_sampling import compute_thumbnail_grid, sample_thumbnails_with_video_cap
 
@@ -66,7 +66,9 @@ VIDEO_GRAB_BUDGET_S = 3.0
 # Poll step inside _wait_for's nested event loop. Fine-grained enough not to add latency,
 # coarse enough that waiting costs ~100 wakeups/sec instead of a busy spin.
 WAIT_POLL_INTERVAL_MS = 10
-VIDEO_BLACK_FRAME_BRIGHTNESS_THRESHOLD = 20
+# Lives in src/video_thumbnails.py now, alongside the async grabber the Session Explorer
+# uses - re-exported here so this file's own references keep reading naturally.
+VIDEO_BLACK_FRAME_BRIGHTNESS_THRESHOLD = video_thumbnails.VIDEO_BLACK_FRAME_BRIGHTNESS_THRESHOLD
 
 
 class MediaFolderPickerDialog(QDialog):
@@ -538,24 +540,6 @@ class MediaFolderPickerDialog(QDialog):
             return VIDEO_GRAB_BUDGET_S
         return self._video_budget_deadline - time.monotonic()
 
-    @staticmethod
-    def _average_brightness(image):
-        """Cheap average-brightness check on a downscaled copy - used to catch black
-        leader frames/fades so the static thumbnail doesn't randomly land on one."""
-        sample = image.scaled(16, 16)
-        total = 0
-        count = 0
-        for y in range(sample.height()):
-            for x in range(sample.width()):
-                color = sample.pixelColor(x, y)
-                total += (color.red() + color.green() + color.blue()) / 3
-                count += 1
-        return total / count if count > 0 else 0
-
-    @classmethod
-    def _is_mostly_black(cls, image, threshold=VIDEO_BLACK_FRAME_BRIGHTNESS_THRESHOLD):
-        return cls._average_brightness(image) < threshold
-
     def _grab_video_frame(self, path):
         """Synchronous frame grab via QMediaPlayer+QVideoSink - deliberately seeks to a
         random position in the middle portion of the clip (never frame 0, which is prone
@@ -619,7 +603,7 @@ class MediaFolderPickerDialog(QDialog):
                 # keep the least-black frame seen across attempts, not just the first
                 # successful grab - a later attempt can be dark-but-less-dark than an
                 # earlier one without ever passing the "not mostly black" threshold
-                brightness = self._average_brightness(image)
+                brightness = video_thumbnails.average_brightness(image)
                 if brightness > best_brightness:
                     best_image = image
                     best_brightness = brightness

@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import QApplication, QDialog, QFileDialog, QLabel
 
 from src import media_kinds
@@ -540,46 +539,6 @@ def test_video_cap_enforced_after_growing_via_resize(app, qtbot, monkeypatch, tm
 
     video_count = sum(1 for p in dialog._current_thumbnails if dialog._is_video(p))
     assert video_count <= 4
-
-
-# --- black-frame detection (real QImage objects - no multimedia backend involved) ---
-
-
-def _solid_image(color):
-    image = QImage(16, 16, QImage.Format.Format_RGB32)
-    image.fill(color)
-    return image
-
-
-def test_is_mostly_black_detects_a_black_frame():
-    assert MediaFolderPickerDialog._is_mostly_black(_solid_image(0x000000)) is True
-
-
-def test_is_mostly_black_rejects_a_bright_frame():
-    assert MediaFolderPickerDialog._is_mostly_black(_solid_image(0xFF00BF)) is False
-
-
-def test_is_mostly_black_respects_custom_threshold():
-    dark_gray = _solid_image(0x101010)  # average channel value 16
-    assert MediaFolderPickerDialog._is_mostly_black(dark_gray, threshold=10) is False
-    assert MediaFolderPickerDialog._is_mostly_black(dark_gray, threshold=20) is True
-
-
-def test_average_brightness_orders_dark_to_bright():
-    black = _solid_image(0x000000)
-    dark_gray = _solid_image(0x101010)
-    bright = _solid_image(0xFF00BF)
-
-    assert MediaFolderPickerDialog._average_brightness(black) < MediaFolderPickerDialog._average_brightness(dark_gray)
-    assert MediaFolderPickerDialog._average_brightness(dark_gray) < MediaFolderPickerDialog._average_brightness(bright)
-
-
-# --- reentrancy guard ---
-#
-# _grab_video_frame blocks for up to several seconds pumping app.processEvents(), which can
-# let a pending resize-debounce timeout (or a button click) dispatch *while* a rebuild is
-# still mid-flight, mutating the same _thumbnail_cells/_current_thumbnails lists. These tests
-# simulate "already mid-rebuild" directly rather than trying to time a real reentrant call.
 
 
 def test_refresh_thumbnails_is_noop_while_already_rebuilding(app, qtbot, tmp_path):

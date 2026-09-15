@@ -785,7 +785,7 @@ def test_show_statistics_passes_new_records(app, monkeypatch):
     captured = {}
 
     class FakeDialog(_FakeDialogBase):
-        def __init__(self, stats_data, new_records=None, parent=None):
+        def __init__(self, stats_data, new_records=None, timeline=None, parent=None):
             captured["new_records"] = new_records
 
         def exec(self):
@@ -1393,3 +1393,68 @@ def test_a_saved_diagnostic_log_level_is_restored(qtbot, qsettings, data_store):
     qtbot.addWidget(window)
 
     assert window.diagnostic_log_level == "ERROR"
+
+
+# --- session recording (feeds the Session Explorer) ---
+
+
+def test_showing_a_medium_is_recorded(app, tmp_path):
+    img = tmp_path / "a.png"
+    img.write_bytes(b"")
+    app.playlist = [img]
+    app.start()
+
+    paths = [path for _at, path in app.session_recorder._media]
+
+    assert str(img) in paths
+
+
+def test_starting_a_segment_is_recorded(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    assert app.session_recorder._segments
+    assert app.session_recorder._segments[0][1] is app.beat_handler.current_segment
+
+
+def test_the_recording_is_reset_for_each_session(app, tmp_path):
+    app.playlist = [tmp_path / "a.png", tmp_path / "b.png"]
+    app.start()
+    app.show_next()
+    app._end_session(show_statistics=False)
+    assert len(app.session_recorder._media) >= 2
+
+    app.start()
+
+    # Only what the fresh session has shown so far - the previous one is gone.
+    assert len(app.session_recorder._media) == 1
+
+
+def test_the_timeline_reaches_the_statistics_dialog(app, tmp_path, monkeypatch):
+    captured = {}
+
+    class FakeStatisticsDialog:
+        def __init__(self, stats_data, new_records=None, timeline=None, parent=None):
+            captured["timeline"] = timeline
+
+        def exec(self):
+            return None
+
+        def deleteLater(self):
+            return None
+
+    monkeypatch.setattr("src.GoonerApp.StatisticsDialog", FakeStatisticsDialog)
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app._end_session(show_statistics=True)
+
+    assert captured["timeline"]["segments"]
+
+
+def test_a_fake_climax_is_recorded_for_the_timeline(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app.climax_handler.fake_climax_triggered_event.emit()
+
+    assert app.session_recorder.timeline()["fake_climaxes"]

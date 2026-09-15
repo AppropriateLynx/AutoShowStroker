@@ -238,6 +238,28 @@ CHANGELOG = {
         "</ul>"
         "She has already decided. You just do not know it yet."
     ),
+    "0.12.0": (
+        "Every session you have ever finished is gone the moment you look away. Not this one."
+        "<ul>"
+        "<li><b>Scrub back through what she just did to you.</b> A new Session Explorer "
+        "button on your end-of-session stats opens the whole thing as a seek bar - drag "
+        "along it and watch it play back</li>"
+        "<li><b>See what you were looking at.</b> Wherever you stop, the picture that was "
+        "on screen at that exact second comes back up, with the rhythm she was using on "
+        "you and how fast</li>"
+        "<li>That one you could not get enough of? Find it on the bar, hit <b>Show in "
+        "folder</b>, and it is yours. No more scrolling your whole collection hoping to "
+        "recognise it</li>"
+        "<li>The shape of the session is right there: the long slow stretches, every pause "
+        "she made you sit through, and the fast run-in marked where she finally let you</li>"
+        "<li>Videos give up a frame too, fetched quietly in the background so the bar never "
+        "stutters under your hand</li>"
+        "<li>None of it is written down. It lives only as long as the session you just "
+        "finished and never touches your disk - what you watch stays nobody else's business, "
+        "including the app's</li>"
+        "</ul>"
+        "Finish. Then go back and watch yourself lose it."
+    ),
     "0.9.0": (
         "Every corner of GoonerApp got picked apart and put back together. It takes more, "
         "breaks less, and finally tells you what it knows about you."

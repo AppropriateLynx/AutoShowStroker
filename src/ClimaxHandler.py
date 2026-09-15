@@ -191,10 +191,10 @@ class ClimaxHandler(QObject):
             if random.uniform(0, 1) < self.fake_climax_chance:
                 self._planned_fakes.add(segment.index)
 
-    def on_segment_started(self, index):
-        if index not in self._planned_fakes:
+    def on_segment_started(self, segment):
+        if segment.index not in self._planned_fakes:
             return
-        self._planned_fakes.discard(index)
+        self._planned_fakes.discard(segment.index)
         if self.climax_triggered or self._fake_climax_pending:
             return
         self._trigger_fake_climax()

@@ -14,6 +14,10 @@ SECONDARY = "#5A3D73"
 SECONDARY_HOVER = "#6E4A8C"
 SURFACE = "#3A2650"
 SURFACE_DARK = "#241730"
+# Darker than any surface: the backing for a media cell that has nothing in it yet. A video
+# thumbnail arrives asynchronously, and the cell has to read as an empty frame in the
+# meantime rather than as a hole in the card it sits on.
+SURFACE_DARKEST = "#150D1D"
 DISABLED_BG = "#3A2A4A"
 DISABLED_TEXT = "#7A6288"
 
