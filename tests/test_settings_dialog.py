@@ -212,7 +212,7 @@ def test_climax_fields_initialized_from_climax_handler(app, dialog):
     assert dialog.ruined_orgasm_active_checkbox.isChecked() == app.climax_handler.ruined_orgasm_active
     assert dialog.denied_orgasm_active_checkbox.isChecked() == app.climax_handler.denied_orgasm_active
     assert dialog.fake_climax_active_checkbox.isChecked() == app.climax_handler.fake_climax_active
-    assert dialog.settings_fields["min_climax_delay"]["object"] is app.climax_handler
+    assert dialog.settings_fields["min_climax_after"]["object"] is app.climax_handler
     assert dialog.settings_fields["ruined_orgasm_chance"]["object"] is app.climax_handler
     assert dialog.settings_fields["denied_orgasm_chance"]["object"] is app.climax_handler
     assert dialog.settings_fields["fake_climax_chance"]["object"] is app.climax_handler
@@ -243,11 +243,11 @@ def test_accept_settings_updates_climax_toggles(app, dialog):
 
 
 def test_accept_settings_applies_climax_spinbox_values(app, dialog):
-    dialog.settings_fields["min_climax_delay"]["widget"].setValue(90.0)
+    dialog.settings_fields["min_climax_after"]["widget"].setValue(90.0)
 
     dialog.accept_settings()
 
-    assert app.climax_handler.min_climax_delay == pytest.approx(90.0)
+    assert app.climax_handler.min_climax_after == pytest.approx(90.0)
 
 
 # --- reset to defaults ---
@@ -300,7 +300,7 @@ def test_beat_reset_button_resets_fields(app, dialog):
 
 
 def test_climax_reset_button_resets_fields(app, dialog):
-    dialog.settings_fields["min_climax_delay"]["widget"].setValue(990.0)
+    dialog.settings_fields["min_climax_after"]["widget"].setValue(990.0)
     dialog.climax_active_checkbox.setChecked(False)
     dialog.ruined_orgasm_active_checkbox.setChecked(True)
     dialog.denied_orgasm_active_checkbox.setChecked(True)
@@ -309,8 +309,8 @@ def test_climax_reset_button_resets_fields(app, dialog):
     dialog.climax_reset_button.click()
 
     climax_defaults = app.climax_handler.DEFAULTS
-    assert dialog.settings_fields["min_climax_delay"]["widget"].value() == pytest.approx(
-        climax_defaults["min_climax_delay"]
+    assert dialog.settings_fields["min_climax_after"]["widget"].value() == pytest.approx(
+        climax_defaults["min_climax_after"]
     )
     assert dialog.climax_active_checkbox.isChecked() == climax_defaults["climax_active"]
     assert dialog.ruined_orgasm_active_checkbox.isChecked() == climax_defaults["ruined_orgasm_active"]

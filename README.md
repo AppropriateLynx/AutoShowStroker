@@ -41,7 +41,7 @@ Local still means written somewhere, so: your data (session history, custom patt
     * **Playback:** slideshow timing for images/GIFs, minimum video duration, and beat/video volume.
     * **Beat & Rhythm:** beat frequency and duration ranges, pause duration and chance, which rhythm patterns are active (plus a Pattern Editor for creating your own), and optional difficulty ramping.
     * The session is planned a few segments ahead rather than improvised beat by beat, which is what lets the rhythm speed up into the climax instead of stumbling onto it.
-    * **Climax:** how long after the ramp the climax lands, and independent toggles/chances for ruined, denied, and fake climax outcomes.
+    * **Climax:** the earliest and latest point in the session the climax may land, and independent toggles/chances for ruined, denied, and fake climax outcomes.
     * **Callouts:** enable/disable, callout language, the tone mix, and how often callouts trigger.
 
 ## 💬 Community

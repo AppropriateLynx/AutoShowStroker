@@ -35,7 +35,7 @@ log = get_logger(__name__)
 # by GoonerApp/vid_loudness.
 LEGACY_DEAD_KEYS = (
     # Replaced by the session plan: segment length is now drawn outright, and the climax
-    # is placed as a time after the ramp rather than rolled at every beat change.
+    # is placed as a time into the session rather than rolled at every beat change.
     "BeatHandler/beat_change_chance",
     "ClimaxHandler/climax_chance",
     "TTSHandler",

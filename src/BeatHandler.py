@@ -102,10 +102,10 @@ class BeatHandler(QObject):
     # same pattern CalloutHandler/ClimaxHandler already use for their GoonerApp-owned labels.
     beat_meter_update_event = pyqtSignal(str, str)
     # The session plan, announced to whoever wants to shape or read it.
-    # session_planned_event carries the wall-clock time the difficulty ramp completes, and
-    # is emitted before the first segment is planned so a listener can still place a
-    # finale into it (see set_finale_at). plan_extended_event carries the newly planned
-    # segments; segment_started_event the index of the one now on the air.
+    # session_planned_event carries the session's start time, and is emitted before the
+    # first segment is planned so a listener can still place a finale into it (see
+    # set_finale_at). plan_extended_event carries the newly planned segments;
+    # segment_started_event the index of the one now on the air.
     session_planned_event = pyqtSignal(float)
     plan_extended_event = pyqtSignal(list)
     segment_started_event = pyqtSignal(int)
@@ -359,7 +359,7 @@ class BeatHandler(QObject):
         self._current_segment = None
         self._plan_end_time = self.session_start_time
         # Before the plan is built, so a listener still gets to place a finale into it.
-        self.session_planned_event.emit(self.session_start_time + self.ramp_target_duration)
+        self.session_planned_event.emit(self.session_start_time)
         self._extend_plan()
         self._begin_next_segment()
 
@@ -467,10 +467,6 @@ class BeatHandler(QObject):
             return upcoming
         finally:
             self.beat_pattern_mutex.unlock()
-
-    def is_ramp_complete(self):
-        progress = self._ramp_progress()
-        return progress is not None and progress >= 1.0
 
     def _ramp_progress(self, at_time=None):
         """Ramp progress at `at_time` (default: now).

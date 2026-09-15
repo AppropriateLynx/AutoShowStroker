@@ -89,13 +89,12 @@ def test_segment_started_event_reports_the_index(handler, qtbot):
     assert blocker.args == [handler.current_segment.index]
 
 
-def test_session_planned_event_reports_when_the_ramp_completes(handler, qtbot, monkeypatch):
+def test_session_planned_event_reports_when_the_session_started(handler, qtbot, monkeypatch):
     pin(handler)
-    handler.min_ramp_duration = handler.max_ramp_duration = 600.0
     freeze(monkeypatch, 1000.0)
     with qtbot.waitSignal(handler.session_planned_event, timeout=1000) as blocker:
         handler.start_beat()
-    assert blocker.args == [1600.0]
+    assert blocker.args == [1000.0]
 
 
 def test_session_planned_event_fires_before_the_plan_is_built(handler):
@@ -213,6 +212,27 @@ def test_the_finale_runs_at_the_top_of_its_frequency_window(handler, monkeypatch
 
     finale = next(s for s in handler.planned_segments if s.kind == "finale")
     assert finale.freq == 5.0
+
+
+def test_a_finale_inside_the_ramp_runs_at_the_top_of_the_window_it_is_in(handler, monkeypatch):
+    """The climax can be set to land while the ramp is still climbing. "Fast" then means
+    the fastest the ramp currently allows, not the absolute maximum - the run-in should be
+    the hardest the session has been so far, not a jump out of its own difficulty curve."""
+    freeze(monkeypatch, 1000.0)
+    handler.min_beat_freq, handler.max_beat_freq = 1.0, 5.0
+    handler.min_beat_dur = handler.max_beat_dur = 20.0
+    handler.min_ramp_duration = handler.max_ramp_duration = 1000.0  # barely started
+    handler.ramp_window_width = 0.4
+    handler.ramping_active = True
+    handler.pause_chance = 0.0
+    handler.selected_beat_patterns = ["Standard Beat"]
+    handler.start_beat()
+    handler.set_finale_at(1095.0)
+
+    finale = next(s for s in handler.planned_segments if s.kind == "finale")
+    assert finale.freq < handler.max_beat_freq
+    _window_min, window_max = handler._current_freq_range(at_time=1080.0)
+    assert finale.freq == pytest.approx(window_max, abs=0.2)
 
 
 def test_the_finale_is_never_a_pause(handler, monkeypatch):

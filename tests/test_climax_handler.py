@@ -11,9 +11,7 @@ from src.ClimaxHandler import ClimaxHandler
 
 @pytest.fixture
 def beat_handler():
-    mock = MagicMock()
-    mock.is_ramp_complete.return_value = False
-    return mock
+    return MagicMock()
 
 
 @pytest.fixture
@@ -39,8 +37,8 @@ def test_settings_override_defaults(qtbot, beat_handler, callout_handler, tmp_pa
     ini = tmp_path / "settings.ini"
     settings = QSettings(str(ini), QSettings.Format.IniFormat)
     settings.setValue("ClimaxHandler/climax_active", False)
-    settings.setValue("ClimaxHandler/min_climax_delay", 60.0)
-    settings.setValue("ClimaxHandler/max_climax_delay", 90.0)
+    settings.setValue("ClimaxHandler/min_climax_after", 60.0)
+    settings.setValue("ClimaxHandler/max_climax_after", 90.0)
     settings.setValue("ClimaxHandler/ruined_orgasm_active", True)
     settings.setValue("ClimaxHandler/ruined_orgasm_chance", 0.35)
     settings.setValue("ClimaxHandler/denied_orgasm_active", True)
@@ -53,8 +51,8 @@ def test_settings_override_defaults(qtbot, beat_handler, callout_handler, tmp_pa
     handler = ClimaxHandler(beat_handler, callout_handler, settings=settings)
 
     assert handler.climax_active is False
-    assert handler.min_climax_delay == 60.0
-    assert handler.max_climax_delay == 90.0
+    assert handler.min_climax_after == 60.0
+    assert handler.max_climax_after == 90.0
     assert handler.ruined_orgasm_active is True
     assert handler.ruined_orgasm_chance == 0.35
     assert handler.denied_orgasm_active is True
@@ -68,21 +66,34 @@ def test_settings_override_defaults(qtbot, beat_handler, callout_handler, tmp_pa
 # --- planning the climax ---
 
 
-def test_the_climax_is_placed_the_configured_delay_after_the_ramp(handler, beat_handler):
+def test_the_climax_is_placed_the_configured_time_into_the_session(handler, beat_handler):
     handler.climax_active = True
-    handler.min_climax_delay = handler.max_climax_delay = 100.0
+    handler.min_climax_after = handler.max_climax_after = 100.0
 
-    handler.on_session_planned(5000.0)
+    handler.on_session_planned(5000.0)  # the session started at 5000
 
     assert handler.finale_at == 5100.0
     beat_handler.set_finale_at.assert_called_once_with(5100.0)
 
 
-def test_the_delay_is_drawn_from_the_configured_range(handler):
+def test_the_time_is_drawn_from_the_configured_range(handler):
     handler.climax_active = True
-    handler.min_climax_delay, handler.max_climax_delay = 60.0, 300.0
+    handler.min_climax_after, handler.max_climax_after = 60.0, 300.0
     handler.on_session_planned(5000.0)
     assert 5060.0 <= handler.finale_at <= 5300.0
+
+
+def test_the_climax_is_independent_of_the_difficulty_ramp(handler, beat_handler):
+    """It is measured from the start of the session, not from the end of the ramp - so it
+    can be set to land while the ramp is still climbing, and switching ramping off does
+    not silently move it."""
+    beat_handler.ramp_target_duration = 9999.0
+    handler.climax_active = True
+    handler.min_climax_after = handler.max_climax_after = 100.0
+
+    handler.on_session_planned(5000.0)
+
+    assert handler.finale_at == 5100.0
 
 
 def test_no_climax_is_planned_when_it_is_switched_off(handler, beat_handler):
@@ -119,7 +130,7 @@ def test_the_climax_fires_when_its_moment_arrives(handler, callout_handler):
 
 def test_the_climax_fires_by_itself_via_the_real_timer(handler, callout_handler, qtbot):
     handler.climax_active = True
-    handler.min_climax_delay = handler.max_climax_delay = 0.05
+    handler.min_climax_after = handler.max_climax_after = 0.05
 
     handler.on_session_planned(time.time())
 
@@ -336,10 +347,10 @@ def test_fake_climax_reveal_fires_via_real_timer(handler, callout_handler, qtbot
 def test_a_settings_save_keeps_the_climax_where_it_was(handler):
     """Re-drawing it would make "open Settings and save" a lever for a different climax."""
     handler.climax_active = True
-    handler.min_climax_delay = handler.max_climax_delay = 100.0
+    handler.min_climax_after = handler.max_climax_after = 100.0
     handler.on_session_planned(5000.0)
 
-    handler.min_climax_delay = handler.max_climax_delay = 5.0
+    handler.min_climax_after = handler.max_climax_after = 5.0
     handler.settings_changed()
 
     assert handler.finale_at == 5100.0
@@ -370,13 +381,12 @@ def test_switching_the_climax_off_mid_session_withdraws_it(handler, beat_handler
 
 
 def test_switching_the_climax_on_mid_session_plans_one(handler, beat_handler):
-    beat_handler.session_start_time = 4000.0
-    beat_handler.ramp_target_duration = 1000.0
+    beat_handler.session_start_time = 5000.0
     handler.climax_active = False
     handler.on_session_planned(5000.0)
 
     handler.climax_active = True
-    handler.min_climax_delay = handler.max_climax_delay = 100.0
+    handler.min_climax_after = handler.max_climax_after = 100.0
     handler.settings_changed()
 
     assert handler.finale_at == 5100.0

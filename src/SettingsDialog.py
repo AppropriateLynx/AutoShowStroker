@@ -110,10 +110,10 @@ class SettingsDialog(QDialog):
         self.climax_active_checkbox.setChecked(self.climax_handler.climax_active)
         self._current_layout.addWidget(self.climax_active_checkbox)
         self.add_setting(
-            "Climax Min. delay after ramp (s)", "min_climax_delay", self.climax_handler, float, 0.0, 3600.0, 10.0
+            "Climax earliest (s into session):", "min_climax_after", self.climax_handler, float, 10.0, 7200.0, 10.0
         )
         self.add_setting(
-            "Climax Max. delay after ramp (s)", "max_climax_delay", self.climax_handler, float, 0.0, 3600.0, 10.0
+            "Climax latest (s into session):", "max_climax_after", self.climax_handler, float, 10.0, 7200.0, 10.0
         )
 
         self.ruined_orgasm_active_checkbox = QCheckBox("Allow ruined orgasm outcome")
@@ -146,7 +146,7 @@ class SettingsDialog(QDialog):
         )
         self.climax_reset_button = self.add_reset_button(
             [
-                "min_climax_delay", "max_climax_delay",
+                "min_climax_after", "max_climax_after",
                 "ruined_orgasm_chance", "denied_orgasm_chance",
                 "fake_climax_chance", "min_fake_climax_delay", "max_fake_climax_delay",
             ],
@@ -267,7 +267,7 @@ class SettingsDialog(QDialog):
         ("min_beat_dur", "max_beat_dur", "Beat duration"),
         ("min_pause_dur", "max_pause_dur", "Pause duration"),
         ("min_ramp_duration", "max_ramp_duration", "Ramp duration"),
-        ("min_climax_delay", "max_climax_delay", "Climax delay after ramp"),
+        ("min_climax_after", "max_climax_after", "Climax time"),
         ("min_fake_climax_delay", "max_fake_climax_delay", "Fake climax reveal delay"),
     )
 

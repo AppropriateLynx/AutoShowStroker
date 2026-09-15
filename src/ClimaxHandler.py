@@ -28,11 +28,14 @@ class ClimaxHandler(QObject):
     # "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
         "climax_active": True,
-        # Seconds after the difficulty ramp completes. A range rather than a single value:
-        # once the ramp runs out the frequency window stops moving, so a fixed delay would
-        # make every session's hardest stretch exactly the same length.
-        "min_climax_delay": 120.0,
-        "max_climax_delay": 300.0,
+        # Seconds into the session. Measured from the start, deliberately not from the end
+        # of the difficulty ramp: the ramp is a difficulty curve the user can switch off,
+        # and hanging the climax off it meant the Ramp duration sliders silently decided
+        # when the orgasm came even with ramping unticked. Independent also means the
+        # climax can be set to land while the ramp is still climbing.
+        # A range rather than a single value, so the session is not the same length twice.
+        "min_climax_after": 720.0,
+        "max_climax_after": 2100.0,
         "ruined_orgasm_active": False,
         "ruined_orgasm_chance": 0.5,
         "denied_orgasm_active": False,
@@ -60,11 +63,11 @@ class ClimaxHandler(QObject):
             self.climax_active = bool(
                 self.settings.value("ClimaxHandler/climax_active", self.climax_active, type=bool)
             )
-            self.min_climax_delay = float(
-                self.settings.value("ClimaxHandler/min_climax_delay", self.min_climax_delay)
+            self.min_climax_after = float(
+                self.settings.value("ClimaxHandler/min_climax_after", self.min_climax_after)
             )
-            self.max_climax_delay = float(
-                self.settings.value("ClimaxHandler/max_climax_delay", self.max_climax_delay)
+            self.max_climax_after = float(
+                self.settings.value("ClimaxHandler/max_climax_after", self.max_climax_after)
             )
             self.ruined_orgasm_active = bool(
                 self.settings.value("ClimaxHandler/ruined_orgasm_active", self.ruined_orgasm_active, type=bool)
@@ -128,16 +131,16 @@ class ClimaxHandler(QObject):
         self._fake_climax_timer.stop()
         self._climax_timer.stop()
 
-    def on_session_planned(self, ramp_complete_at):
-        """Places this session's climax, the moment BeatHandler has planned the ramp."""
+    def on_session_planned(self, session_start_time):
+        """Places this session's climax, the moment BeatHandler starts planning."""
         if not self.climax_active:
             self.finale_at = None
             self.outcome = None
             self._climax_timer.stop()
             self.beat_handler.set_finale_at(None)
             return
-        low, high = sorted((self.min_climax_delay, self.max_climax_delay))
-        self.finale_at = ramp_complete_at + random.uniform(low, high)
+        low, high = sorted((self.min_climax_after, self.max_climax_after))
+        self.finale_at = session_start_time + random.uniform(low, high)
         self.outcome = self._resolve_outcome()
         self._arm_climax_timer()
         self.beat_handler.set_finale_at(self.finale_at)
@@ -190,8 +193,9 @@ class ClimaxHandler(QObject):
             self.beat_handler.set_finale_at(None)
             return
         if self.finale_at is None:
-            # Switched on mid-session: place one relative to the ramp already running.
-            self.on_session_planned(self.beat_handler.session_start_time + self.beat_handler.ramp_target_duration)
+            # Switched on mid-session: place one against the session already running. It
+            # can therefore land in the past, which the timer treats as "due now".
+            self.on_session_planned(self.beat_handler.session_start_time)
             return
         self.outcome = self._resolve_outcome()
 
