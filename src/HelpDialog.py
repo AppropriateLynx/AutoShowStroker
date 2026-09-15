@@ -53,6 +53,17 @@ HELP_TOPICS = [
     ),
     (
         "On-Screen Display",
+        "<h3>Session Explorer</h3>"
+        "<p>The end-of-session statistics have a <b>Session Explorer</b> button. It opens "
+        "the whole session as a seek bar: move along it and you see what was on screen at "
+        "that moment, together with the rhythm that was playing and how fast. Pauses and "
+        "the run-in to the climax are marked, so the shape of the session is visible at a "
+        "glance.</p>"
+        "<p>It exists mostly for one thing: spotting the picture you particularly liked "
+        "and getting back to the file. <b>Show in folder</b> opens it where it lives.</p>"
+        "<p>This is kept in memory for the session you just finished and nothing more - it "
+        "is gone when you start the next one or close the app. Your media paths are never "
+        "written to the data folder or to the diagnostic log.</p>"
         "<h3>Session Timer</h3>"
         "<p>Top-left of the media area, shows how long the current session has been running "
         "(<code>⏱ mm:ss</code>, or <code>h:mm:ss</code> past an hour). It's a wall-clock "
@@ -71,9 +82,11 @@ HELP_TOPICS = [
         "<p>The track along the bottom. Notes travel right-to-left and land on the glowing "
         "hit line near the left edge exactly when the beat sounds, so you can see each beat "
         "coming before you hear it. A rhythm's silent steps show up as the wider gaps between "
-        "notes. When the pattern changes, a sweep of light crosses the track and the new "
-        "rhythm fades in. The caption on the right shows the current pattern, or the countdown "
-        "while the Strokemeter is taking a break.</p>"
+        "notes. When the rhythm changes, a sweep of light crosses the track to mark it - the "
+        "notes themselves keep flowing straight through, because the app already knows what "
+        "is coming next. They even fly in during a break, so you can see the beat returning. "
+        "The caption on the right shows the current pattern, or the countdown while the "
+        "Strokemeter is taking one.</p>"
         "<h3>Climax Banner</h3>"
         "<p>Sits just above the Strokemeter and lights up with the session's outcome "
         "(Cum / Ruined / Denied) once it's decided.</p>",
