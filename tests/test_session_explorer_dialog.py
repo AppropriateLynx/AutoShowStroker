@@ -1,4 +1,4 @@
-"""The Session Explorer: the timeline you scroll back through after a session.
+"""The Session Explorer: scrub the session's timeline and see what was on screen.
 
 The thumbnail source is stubbed throughout - a real one would build a QMediaPlayer.
 """
@@ -28,7 +28,7 @@ class _StubThumbnailSource:
 def timeline(segments=None, **overrides):
     base = {
         "started_at": 1000.0,
-        "ended_at": 1120.0,
+        "ended_at": 1100.0,
         "climax_at": None,
         "climax_outcome": None,
         "segments": segments if segments is not None else [segment()],
@@ -37,14 +37,14 @@ def timeline(segments=None, **overrides):
     return base
 
 
-def segment(kind="beat", pattern="Standard Beat", freq=2.0, start=1000.0, end=1060.0, media=()):
+def segment(kind="beat", pattern="Standard Beat", freq=2.0, start=1000.0, end=1100.0, media=()):
     return {
         "kind": kind, "pattern": pattern, "freq": freq,
         "start": start, "end": end, "media": list(media),
     }
 
 
-def medium(path="a.png", start=1005.0, end=1010.0, carried_over=False):
+def medium(path="a.png", start=1000.0, end=1100.0, carried_over=False):
     return {"path": path, "start": start, "end": end, "carried_over": carried_over}
 
 
@@ -58,157 +58,142 @@ def make_dialog(qtbot, source):
     def build(data):
         dialog = SessionExplorerDialog(data, thumbnail_source=source, parent=None)
         qtbot.addWidget(dialog)
-        dialog.resize(700, 500)
-        dialog.show()  # thumbnails are loaded from showEvent, like the real dialog
+        dialog.resize(900, 600)
+        dialog.show()
         qtbot.waitExposed(dialog)
         return dialog
 
     return build
 
 
-# --- the segment cards ---
+# --- the timeline bar ---
 
 
-def test_one_card_per_segment(make_dialog):
-    dialog = make_dialog(timeline([segment(start=1000.0, end=1030.0), segment(start=1030.0, end=1060.0)]))
-    assert len(dialog.segment_cards) == 2
+def test_the_bar_spans_the_whole_session(make_dialog):
+    dialog = make_dialog(timeline(ended_at=1100.0))
+    bar = dialog.timeline_bar
+
+    assert bar.time_at_x(0) == pytest.approx(0.0)
+    assert bar.time_at_x(bar.width()) == pytest.approx(100.0, abs=1.0)
 
 
-def test_a_card_reports_rhythm_speed_and_type(make_dialog):
-    dialog = make_dialog(timeline([segment(pattern="Quick Swing", freq=3.25)]))
-
-    text = dialog.segment_cards[0].summary()
-
-    assert "Quick Swing" in text
-    assert "3.25" in text
-    assert "Beat" in text
+def test_a_position_halfway_along_is_halfway_through(make_dialog):
+    dialog = make_dialog(timeline(ended_at=1100.0))
+    bar = dialog.timeline_bar
+    assert bar.time_at_x(bar.width() / 2) == pytest.approx(50.0, abs=1.0)
 
 
-def test_a_pause_card_says_pause_and_shows_no_rhythm(make_dialog):
-    dialog = make_dialog(timeline([segment(kind="pause", pattern=None, freq=None)]))
-
-    text = dialog.segment_cards[0].summary()
-
-    assert "Pause" in text
-    assert "Hz" not in text
+def test_a_zero_length_session_does_not_divide_by_zero(make_dialog):
+    dialog = make_dialog(timeline([], ended_at=1000.0))
+    assert dialog.timeline_bar.time_at_x(50) == 0.0
 
 
-def test_a_card_reports_when_it_started_and_how_long_it_ran(make_dialog):
-    dialog = make_dialog(timeline([segment(start=1000.0, end=1030.0), segment(start=1030.0, end=1095.0)]))
+def test_the_bar_knows_where_the_climax_sits(make_dialog):
+    dialog = make_dialog(timeline(climax_at=1075.0, climax_outcome="ruined"))
+    bar = dialog.timeline_bar
 
-    assert "0:00" in dialog.segment_cards[0].summary()
-    assert "0:30" in dialog.segment_cards[1].summary()
-    assert "1:05" in dialog.segment_cards[1].summary()  # 65s long
-
-
-def test_the_finale_card_is_labelled_as_the_run_in(make_dialog):
-    dialog = make_dialog(timeline([segment(kind="finale")]))
-    assert "Finale" in dialog.segment_cards[0].summary()
+    assert bar.climax_offset == pytest.approx(75.0)
+    assert bar.x_for_time(75.0) == pytest.approx(bar.width() * 0.75, abs=2.0)
 
 
-def test_the_card_covering_the_climax_is_marked(make_dialog):
+# --- scrubbing ---
+
+
+def test_scrubbing_shows_the_medium_that_was_on_screen(make_dialog):
     dialog = make_dialog(
-        timeline(
-            [segment(start=1000.0, end=1030.0), segment(start=1030.0, end=1060.0)],
-            climax_at=1040.0,
-            climax_outcome="ruined",
-        )
+        timeline([segment(media=[medium("early.png", 1000.0, 1050.0), medium("late.png", 1050.0, 1100.0)])])
     )
 
-    assert dialog.segment_cards[0].climax_outcome is None
-    assert dialog.segment_cards[1].climax_outcome == "ruined"
+    dialog.scrub_to(10.0)
+    assert dialog.selected_path == "early.png"
+
+    dialog.scrub_to(80.0)
+    assert dialog.selected_path == "late.png"
 
 
-def test_no_card_is_marked_without_a_climax(make_dialog):
-    dialog = make_dialog(timeline([segment()]))
-    assert all(card.climax_outcome is None for card in dialog.segment_cards)
+def test_scrubbing_reports_the_segment_at_that_moment(make_dialog):
+    dialog = make_dialog(
+        timeline([
+            segment(pattern="Slow Pulse", freq=1.25, start=1000.0, end=1050.0),
+            segment(kind="pause", pattern=None, freq=None, start=1050.0, end=1100.0),
+        ])
+    )
+
+    dialog.scrub_to(10.0)
+    assert "Slow Pulse" in dialog.moment_label.text()
+    assert "1.25" in dialog.moment_label.text()
+
+    dialog.scrub_to(80.0)
+    assert "Pause" in dialog.moment_label.text()
+    assert "Hz" not in dialog.moment_label.text()
 
 
-# --- the media inside a card ---
+def test_the_moment_label_shows_the_time(make_dialog):
+    dialog = make_dialog(timeline([segment(start=1000.0, end=1100.0)]))
+    dialog.scrub_to(65.0)
+    assert "1:05" in dialog.moment_label.text()
 
 
-def test_a_card_holds_a_cell_per_medium(make_dialog):
-    dialog = make_dialog(timeline([segment(media=[medium("a.png"), medium("b.png")])]))
-    assert len(dialog.segment_cards[0].media_cells) == 2
+def test_scrubbing_past_every_medium_clears_the_preview(make_dialog):
+    dialog = make_dialog(timeline([segment(media=[medium("a.png", 1000.0, 1010.0)])]))
+
+    dialog.scrub_to(50.0)
+
+    assert dialog.selected_path is None
 
 
-def test_a_carried_over_medium_is_marked_as_continuing(make_dialog):
-    dialog = make_dialog(timeline([segment(media=[medium("a.png", carried_over=True)])]))
-    assert dialog.segment_cards[0].media_cells[0].carried_over is True
+def test_scrubbing_moves_the_playhead(make_dialog):
+    dialog = make_dialog(timeline(ended_at=1100.0))
+    dialog.scrub_to(40.0)
+    assert dialog.timeline_bar.playhead_offset == pytest.approx(40.0)
 
 
-def test_a_segment_without_media_still_gets_a_card(make_dialog):
-    dialog = make_dialog(timeline([segment(media=[])]))
-    assert len(dialog.segment_cards) == 1
-    assert dialog.segment_cards[0].media_cells == []
+def test_a_finale_segment_is_still_scrubbable(make_dialog):
+    dialog = make_dialog(timeline([segment(kind="finale", start=1000.0, end=1100.0)]))
+    dialog.scrub_to(50.0)
+    assert "Finale" in dialog.moment_label.text()
 
 
-# --- lazy loading ---
-
-
-def test_thumbnails_are_not_built_until_a_card_is_near_the_viewport(qtbot, source):
-    """A long session holds hundreds of media - building them all up front would stall the
-    open. Only what is nearly on screen gets decoded."""
-    far_away = [
-        segment(start=1000.0 + i * 30, end=1030.0 + i * 30, media=[medium(f"clip{i}.mp4")])
-        for i in range(60)
-    ]
-    dialog = SessionExplorerDialog(timeline(far_away), thumbnail_source=source, parent=None)
-    qtbot.addWidget(dialog)
-    dialog.resize(700, 400)
-    dialog.show()
-    qtbot.waitExposed(dialog)
-
-    assert len(source.requested) < len(far_away)
-
-
-def test_scrolling_loads_the_cards_that_come_into_view(qtbot, source):
-    segments = [
-        segment(start=1000.0 + i * 30, end=1030.0 + i * 30, media=[medium(f"clip{i}.mp4")])
-        for i in range(60)
-    ]
-    dialog = SessionExplorerDialog(timeline(segments), thumbnail_source=source, parent=None)
-    qtbot.addWidget(dialog)
-    dialog.resize(700, 400)
-    dialog.show()
-    qtbot.waitExposed(dialog)
-    before = len(source.requested)
-
-    bar = dialog.scroll_area.verticalScrollBar()
-    bar.setValue(bar.maximum())
-
-    assert len(source.requested) > before
+# --- thumbnails ---
 
 
 def test_only_videos_go_to_the_thumbnail_source(make_dialog, source):
     """Images and GIFs decode straight off disk - queueing them behind a video would make
     them appear late for no reason."""
-    make_dialog(timeline([segment(media=[medium("a.png"), medium("b.gif"), medium("c.mp4")])]))
-    assert source.requested == ["c.mp4"]
+    dialog = make_dialog(
+        timeline([segment(media=[medium("a.png", 1000.0, 1050.0), medium("b.mp4", 1050.0, 1100.0)])])
+    )
+
+    dialog.scrub_to(10.0)
+    dialog.scrub_to(80.0)
+
+    assert source.requested == ["b.mp4"]
 
 
-# --- the detail pane ---
+def test_a_video_frame_is_only_grabbed_once(make_dialog, source):
+    """Scrubbing back and forth over the same clip must not re-decode it every time."""
+    dialog = make_dialog(timeline([segment(media=[medium("b.mp4", 1000.0, 1100.0)])]))
+
+    dialog.scrub_to(10.0)
+    dialog.scrub_to(20.0)
+    dialog.scrub_to(30.0)
+
+    assert source.requested == ["b.mp4"]
 
 
-def test_the_detail_pane_starts_empty(make_dialog):
-    dialog = make_dialog(timeline([segment(media=[medium("a.png")])]))
-    assert dialog.selected_path is None
+def test_nothing_is_decoded_before_the_first_scrub(make_dialog, source):
+    make_dialog(timeline([segment(media=[medium("b.mp4", 1000.0, 1100.0)])]))
+    assert source.requested == []
 
 
-def test_selecting_a_medium_fills_the_detail_pane(make_dialog):
-    dialog = make_dialog(timeline([segment(media=[medium("/some/where/a.png")])]))
-
-    dialog.select_medium("/some/where/a.png")
-
-    assert dialog.selected_path == "/some/where/a.png"
-    assert "a.png" in dialog.detail_name_label.text()
+# --- acting on what you found ---
 
 
-def test_the_reveal_button_is_disabled_until_something_is_selected(make_dialog):
-    dialog = make_dialog(timeline([segment(media=[medium("a.png")])]))
+def test_the_buttons_are_disabled_until_something_is_on_screen(make_dialog):
+    dialog = make_dialog(timeline([segment(media=[medium("a.png", 1000.0, 1010.0)])]))
     assert dialog.reveal_button.isEnabled() is False
 
-    dialog.select_medium("a.png")
+    dialog.scrub_to(5.0)
 
     assert dialog.reveal_button.isEnabled() is True
 
@@ -221,8 +206,8 @@ def test_revealing_opens_the_containing_folder(make_dialog, monkeypatch, tmp_pat
     )
     media_file = tmp_path / "keep_this.png"
     media_file.write_bytes(b"")
-    dialog = make_dialog(timeline([segment(media=[medium(str(media_file))])]))
-    dialog.select_medium(str(media_file))
+    dialog = make_dialog(timeline([segment(media=[medium(str(media_file), 1000.0, 1100.0)])]))
+    dialog.scrub_to(50.0)
 
     dialog.reveal_button.click()
 
@@ -231,12 +216,14 @@ def test_revealing_opens_the_containing_folder(make_dialog, monkeypatch, tmp_pat
 
 
 def test_the_play_button_only_shows_for_video(make_dialog):
-    dialog = make_dialog(timeline([segment(media=[medium("a.png"), medium("b.mp4")])]))
+    dialog = make_dialog(
+        timeline([segment(media=[medium("a.png", 1000.0, 1050.0), medium("b.mp4", 1050.0, 1100.0)])])
+    )
 
-    dialog.select_medium("a.png")
+    dialog.scrub_to(10.0)
     assert dialog.play_button.isHidden()
 
-    dialog.select_medium("b.mp4")
+    dialog.scrub_to(80.0)
     assert not dialog.play_button.isHidden()
 
 
@@ -244,7 +231,8 @@ def test_the_play_button_only_shows_for_video(make_dialog):
 
 
 def test_closing_cancels_pending_thumbnail_work(make_dialog, source):
-    dialog = make_dialog(timeline([segment(media=[medium("a.mp4")])]))
+    dialog = make_dialog(timeline([segment(media=[medium("a.mp4", 1000.0, 1100.0)])]))
+    dialog.scrub_to(10.0)
 
     dialog.close()
 
@@ -253,40 +241,5 @@ def test_closing_cancels_pending_thumbnail_work(make_dialog, source):
 
 def test_a_timeline_with_no_segments_does_not_raise(make_dialog):
     dialog = make_dialog(timeline([]))
-    assert dialog.segment_cards == []
-
-
-# --- many media in one segment ---
-
-
-def test_media_wrap_into_rows_instead_of_running_off_the_card(make_dialog):
-    """A 45-second segment at the default slideshow speed holds dozens of media - in a
-    single row they run straight off the side of the card."""
-    many = [medium(f"pic{i}.png", start=1000.0 + i) for i in range(12)]
-    dialog = make_dialog(timeline([segment(media=many)]))
-    card = dialog.segment_cards[0]
-
-    assert card.media_columns < 12
-    rows = {cell.pos().y() for cell in card.media_cells}
-    assert len(rows) > 1
-
-
-def test_a_wider_card_fits_more_media_per_row(qtbot, source):
-    many = [medium(f"pic{i}.png", start=1000.0 + i) for i in range(12)]
-    dialog = SessionExplorerDialog(timeline([segment(media=many)]), thumbnail_source=source, parent=None)
-    qtbot.addWidget(dialog)
-    dialog.resize(600, 500)
-    dialog.show()
-    qtbot.waitExposed(dialog)
-    narrow = dialog.segment_cards[0].media_columns
-
-    dialog.resize(1400, 500)
-    qtbot.wait(20)
-
-    assert dialog.segment_cards[0].media_columns > narrow
-
-
-def test_every_medium_still_gets_a_cell_when_wrapped(make_dialog):
-    many = [medium(f"pic{i}.png", start=1000.0 + i) for i in range(12)]
-    dialog = make_dialog(timeline([segment(media=many)]))
-    assert len(dialog.segment_cards[0].media_cells) == 12
+    dialog.scrub_to(10.0)
+    assert dialog.selected_path is None
