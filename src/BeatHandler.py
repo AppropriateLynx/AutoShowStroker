@@ -105,10 +105,11 @@ class BeatHandler(QObject):
     # session_planned_event carries the session's start time, and is emitted before the
     # first segment is planned so a listener can still place a finale into it (see
     # set_finale_at). plan_extended_event carries the newly planned segments;
-    # segment_started_event the index of the one now on the air.
+    # segment_started_event the Segment now on the air - the whole thing rather than its
+    # index, so a consumer can record what actually played without reaching back in here.
     session_planned_event = pyqtSignal(float)
     plan_extended_event = pyqtSignal(list)
-    segment_started_event = pyqtSignal(int)
+    segment_started_event = pyqtSignal(object)
 
     def __init__(self, beat_file=None, settings=None, data_store=None):
         super().__init__()
@@ -387,7 +388,7 @@ class BeatHandler(QObject):
             self.start_pause()
         else:
             self._apply_beat_segment(segment)
-        self.segment_started_event.emit(segment.index)
+        self.segment_started_event.emit(segment)
 
     # --- running the beat ---
 

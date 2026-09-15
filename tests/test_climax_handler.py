@@ -291,7 +291,7 @@ def test_a_fake_climax_does_not_hold_the_rhythm(handler, beat_handler):
     handler.fake_climax_chance = 1.0
     handler.on_plan_extended(beats(7))
 
-    handler.on_segment_started(7)
+    handler.on_segment_started(beats(7)[0])
 
     beat_handler.hold_final_segment.assert_not_called()
 
@@ -331,7 +331,7 @@ def test_a_planned_fake_fires_when_its_segment_starts(handler, callout_handler):
     handler.fake_climax_chance = 1.0
     handler.on_plan_extended(beats(7))
 
-    handler.on_segment_started(7)
+    handler.on_segment_started(beats(7)[0])
 
     callout_handler.force_output_sentence.assert_called_once_with("climax_real")
     assert handler._fake_climax_pending is True
@@ -339,7 +339,7 @@ def test_a_planned_fake_fires_when_its_segment_starts(handler, callout_handler):
 
 def test_a_segment_with_no_planned_fake_does_nothing(handler, callout_handler):
     handler.on_plan_extended(beats(7))
-    handler.on_segment_started(7)
+    handler.on_segment_started(beats(7)[0])
     callout_handler.force_output_sentence.assert_not_called()
 
 
@@ -348,10 +348,10 @@ def test_a_fake_fires_only_once_for_its_boundary(handler, callout_handler):
     handler.fake_climax_chance = 1.0
     handler.on_plan_extended(beats(7))
 
-    handler.on_segment_started(7)
+    handler.on_segment_started(beats(7)[0])
     handler._reveal_fake_climax()
     callout_handler.force_output_sentence.reset_mock()
-    handler.on_segment_started(7)
+    handler.on_segment_started(beats(7)[0])
 
     callout_handler.force_output_sentence.assert_not_called()
 
@@ -365,7 +365,7 @@ def test_a_fake_does_not_fire_once_the_real_climax_has_happened(handler, callout
     handler._on_climax_due()
     callout_handler.force_output_sentence.reset_mock()
 
-    handler.on_segment_started(7)
+    handler.on_segment_started(beats(7)[0])
 
     callout_handler.force_output_sentence.assert_not_called()
 
@@ -378,7 +378,7 @@ def test_the_real_climax_cancels_a_pending_fake_reveal(handler, callout_handler,
     handler.min_fake_climax_delay = handler.max_fake_climax_delay = 0.05
     handler.on_session_planned(time.time() + 100)
     handler.on_plan_extended(beats(7))
-    handler.on_segment_started(7)
+    handler.on_segment_started(beats(7)[0])
 
     handler._on_climax_due()
     qtbot.wait(300)
@@ -393,7 +393,7 @@ def test_fake_climax_triggered_event_is_emitted(handler, qtbot):
     handler.on_plan_extended(beats(7))
 
     with qtbot.waitSignal(handler.fake_climax_triggered_event, timeout=1000):
-        handler.on_segment_started(7)
+        handler.on_segment_started(beats(7)[0])
 
 
 def test_the_real_climax_does_not_emit_the_fake_event(handler):
@@ -413,7 +413,7 @@ def test_a_fake_prompt_emits_the_cum_status(handler, qtbot):
     handler.on_plan_extended(beats(7))
 
     with qtbot.waitSignal(handler.status_changed_event, timeout=1000) as blocker:
-        handler.on_segment_started(7)
+        handler.on_segment_started(beats(7)[0])
 
     assert blocker.args == ["cum"]
 
@@ -442,7 +442,7 @@ def test_fake_climax_reveal_fires_via_real_timer(handler, callout_handler, qtbot
     handler.min_fake_climax_delay = handler.max_fake_climax_delay = 0.05
     handler.on_plan_extended(beats(7))
 
-    handler.on_segment_started(7)
+    handler.on_segment_started(beats(7)[0])
     callout_handler.force_output_sentence.assert_called_once_with("climax_real")
 
     qtbot.waitUntil(lambda: not handler._fake_climax_pending, timeout=2000)

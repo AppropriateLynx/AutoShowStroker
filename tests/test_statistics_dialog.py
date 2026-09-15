@@ -227,3 +227,47 @@ def test_missing_favourite_pattern_reads_as_not_available(qtbot):
 
     assert "'None'" not in dialog.conclusion_label.text()
     assert "N/A" in dialog.conclusion_label.text()
+
+
+# --- Session Explorer entry point ---
+
+
+def _timeline():
+    return {
+        "started_at": 1000.0, "ended_at": 1060.0,
+        "climax_at": None, "climax_outcome": None,
+        "segments": [
+            {"kind": "beat", "pattern": "Standard Beat", "freq": 2.0,
+             "start": 1000.0, "end": 1060.0, "media": []},
+        ],
+    }
+
+
+def test_no_explorer_button_without_a_timeline(qtbot):
+    dialog = StatisticsDialog(dict(FULL_STATS), parent=None)
+    qtbot.addWidget(dialog)
+    assert dialog.explorer_button is None
+
+
+def test_the_explorer_button_appears_with_a_timeline(qtbot):
+    dialog = StatisticsDialog(dict(FULL_STATS), timeline=_timeline(), parent=None)
+    qtbot.addWidget(dialog)
+    assert dialog.explorer_button is not None
+    assert "Explorer" in dialog.explorer_button.text()
+
+
+def test_no_explorer_button_for_a_timeline_without_segments(qtbot):
+    empty = _timeline() | {"segments": []}
+    dialog = StatisticsDialog(dict(FULL_STATS), timeline=empty, parent=None)
+    qtbot.addWidget(dialog)
+    assert dialog.explorer_button is None
+
+
+def test_the_explorer_button_is_inside_the_locked_dialog_size(qtbot):
+    """_populate_table() locks the dialog size with adjustSize + setFixedSize, so anything
+    added to the layout after it is never actually visible."""
+    dialog = StatisticsDialog(dict(FULL_STATS), timeline=_timeline(), parent=None)
+    qtbot.addWidget(dialog)
+
+    button = dialog.explorer_button
+    assert button.geometry().bottom() <= dialog.height()
