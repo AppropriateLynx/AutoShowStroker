@@ -5,7 +5,6 @@ from pathlib import Path
 from PyQt6.QtCore import QSettings, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QMovie
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import (
     QDialog,
     QGraphicsDropShadowEffect,
@@ -38,6 +37,7 @@ from src.StatisticsDialog import StatisticsDialog
 from src.UpdateChecker import UpdateChecker
 from src.user_data import UserDataStore
 from src.utils import format_clock, get_current_version, get_project_root, load_scaled_pixmap
+from src.VideoDisplay import VideoDisplay
 from src.WhatsNewDialog import WhatsNewDialog
 
 # How long the "denied" banner stays up before the session is ended for the user.
@@ -151,11 +151,11 @@ class GoonerApp(QMainWindow):
         )
         self.media_stack.addWidget(self.image_label)
 
-        self.video_widget = QVideoWidget()
+        self.video_widget = VideoDisplay()
         self.media_player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.media_player.setAudioOutput(self.audio_output)
-        self.media_player.setVideoOutput(self.video_widget)
+        self.media_player.setVideoOutput(self.video_widget.video_item)
         self.media_stack.addWidget(self.video_widget)
 
         self.media_player.mediaStatusChanged.connect(self.video_status_changed)
