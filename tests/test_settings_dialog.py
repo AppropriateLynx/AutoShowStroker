@@ -207,6 +207,20 @@ def test_accept_settings_updates_ramping_active(app, dialog):
     assert app.settings.value("BeatHandler/ramping_active", type=bool) == expected
 
 
+def test_climax_only_after_ramp_checkbox_initialized_from_handler(app, dialog):
+    assert dialog.climax_only_after_ramp_checkbox.isChecked() == app.climax_handler.climax_only_after_ramp
+
+
+def test_accept_settings_updates_climax_only_after_ramp(app, dialog):
+    dialog.climax_only_after_ramp_checkbox.setChecked(not app.climax_handler.climax_only_after_ramp)
+    expected = dialog.climax_only_after_ramp_checkbox.isChecked()
+
+    dialog.accept_settings()
+
+    assert app.climax_handler.climax_only_after_ramp == expected
+    assert app.settings.value("ClimaxHandler/climax_only_after_ramp", type=bool) == expected
+
+
 def test_climax_fields_initialized_from_climax_handler(app, dialog):
     assert dialog.climax_active_checkbox.isChecked() == app.climax_handler.climax_active
     assert dialog.ruined_orgasm_active_checkbox.isChecked() == app.climax_handler.ruined_orgasm_active

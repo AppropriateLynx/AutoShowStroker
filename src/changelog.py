@@ -224,7 +224,7 @@ CHANGELOG = {
         "<li><b>You decide how long she draws it out.</b> The old \"climax chance\" guessing "
         "game is gone - set the earliest and latest point in the session she may say it, "
         "and she picks her moment in between. Want her to let you finish before it even "
-        "gets hard? Now you can ask for that</li>"
+        "gets hard? Untick \"Climax only after ramping finishes\" and she will</li>"
         "<li>The difficulty ramp is a real curve now, climbing segment by segment instead "
         "of rolling the dice again every time she changes her mind</li>"
         "<li>The Strokemeter can see past her next change, so the notes keep flowing "

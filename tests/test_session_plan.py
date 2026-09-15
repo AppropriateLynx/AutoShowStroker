@@ -334,3 +334,28 @@ def test_stop_clears_the_plan(handler):
     handler.stop()
     assert handler.planned_segments == ()
     assert handler.current_segment is None
+
+
+# --- when the ramp tops out ---
+
+
+def test_ramp_complete_at_is_none_before_the_session_starts(handler):
+    assert handler.ramp_complete_at is None
+
+
+def test_ramp_complete_at_reports_the_end_of_the_ramp(handler, monkeypatch):
+    freeze(monkeypatch, 1000.0)
+    pin(handler, ramping=True)
+    handler.min_ramp_duration = handler.max_ramp_duration = 600.0
+    handler.start_beat()
+    assert handler.ramp_complete_at == 1600.0
+
+
+def test_ramp_complete_at_is_none_while_ramping_is_switched_off(handler, monkeypatch):
+    """There is no ramp to wait for - which is what keeps the Ramp duration sliders from
+    influencing anything while their own checkbox is unticked."""
+    freeze(monkeypatch, 1000.0)
+    pin(handler, ramping=False)
+    handler.min_ramp_duration = handler.max_ramp_duration = 600.0
+    handler.start_beat()
+    assert handler.ramp_complete_at is None

@@ -11,7 +11,11 @@ from src.ClimaxHandler import ClimaxHandler
 
 @pytest.fixture
 def beat_handler():
-    return MagicMock()
+    mock = MagicMock()
+    # No ramp to wait for unless a test says otherwise - a bare MagicMock here would
+    # compare as a stray object inside the climax_only_after_ramp clamp.
+    mock.ramp_complete_at = None
+    return mock
 
 
 @pytest.fixture
@@ -113,6 +117,89 @@ def test_the_outcome_is_decided_up_front_not_at_the_moment_it_fires(handler):
     handler.on_session_planned(5000.0)
 
     assert handler.outcome == "denied"
+
+
+# --- "only after the ramp finishes" ---
+
+
+def test_the_climax_waits_for_the_ramp_when_asked_to(handler, beat_handler):
+    beat_handler.ramp_complete_at = 5500.0
+    handler.climax_active = True
+    handler.climax_only_after_ramp = True
+    handler.min_climax_after = handler.max_climax_after = 100.0  # would land at 5100
+
+    handler.on_session_planned(5000.0)
+
+    assert handler.finale_at == 5500.0
+    beat_handler.set_finale_at.assert_called_once_with(5500.0)
+
+
+def test_waiting_for_the_ramp_never_pushes_a_late_climax_earlier(handler, beat_handler):
+    beat_handler.ramp_complete_at = 5200.0
+    handler.climax_active = True
+    handler.climax_only_after_ramp = True
+    handler.min_climax_after = handler.max_climax_after = 600.0
+
+    handler.on_session_planned(5000.0)
+
+    assert handler.finale_at == 5600.0
+
+
+def test_the_climax_does_not_wait_when_the_box_is_unticked(handler, beat_handler):
+    beat_handler.ramp_complete_at = 5500.0
+    handler.climax_active = True
+    handler.climax_only_after_ramp = False
+    handler.min_climax_after = handler.max_climax_after = 100.0
+
+    handler.on_session_planned(5000.0)
+
+    assert handler.finale_at == 5100.0
+
+
+def test_the_climax_does_not_wait_when_there_is_no_ramp(handler, beat_handler):
+    """Ramping switched off means ramp_complete_at is None - the box has nothing to wait
+    for, and the Ramp duration sliders must not reach the climax through the back door."""
+    beat_handler.ramp_complete_at = None
+    handler.climax_active = True
+    handler.climax_only_after_ramp = True
+    handler.min_climax_after = handler.max_climax_after = 100.0
+
+    handler.on_session_planned(5000.0)
+
+    assert handler.finale_at == 5100.0
+
+
+def test_ticking_the_box_mid_session_pushes_the_climax_past_the_ramp(handler, beat_handler):
+    beat_handler.ramp_complete_at = 5500.0
+    beat_handler.session_start_time = 5000.0
+    handler.climax_active = True
+    handler.climax_only_after_ramp = False
+    handler.min_climax_after = handler.max_climax_after = 100.0
+    handler.on_session_planned(5000.0)
+    assert handler.finale_at == 5100.0
+
+    handler.climax_only_after_ramp = True
+    handler.settings_changed()
+
+    assert handler.finale_at == 5500.0
+    assert beat_handler.set_finale_at.call_args.args == (5500.0,)
+
+
+def test_unticking_the_box_mid_session_restores_the_drawn_time(handler, beat_handler):
+    """The drawn moment is kept, so the box is a clamp that can be lifted again rather
+    than a one-way re-roll."""
+    beat_handler.ramp_complete_at = 5500.0
+    beat_handler.session_start_time = 5000.0
+    handler.climax_active = True
+    handler.climax_only_after_ramp = True
+    handler.min_climax_after = handler.max_climax_after = 100.0
+    handler.on_session_planned(5000.0)
+    assert handler.finale_at == 5500.0
+
+    handler.climax_only_after_ramp = False
+    handler.settings_changed()
+
+    assert handler.finale_at == 5100.0
 
 
 # --- firing the climax ---

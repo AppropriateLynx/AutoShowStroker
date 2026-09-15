@@ -36,6 +36,12 @@ class ClimaxHandler(QObject):
         # A range rather than a single value, so the session is not the same length twice.
         "min_climax_after": 720.0,
         "max_climax_after": 2100.0,
+        # Hold the climax until the difficulty ramp has topped out, however early the draw
+        # above came out. On by default because that is the classic arc - build, peak,
+        # finish - and what the app did for its whole life before the two were separated.
+        # It only ever pushes the climax later, never earlier, and does nothing at all when
+        # ramping is switched off (BeatHandler.ramp_complete_at is then None).
+        "climax_only_after_ramp": True,
         "ruined_orgasm_active": False,
         "ruined_orgasm_chance": 0.5,
         "denied_orgasm_active": False,
@@ -69,6 +75,11 @@ class ClimaxHandler(QObject):
             self.max_climax_after = float(
                 self.settings.value("ClimaxHandler/max_climax_after", self.max_climax_after)
             )
+            self.climax_only_after_ramp = bool(
+                self.settings.value(
+                    "ClimaxHandler/climax_only_after_ramp", self.climax_only_after_ramp, type=bool
+                )
+            )
             self.ruined_orgasm_active = bool(
                 self.settings.value("ClimaxHandler/ruined_orgasm_active", self.ruined_orgasm_active, type=bool)
             )
@@ -101,6 +112,9 @@ class ClimaxHandler(QObject):
         self.finale_at = None
         self.outcome = None
         self._planned_fakes = set()
+        # The moment the draw produced, before climax_only_after_ramp clamps it. Kept so
+        # unticking the box mid-session gives that moment back instead of re-rolling.
+        self._drawn_finale_at = None
 
         self._fake_climax_timer = QTimer()
         self._fake_climax_timer.setSingleShot(True)
@@ -126,6 +140,7 @@ class ClimaxHandler(QObject):
         self.climax_triggered = False
         self._fake_climax_pending = False
         self.finale_at = None
+        self._drawn_finale_at = None
         self.outcome = None
         self._planned_fakes = set()
         self._fake_climax_timer.stop()
@@ -135,15 +150,31 @@ class ClimaxHandler(QObject):
         """Places this session's climax, the moment BeatHandler starts planning."""
         if not self.climax_active:
             self.finale_at = None
+            self._drawn_finale_at = None
             self.outcome = None
             self._climax_timer.stop()
             self.beat_handler.set_finale_at(None)
             return
         low, high = sorted((self.min_climax_after, self.max_climax_after))
-        self.finale_at = session_start_time + random.uniform(low, high)
+        self._drawn_finale_at = session_start_time + random.uniform(low, high)
+        self.finale_at = self._clamped_finale_at()
         self.outcome = self._resolve_outcome()
         self._arm_climax_timer()
         self.beat_handler.set_finale_at(self.finale_at)
+
+    def _clamped_finale_at(self):
+        """The drawn moment, held back to the end of the ramp if the user asked for that.
+
+        Only ever later, never earlier - and never at all when ramping is off, since there
+        is no ramp to wait for and the Ramp duration sliders have no business reaching the
+        climax while their own checkbox is unticked.
+        """
+        if not self.climax_only_after_ramp:
+            return self._drawn_finale_at
+        ramp_complete_at = self.beat_handler.ramp_complete_at
+        if ramp_complete_at is None:
+            return self._drawn_finale_at
+        return max(self._drawn_finale_at, ramp_complete_at)
 
     def _arm_climax_timer(self):
         self._climax_timer.start(max(0, int((self.finale_at - time.time()) * 1000)))
@@ -198,6 +229,13 @@ class ClimaxHandler(QObject):
             self.on_session_planned(self.beat_handler.session_start_time)
             return
         self.outcome = self._resolve_outcome()
+        # The drawn moment stands - re-drawing it would make saving a re-roll lever - but
+        # the ramp clamp is re-applied, so ticking or unticking that box takes effect.
+        moved_to = self._clamped_finale_at()
+        if moved_to != self.finale_at:
+            self.finale_at = moved_to
+            self._arm_climax_timer()
+            self.beat_handler.set_finale_at(self.finale_at)
 
     def _trigger_fake_climax(self):
         self._fake_climax_pending = True

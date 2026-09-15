@@ -468,6 +468,17 @@ class BeatHandler(QObject):
         finally:
             self.beat_pattern_mutex.unlock()
 
+    @property
+    def ramp_complete_at(self):
+        """Wall clock at which the difficulty ramp tops out, or None when there is no ramp
+        to wait for - either because the session has not started or because ramping is
+        switched off. Returning None for the latter is the point: it is what stops the Ramp
+        duration sliders from influencing anything while their own checkbox is unticked.
+        """
+        if not self.ramping_active or self.ramp_target_duration <= 0:
+            return None
+        return self.session_start_time + self.ramp_target_duration
+
     def _ramp_progress(self, at_time=None):
         """Ramp progress at `at_time` (default: now).
 

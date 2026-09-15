@@ -115,6 +115,13 @@ class SettingsDialog(QDialog):
         self.add_setting(
             "Climax latest (s into session):", "max_climax_after", self.climax_handler, float, 10.0, 7200.0, 10.0
         )
+        self.climax_only_after_ramp_checkbox = QCheckBox("Climax only after ramping finishes")
+        self.climax_only_after_ramp_checkbox.setToolTip(
+            "Holds the climax back until the difficulty ramp has topped out, however early "
+            "the window above allows it. Has no effect while difficulty ramping is off."
+        )
+        self.climax_only_after_ramp_checkbox.setChecked(self.climax_handler.climax_only_after_ramp)
+        self._current_layout.addWidget(self.climax_only_after_ramp_checkbox)
 
         self.ruined_orgasm_active_checkbox = QCheckBox("Allow ruined orgasm outcome")
         self.ruined_orgasm_active_checkbox.setChecked(self.climax_handler.ruined_orgasm_active)
@@ -152,6 +159,10 @@ class SettingsDialog(QDialog):
             ],
             checkbox_defaults=[
                 (self.climax_active_checkbox, self.climax_handler.DEFAULTS["climax_active"]),
+                (
+                    self.climax_only_after_ramp_checkbox,
+                    self.climax_handler.DEFAULTS["climax_only_after_ramp"],
+                ),
                 (self.ruined_orgasm_active_checkbox, self.climax_handler.DEFAULTS["ruined_orgasm_active"]),
                 (self.denied_orgasm_active_checkbox, self.climax_handler.DEFAULTS["denied_orgasm_active"]),
                 (self.fake_climax_active_checkbox, self.climax_handler.DEFAULTS["fake_climax_active"]),
@@ -336,6 +347,11 @@ class SettingsDialog(QDialog):
 
         settings.setValue("ClimaxHandler/climax_active", self.climax_active_checkbox.isChecked())
         self.climax_handler.climax_active = self.climax_active_checkbox.isChecked()
+
+        settings.setValue(
+            "ClimaxHandler/climax_only_after_ramp", self.climax_only_after_ramp_checkbox.isChecked()
+        )
+        self.climax_handler.climax_only_after_ramp = self.climax_only_after_ramp_checkbox.isChecked()
 
         settings.setValue("ClimaxHandler/ruined_orgasm_active", self.ruined_orgasm_active_checkbox.isChecked())
         self.climax_handler.ruined_orgasm_active = self.ruined_orgasm_active_checkbox.isChecked()
