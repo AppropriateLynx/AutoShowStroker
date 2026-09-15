@@ -355,6 +355,8 @@ class GoonerApp(QMainWindow):
         # Keeps the running session's timeline for the Session Explorer. In memory only -
         # it holds media paths, which never go near the data directory. See SessionRecorder.
         self.session_recorder = SessionRecorder()
+        # Set while replaying a saved session - see start(). None for a live one.
+        self._script = None
         self._session_start_bests = {}
 
         self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
@@ -695,6 +697,17 @@ class GoonerApp(QMainWindow):
         self.show_next()
 
     def recalc_autoplay_timer(self):
+        """How long the medium now on screen stays up.
+
+        A replay takes the recorded gap - the pacing is as much a part of the saved session
+        as the beats are, and it is most of what "the same session" means when the pictures
+        are someone else's. Once the script runs out the settings take over again.
+        """
+        if self._script is not None:
+            scripted = self._script.next_media_gap()
+            if scripted is not None:
+                self.auto_play_timer.start(int(scripted * 1000))
+                return
         self.auto_play_timer.start(int(random.uniform(self.min_dur, self.max_dur) * 1000))
 
     def open_folder(self):
@@ -732,9 +745,16 @@ class GoonerApp(QMainWindow):
         self.load_current_index()
 
     def load_current_index(self):
+        scripted = self._script.next_media_path() if self._script is not None else None
+        if scripted is not None:
+            self._show_media_path(scripted)
+            return
         if not self.playlist:
             return
         file_path = str(self.playlist[self.current_index])
+        self._show_media_path(file_path)
+
+    def _show_media_path(self, file_path):
         # Never logged, only recorded in memory - a media path is exactly what the privacy
         # rules keep out of the log and the data directory.
         self.media_shown_event.emit(file_path)
@@ -750,7 +770,13 @@ class GoonerApp(QMainWindow):
             self.current_movie = None
 
         if kind == "video":
-            self.auto_play_timer.stop()
+            # Live, a clip runs to EndOfMedia and is not on the autoplay timer at all. In a
+            # replay the recorded gap wins instead: the saved session says where this clip
+            # was actually cut, and that is the thing being replayed.
+            if self._script is None:
+                self.auto_play_timer.stop()
+            else:
+                self.recalc_autoplay_timer()
 
             self.media_stack.setCurrentWidget(self.video_widget)
             self.media_player.setSource(QUrl.fromLocalFile(file_path))
@@ -827,8 +853,11 @@ class GoonerApp(QMainWindow):
         if show_statistics:
             self.show_statistics()
 
-    def start(self):
+    def start(self, script=None):
+        """Starts a session. With a `script` (see SessionScript) the beats, the climax and
+        the media pacing are replayed from a saved session instead of drawn."""
         if not self.is_running:
+            self._script = script
             # A denied outcome from the previous session may still have a stop pending -
             # 5 seconds is comfortably enough to stop, close the stats and start again,
             # and it would then kill the fresh session instead.
@@ -842,10 +871,14 @@ class GoonerApp(QMainWindow):
             self.btn_next.setEnabled(True)
             self.btn_prev.setEnabled(True)
             self.btn_stop.setEnabled(True)
-            self.beat_handler.start_beat()
+            self.beat_handler.start_beat(script=script)
             self.btn_load.setText("Change Gooning Folder.")
+        # No recalc_autoplay_timer() here: load_media() already schedules the next change
+        # for an image or a gif, and deliberately does not for a video, which advances on
+        # EndOfMedia instead. Rescheduling here restarted the timer it had just stopped, so
+        # the first clip of a session was cut after a random 0.5-4s - and in a replay it
+        # burned a second recorded gap.
         self.load_current_index()
-        self.recalc_autoplay_timer()
 
     def _on_climax_outcome(self, outcome):
         log.info("Climax outcome: %s", outcome)

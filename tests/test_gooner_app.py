@@ -1458,3 +1458,115 @@ def test_a_fake_climax_is_recorded_for_the_timeline(app, tmp_path):
     app.climax_handler.fake_climax_triggered_event.emit()
 
     assert app.session_recorder.timeline()["fake_climaxes"]
+
+
+# --- replaying a saved session ---
+
+
+def _replay_script(media, ignore_paths=False, segments=None):
+    from src.SessionScript import SessionScript
+
+    return SessionScript({
+        "duration_sec": 100.0,
+        "segments": segments or [{"kind": "beat", "pattern": "Standard Beat",
+                                  "freq": 2.0, "duration_sec": 100.0}],
+        "custom_patterns": {}, "climax": None, "fake_climaxes": [], "media": media,
+    }, ignore_paths=ignore_paths)
+
+
+def test_a_replay_shows_the_recorded_media_in_order(app, tmp_path):
+    first, second = tmp_path / "one.png", tmp_path / "two.png"
+    for path in (first, second):
+        path.write_bytes(b"")
+    script = _replay_script([{"at_sec": 0.0, "path": str(first)},
+                             {"at_sec": 4.0, "path": str(second)}])
+
+    app.start(script=script)
+
+    assert str(first) in [path for _at, path in app.session_recorder._media]
+
+
+def test_a_replay_uses_the_recorded_media_gaps(app, tmp_path):
+    """The pacing is part of what was saved, not just the beats."""
+    app.playlist = [tmp_path / "a.png"]
+    script = _replay_script([{"at_sec": 0.0, "path": str(tmp_path / "a.png")},
+                             {"at_sec": 7.0, "path": str(tmp_path / "a.png")}])
+
+    app.start(script=script)
+
+    assert app.auto_play_timer.interval() == 7000
+
+
+def test_a_replay_falls_back_to_the_settings_once_the_script_runs_out(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.min_dur = app.max_dur = 2.0
+    app.start(script=_replay_script([{"at_sec": 0.0, "path": str(tmp_path / "a.png")}]))
+
+    app.recalc_autoplay_timer()  # the single recorded gap is already spent
+
+    assert app.auto_play_timer.interval() == 2000
+
+
+def test_ignoring_the_paths_uses_the_loaded_playlist(app, tmp_path):
+    """Replaying someone else's difficulty against your own library."""
+    mine = tmp_path / "mine.png"
+    mine.write_bytes(b"")
+    app.playlist = [mine]
+    script = _replay_script([{"at_sec": 0.0, "path": r"C:\someone\else.png"}], ignore_paths=True)
+
+    app.start(script=script)
+
+    shown = [path for _at, path in app.session_recorder._media]
+    assert shown == [str(mine)]
+
+
+def test_a_replay_without_paths_keeps_the_recorded_gaps(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.min_dur = app.max_dur = 99.0
+    script = _replay_script([{"at_sec": 0.0}, {"at_sec": 6.0}], ignore_paths=True)
+
+    app.start(script=script)
+
+    assert app.auto_play_timer.interval() == 6000
+
+
+def test_a_replayed_video_does_not_escape_its_recorded_gap(app, tmp_path, monkeypatch):
+    """load_media normally stops the autoplay timer for video and advances on EndOfMedia -
+    in a replay the recorded gap wins and cuts the clip where it was cut before."""
+    app.media_player = MagicMock()
+    app.audio_output = MagicMock()
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"")
+    script = _replay_script([{"at_sec": 0.0, "path": str(clip)}, {"at_sec": 5.0, "path": str(clip)}])
+
+    app.start(script=script)
+
+    assert app.auto_play_timer.isActive()
+    assert app.auto_play_timer.interval() == 5000
+
+
+def test_a_normal_session_afterwards_is_not_scripted(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.min_dur = app.max_dur = 3.0
+    app.start(script=_replay_script([{"at_sec": 0.0, "path": str(tmp_path / "a.png")},
+                                     {"at_sec": 9.0, "path": str(tmp_path / "a.png")}]))
+    app._end_session(show_statistics=False)
+
+    app.start()
+
+    assert app.auto_play_timer.interval() == 3000
+
+
+def test_a_video_starting_a_session_is_not_cut_short_by_the_autoplay_timer(app, tmp_path):
+    """load_media deliberately leaves video off the autoplay timer - it advances on
+    EndOfMedia, honouring video_min_dur. start() used to restart the timer right after,
+    so the first clip of a session was cut after a random 0.5-4s."""
+    app.media_player = MagicMock()
+    app.audio_output = MagicMock()
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"")
+    app.playlist = [clip]
+
+    app.start()
+
+    assert app.auto_play_timer.isActive() is False
