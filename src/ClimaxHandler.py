@@ -115,6 +115,10 @@ class ClimaxHandler(QObject):
         # The moment the draw produced, before climax_only_after_ramp clamps it. Kept so
         # unticking the box mid-session gives that moment back instead of re-rolling.
         self._drawn_finale_at = None
+        # Set while replaying a saved session: the climax time, its outcome and the
+        # fake-outs all come from the file instead of from the dice.
+        self._script = None
+        self._scripted_fake_timers = []
 
         self._fake_climax_timer = QTimer()
         self._fake_climax_timer.setSingleShot(True)
@@ -143,11 +147,26 @@ class ClimaxHandler(QObject):
         self._drawn_finale_at = None
         self.outcome = None
         self._planned_fakes = set()
+        self._script = None
+        self._cancel_scripted_fakes()
         self._fake_climax_timer.stop()
         self._climax_timer.stop()
 
-    def on_session_planned(self, session_start_time):
-        """Places this session's climax, the moment BeatHandler starts planning."""
+    @property
+    def scripted_fake_count(self) -> int:
+        return len(self._scripted_fake_timers)
+
+    def on_session_planned(self, session_start_time, script=None):
+        """Places this session's climax, the moment BeatHandler starts planning.
+
+        With a `script` the whole thing is read off the saved session instead: the recorded
+        time, the recorded outcome, and one timer per recorded fake-out.
+        """
+        self._script = script
+        self._cancel_scripted_fakes()
+        if script is not None:
+            self._replay_session_planned(session_start_time, script)
+            return
         if not self.climax_active:
             self.finale_at = None
             self._drawn_finale_at = None
@@ -176,11 +195,47 @@ class ClimaxHandler(QObject):
             return self._drawn_finale_at
         return max(self._drawn_finale_at, ramp_complete_at)
 
+    def _replay_session_planned(self, session_start_time, script):
+        """Everything from the file. No draw, and deliberately no climax_only_after_ramp
+        clamp: the time was recorded, not negotiated, and holding it back would replay a
+        different session than the one that was saved."""
+        for offset in script.fake_offsets:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(self._on_scripted_fake_due)
+            timer.start(max(0, int((session_start_time + offset - time.time()) * 1000)))
+            self._scripted_fake_timers.append(timer)
+
+        if script.climax_offset is None:
+            self.finale_at = None
+            self._drawn_finale_at = None
+            self.outcome = None
+            self._climax_timer.stop()
+            self.beat_handler.set_finale_at(None)
+            return
+        self.finale_at = session_start_time + script.climax_offset
+        self._drawn_finale_at = self.finale_at
+        self.outcome = script.climax_outcome
+        self._arm_climax_timer()
+        self.beat_handler.set_finale_at(self.finale_at)
+
+    def _on_scripted_fake_due(self):
+        if self.climax_triggered or self._fake_climax_pending:
+            return
+        self._trigger_fake_climax()
+
+    def _cancel_scripted_fakes(self):
+        for timer in self._scripted_fake_timers:
+            timer.stop()
+        self._scripted_fake_timers = []
+
     def _arm_climax_timer(self):
         self._climax_timer.start(max(0, int((self.finale_at - time.time()) * 1000)))
 
     def on_plan_extended(self, segments):
         """Rolls the fake climaxes for boundaries that have just been planned."""
+        if self._script is not None:
+            return  # a replay's fake-outs are on their own timers, recorded not rolled
         if not self.fake_climax_active:
             return
         for segment in segments:

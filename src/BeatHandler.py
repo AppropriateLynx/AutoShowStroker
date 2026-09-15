@@ -143,6 +143,10 @@ class BeatHandler(QObject):
         self._current_segment = None
         self._current_segment_end = 0.0
         self._holding = False
+        self._script = None
+        # Rhythms a replayed session brought with it. Kept apart from custom_beat_patterns
+        # so borrowing someone else's session never quietly adopts their pattern library.
+        self._borrowed_patterns = {}
 
         # Whatever the user has saved wins over the defaults above.
         if self.settings:
@@ -208,7 +212,7 @@ class BeatHandler(QObject):
         self.current_beat_pattern = None
         self.current_beat_pattern_name = None
         self.current_beat_position = 0
-        self.available_beat_patterns = {**self.BEAT_PATTERNS_MAP, **self.custom_beat_patterns}
+        self._refresh_available_patterns()
         self.beat_pattern_mutex = QMutex()
         self._pattern_audible_count = 1
         self._pattern_inv_sum = 1.0
@@ -291,6 +295,12 @@ class BeatHandler(QObject):
         pause_loop() always recalculated a fresh one on the way out.
         """
         index = self._next_index
+        if self._script is not None:
+            scripted = self._script.next_segment(index)
+            if scripted is not None:
+                # No finale rule: a replayed session already has its run-in recorded, and
+                # reshaping it would make the replay something other than what was saved.
+                return scripted
         if self._last_planned_kind() not in (None, "pause") and random.uniform(0, 1) < self.pause_chance:
             # sorted() because randint - unlike the uniform() calls everywhere else - raises on
             # an inverted range. SettingsDialog refuses to save min above max, but a registry
@@ -392,7 +402,12 @@ class BeatHandler(QObject):
 
     # --- running the beat ---
 
-    def start_beat(self):
+    def start_beat(self, script=None):
+        """Starts a session. With a `script` (see SessionScript) the planner replays the
+        recorded segments instead of drawing its own, until the script runs out."""
+        self._script = script
+        self._borrowed_patterns = dict(script.custom_patterns) if script else {}
+        self._refresh_available_patterns()
         self.session_start_time = time.time()
         self.ramp_target_duration = random.uniform(self.min_ramp_duration, self.max_ramp_duration)
         self._plan.clear()
@@ -598,6 +613,15 @@ class BeatHandler(QObject):
         window_min = self.min_beat_freq + progress * (corridor - width)
         return window_min, window_min + width
 
+    def _refresh_available_patterns(self):
+        """What recalc can actually play: the built-ins, the user's own, and anything a
+        replayed session brought with it."""
+        self.available_beat_patterns = {
+            **self.BEAT_PATTERNS_MAP,
+            **self.custom_beat_patterns,
+            **self._borrowed_patterns,
+        }
+
     def _usable_pattern_names(self):
         """Selected pattern names that actually have a definition - never empty.
 
@@ -760,7 +784,7 @@ class BeatHandler(QObject):
 
         log.info("Custom pattern %r saved with %d steps", name, len(steps))
         self.custom_beat_patterns[name] = list(steps)
-        self.available_beat_patterns = {**self.BEAT_PATTERNS_MAP, **self.custom_beat_patterns}
+        self._refresh_available_patterns()
         if name not in self.selected_beat_patterns:
             self.selected_beat_patterns.append(name)
         self._save_custom_patterns()
@@ -768,7 +792,7 @@ class BeatHandler(QObject):
     def delete_custom_pattern(self, name):
         log.info("Custom pattern %r deleted", name)
         self.custom_beat_patterns.pop(name, None)
-        self.available_beat_patterns = {**self.BEAT_PATTERNS_MAP, **self.custom_beat_patterns}
+        self._refresh_available_patterns()
         if name in self.selected_beat_patterns:
             self.selected_beat_patterns.remove(name)
         self._save_custom_patterns()
@@ -781,7 +805,7 @@ class BeatHandler(QObject):
         data deletion, not a rhythm reset."""
         log.info("Clearing %d custom pattern(s)", len(self.custom_beat_patterns))
         self.custom_beat_patterns = {}
-        self.available_beat_patterns = dict(self.BEAT_PATTERNS_MAP)
+        self._refresh_available_patterns()
         self.selected_beat_patterns = [
             name for name in self._usable_pattern_names() if name in self.BEAT_PATTERNS_MAP
         ]

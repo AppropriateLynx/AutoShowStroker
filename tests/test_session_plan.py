@@ -458,3 +458,110 @@ def test_the_track_stays_full_while_the_final_segment_is_held(handler, monkeypat
     freeze(monkeypatch, 1000.0 + 600.0)  # long past where the segment would have ended
 
     assert len(handler.upcoming_beats(2.5)) == before
+
+
+# --- replaying a saved session ---
+
+
+def _script(segments, **overrides):
+    from src.SessionScript import SessionScript
+
+    saved = {"duration_sec": sum(s["duration_sec"] for s in segments), "segments": segments,
+             "custom_patterns": {}, "climax": None, "fake_climaxes": [], "media": []}
+    saved.update(overrides)
+    return SessionScript(saved)
+
+
+def test_a_scripted_session_replays_the_recorded_segments(handler):
+    """The whole point of the rebuild: the planner reads a plan instead of drawing one."""
+    pin(handler)
+    script = _script([
+        {"kind": "beat", "pattern": "Quick Swing", "freq": 2.3, "duration_sec": 30.0},
+        {"kind": "pause", "pattern": None, "freq": None, "duration_sec": 12.0},
+        {"kind": "beat", "pattern": "Slow Pulse", "freq": 4.1, "duration_sec": 25.0},
+    ])
+
+    handler.start_beat(script=script)
+
+    planned = [handler.current_segment, *handler.planned_segments][:3]
+    assert [(s.kind, s.pattern_name, s.freq, s.duration_sec) for s in planned] == [
+        ("beat", "Quick Swing", 2.3, 30.0),
+        ("pause", None, None, 12.0),
+        ("beat", "Slow Pulse", 4.1, 25.0),
+    ]
+
+
+def test_a_scripted_session_ignores_the_configured_ranges(handler):
+    """A replay is the recorded session, not the recorded session filtered through whatever
+    the sliders happen to say today."""
+    pin(handler, beat_dur=99.0, freq=1.0)
+    script = _script([{"kind": "beat", "pattern": "Standard Beat", "freq": 3.3, "duration_sec": 7.0}])
+
+    handler.start_beat(script=script)
+
+    assert handler.current_segment.duration_sec == 7.0
+    assert handler.cur_freq == 3.3
+
+
+def test_the_planner_takes_over_once_the_script_is_spent(handler):
+    """A replay that outlives its recording keeps playing rather than stopping dead."""
+    pin(handler, beat_dur=20.0)
+    script = _script([{"kind": "beat", "pattern": "Standard Beat", "freq": 2.0, "duration_sec": 5.0}])
+
+    handler.start_beat(script=script)
+
+    drawn = handler.planned_segments
+    assert drawn, "nothing was planned after the script ran out"
+    assert all(s.duration_sec == 20.0 for s in drawn)
+
+
+def test_scripted_segments_keep_the_handlers_own_indices(handler):
+    pin(handler)
+    script = _script([
+        {"kind": "beat", "pattern": "Standard Beat", "freq": 2.0, "duration_sec": 10.0},
+        {"kind": "beat", "pattern": "Standard Beat", "freq": 2.0, "duration_sec": 10.0},
+    ])
+
+    handler.start_beat(script=script)
+
+    planned = [handler.current_segment, *handler.planned_segments]
+    assert [s.index for s in planned] == list(range(len(planned)))
+
+
+def test_a_scripted_custom_pattern_is_registered_before_it_plays(handler):
+    """Otherwise the replay reaches a rhythm the machine has never heard of and falls back
+    to something else entirely."""
+    pin(handler)
+    script = _script(
+        [{"kind": "beat", "pattern": "Borrowed", "freq": 2.0, "duration_sec": 10.0}],
+        custom_patterns={"Borrowed": [1, -1, 2]},
+    )
+
+    handler.start_beat(script=script)
+
+    assert handler.current_beat_pattern_name == "Borrowed"
+    assert handler.current_beat_pattern == [1, -1, 2]
+
+
+def test_a_scripted_custom_pattern_is_not_saved_to_the_users_library(handler, tmp_path):
+    """A replay borrows someone else's rhythm for the session; it does not adopt it."""
+    pin(handler)
+    script = _script(
+        [{"kind": "beat", "pattern": "Borrowed", "freq": 2.0, "duration_sec": 10.0}],
+        custom_patterns={"Borrowed": [1, -1, 2]},
+    )
+
+    handler.start_beat(script=script)
+
+    assert "Borrowed" not in handler.custom_beat_patterns
+
+
+def test_starting_a_normal_session_afterwards_drops_the_script(handler):
+    pin(handler, beat_dur=20.0)
+    handler.start_beat(script=_script(
+        [{"kind": "beat", "pattern": "Standard Beat", "freq": 3.3, "duration_sec": 7.0}]
+    ))
+
+    handler.start_beat()
+
+    assert handler.current_segment.duration_sec == 20.0
