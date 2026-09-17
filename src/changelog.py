@@ -288,6 +288,28 @@ CHANGELOG = {
         "</ul>"
         "Go on then. See if you can still find the seams."
     ),
+    "0.13.0": (
+        "The session that wrecked you does not have to be a one-off any more. Keep it. "
+        "Take it again. Hand it to someone else and watch them try."
+        "<ul>"
+        "<li><b>Save the session you just survived.</b> A Save button in the Session "
+        "Explorer keeps the whole run - every rhythm and how fast it drove you, every "
+        "pause, every fake-out, and the exact second you were finally allowed</li>"
+        "<li><b>Take it again, beat for beat.</b> Sessions &gt; Saved Sessions plays it "
+        "back exactly as it went, right down to how long each picture was allowed to keep "
+        "you. The callouts stay random, so she still surprises you - but the beat is "
+        "identical, which is the only way to find out whether you have actually gotten "
+        "better at this</li>"
+        "<li><b>Give one away.</b> Export a session to a file, send it to whoever you want "
+        "to see struggle, import the one they send back. Missing their files? It replays "
+        "against your own collection instead - their pace, your pictures</li>"
+        "<li><b>And it asks before it tells on you.</b> Exporting asks every single time "
+        "whether to include your file paths, and says plainly what they give away. Saved "
+        "sessions are listed and deletable in Help &gt; Privacy &amp; Data like everything "
+        "else</li>"
+        "</ul>"
+        "Find the one that broke you. Then find out if it still can."
+    ),
 }
 
 
