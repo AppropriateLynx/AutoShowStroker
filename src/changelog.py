@@ -288,7 +288,7 @@ CHANGELOG = {
         "</ul>"
         "Go on then. See if you can still find the seams."
     ),
-    "0.13.3": (
+    "0.13.4": (
         "The session that wrecked you does not have to be a one-off any more. Keep it. "
         "Take it again. Hand it to someone else and watch them try."
         "<ul>"
@@ -328,6 +328,11 @@ CHANGELOG = {
         "shows every one there is - including the ones you have not earned, with what "
         "they want and how close you got. A few stay <i>???</i> until you trip over them. "
         "Obedience only counts when it costs you something, naturally</li>"
+        "<li><b>And you can have one written for you.</b> A session is just a file, so an "
+        "AI can compose one - the format and a ready-made skill now ship in the repo. Ask "
+        "for forty punishing minutes that deny you at the end and import what it hands "
+        "back. It never touches your collection: a written session says only <i>when</i> "
+        "the picture changes, never which one</li>"
         "</ul>"
         "Find the one that broke you. Then find out if it still can."
     ),

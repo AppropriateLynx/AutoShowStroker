@@ -400,3 +400,23 @@ def test_the_manager_explains_what_replaying_an_unfinished_session_does(make_dia
     dialog = make_dialog([])
 
     assert "stopped early" in dialog.intro_label.text().lower()
+
+
+def test_importing_a_broken_session_names_what_is_wrong_with_it(
+    make_dialog, tmp_path, monkeypatch
+):
+    """Somebody iterating on a generated file needs the list, not "could not import"."""
+    broken = saved()
+    broken["segments"][0]["pattern"] = "Furious Wiggle"
+    incoming = tmp_path / "generated.json"
+    session_files.write_session_file(incoming, broken)
+    warned = []
+    monkeypatch.setattr("src.SavedSessionsDialog.QMessageBox.warning",
+                        lambda parent, title, text: warned.append(text))
+    monkeypatch.setattr(SavedSessionsDialog, "_choose_import_file", lambda self: incoming)
+    dialog = make_dialog([])
+
+    dialog.import_button.click()
+
+    assert len(warned) == 1
+    assert "Furious Wiggle" in warned[0]
