@@ -1733,3 +1733,25 @@ def test_a_replay_starts_its_recording_fresh(app, tmp_path):
     app.replay_session(_saved_with_media(tmp_path))
 
     assert len(app.session_recorder._media) == 1
+
+
+def test_the_sessions_menu_opens_the_saved_sessions_manager(app, monkeypatch):
+    from PyQt6.QtWidgets import QMenu
+
+    captured = {}
+
+    class FakeDialog(_FakeDialogBase):
+        def __init__(self, main_app, parent=None):
+            captured["main_app"] = main_app
+
+        def exec(self):
+            pass
+
+    monkeypatch.setattr("src.SavedSessionsDialog.SavedSessionsDialog", FakeDialog)
+
+    menu_bar = app.menuBar()
+    sessions_menu = next(m for m in menu_bar.findChildren(QMenu) if m.title() == "Sessions")
+    action = next(a for a in sessions_menu.actions() if a.text() == "Saved Sessions...")
+    action.trigger()
+
+    assert captured.get("main_app") is app

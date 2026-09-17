@@ -520,6 +520,12 @@ class GoonerApp(QMainWindow):
         check_updates_action.triggered.connect(self.check_for_updates)
         help_menu.addAction(check_updates_action)
 
+        sessions_menu = menu_bar.addMenu("Sessions")
+
+        saved_sessions_action = QAction("Saved Sessions...", self)
+        saved_sessions_action.triggered.connect(self.show_saved_sessions)
+        sessions_menu.addAction(saved_sessions_action)
+
         stats_menu = menu_bar.addMenu("Statistics")
 
         long_term_stats_action = QAction("Long-term Statistics", self)
@@ -1042,6 +1048,15 @@ class GoonerApp(QMainWindow):
             return False
         log.info("Session saved for replay: %d segments", len(saved["segments"]))
         return True
+
+    def show_saved_sessions(self):
+        # Imported here rather than at module scope, same as the other on-demand dialogs:
+        # most runs never open it.
+        from src.SavedSessionsDialog import SavedSessionsDialog
+
+        dialog = SavedSessionsDialog(self, parent=self)
+        dialog.exec()
+        dialog.deleteLater()
 
     def show_long_term_statistics(self):
         # Imported here, not at module scope: LongTermStatisticsDialog pulls in pyqtgraph and
