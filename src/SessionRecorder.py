@@ -89,6 +89,11 @@ class SessionRecorder:
                     "freq": segment.freq,
                     "start": start,
                     "end": end,
+                    # What the planner asked for, next to what it measured. They differ:
+                    # a segment ends at the first note *past* its planned end, and the
+                    # final one is held open until the session stops. Saving a session
+                    # replays the planned figure - see src/session_files.py.
+                    "planned_sec": segment.duration_sec,
                     "media": self._media_within(media_spans, start, end, is_first=index == 0),
                 }
             )

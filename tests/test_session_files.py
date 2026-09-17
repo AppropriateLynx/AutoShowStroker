@@ -293,3 +293,36 @@ def test_a_complete_session_is_not_marked_as_stopped_early():
     assert "stopped early" not in session_files.describe(
         session_files.to_saved_session(timeline())
     ).lower()
+
+
+# --- planned lengths, not measured ones ---
+
+
+def test_a_saved_segment_takes_the_length_it_was_planned_to_be():
+    """A measured length already carries the overshoot to the next note. Feeding that back
+    to the planner makes the replay overshoot again, so every segment of a replay came out
+    a little longer than the session it was reproducing."""
+    recorded = timeline()
+    recorded["segments"][0]["planned_sec"] = 58.0  # planned 58, measured 60
+
+    saved = session_files.to_saved_session(recorded)
+
+    assert saved["segments"][0]["duration_sec"] == pytest.approx(58.0)
+
+
+def test_the_last_segment_keeps_the_length_it_actually_ran():
+    """It is the one segment whose plan was not what happened: the climax holds it open
+    until the session ends, or the user stopped partway through it."""
+    recorded = timeline()
+    for data in recorded["segments"]:
+        data["planned_sec"] = 1.0
+
+    saved = session_files.to_saved_session(recorded)
+
+    assert saved["segments"][-1]["duration_sec"] == pytest.approx(125.0)  # 5075 -> 5200
+
+
+def test_a_segment_without_a_planned_length_falls_back_to_what_it_measured():
+    saved = session_files.to_saved_session(timeline())
+
+    assert saved["segments"][0]["duration_sec"] == pytest.approx(60.0)

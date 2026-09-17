@@ -37,14 +37,15 @@ class UnsupportedSessionFile(Exception):
 def to_saved_session(timeline, custom_patterns=None) -> dict:
     """Converts a SessionRecorder timeline into the saved form."""
     start = timeline.get("started_at") or 0.0
+    recorded = timeline["segments"]
     segments = [
         {
             "kind": data["kind"],
             "pattern": data["pattern"],
             "freq": data["freq"],
-            "duration_sec": data["end"] - data["start"],
+            "duration_sec": _length_to_replay(data, is_last=index == len(recorded) - 1),
         }
-        for data in timeline["segments"]
+        for index, data in enumerate(recorded)
     ]
 
     climax = None
@@ -62,6 +63,26 @@ def to_saved_session(timeline, custom_patterns=None) -> dict:
         "fake_climaxes": [at - start for at in timeline.get("fake_climaxes", [])],
         "media": _media_script(timeline, start),
     }
+
+
+def _length_to_replay(data, is_last: bool) -> float:
+    """The planned length, not the measured one - except for the last segment.
+
+    A segment does not stop the instant its time is up; it runs to the first note past it,
+    so what it measured is always a little more than what it was planned to be. Handing the
+    *measured* figure back to the planner makes the replay overshoot a second time, and
+    every segment of a replay came out longer than the one it was reproducing. Handing back
+    the planned figure makes the replay overshoot exactly the way the recording did, which
+    is the point.
+
+    The last segment is the exception both ways: the climax holds it open until the session
+    ends, or the user stopped partway through it. Neither has anything to do with its plan,
+    so there what it actually ran is the truth.
+    """
+    measured = data["end"] - data["start"]
+    if is_last:
+        return measured
+    return data.get("planned_sec", measured)
 
 
 def _patterns_used(timeline, custom_patterns) -> dict:
