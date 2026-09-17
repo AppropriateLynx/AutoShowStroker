@@ -7,9 +7,10 @@ import pytest
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import QDialog
 
-from src import applog
+from src import applog, session_files
 from src.BeatTrackWidget import BeatTrackWidget
 from src.GoonerApp import GoonerApp
+from src.SessionScript import SessionScript
 
 
 class _FakeDialogBase:
@@ -785,7 +786,7 @@ def test_show_statistics_passes_new_records(app, monkeypatch):
     captured = {}
 
     class FakeDialog(_FakeDialogBase):
-        def __init__(self, stats_data, new_records=None, timeline=None, parent=None):
+        def __init__(self, stats_data, new_records=None, timeline=None, parent=None, **kwargs):
             captured["new_records"] = new_records
 
         def exec(self):
@@ -1434,7 +1435,7 @@ def test_the_timeline_reaches_the_statistics_dialog(app, tmp_path, monkeypatch):
     captured = {}
 
     class FakeStatisticsDialog:
-        def __init__(self, stats_data, new_records=None, timeline=None, parent=None):
+        def __init__(self, stats_data, new_records=None, timeline=None, parent=None, **kwargs):
             captured["timeline"] = timeline
 
         def exec(self):
@@ -1458,3 +1459,310 @@ def test_a_fake_climax_is_recorded_for_the_timeline(app, tmp_path):
     app.climax_handler.fake_climax_triggered_event.emit()
 
     assert app.session_recorder.timeline()["fake_climaxes"]
+
+
+# --- replaying a saved session ---
+
+
+def _replay_script(media, ignore_paths=False, segments=None):
+    from src.SessionScript import SessionScript
+
+    return SessionScript({
+        "duration_sec": 100.0,
+        "segments": segments or [{"kind": "beat", "pattern": "Standard Beat",
+                                  "freq": 2.0, "duration_sec": 100.0}],
+        "custom_patterns": {}, "climax": None, "fake_climaxes": [], "media": media,
+    }, ignore_paths=ignore_paths)
+
+
+def test_a_replay_shows_the_recorded_media_in_order(app, tmp_path):
+    first, second = tmp_path / "one.png", tmp_path / "two.png"
+    for path in (first, second):
+        path.write_bytes(b"")
+    script = _replay_script([{"at_sec": 0.0, "path": str(first)},
+                             {"at_sec": 4.0, "path": str(second)}])
+
+    app.start(script=script)
+
+    assert str(first) in [path for _at, path in app.session_recorder._media]
+
+
+def test_a_replay_uses_the_recorded_media_gaps(app, tmp_path):
+    """The pacing is part of what was saved, not just the beats."""
+    app.playlist = [tmp_path / "a.png"]
+    script = _replay_script([{"at_sec": 0.0, "path": str(tmp_path / "a.png")},
+                             {"at_sec": 7.0, "path": str(tmp_path / "a.png")}])
+
+    app.start(script=script)
+
+    assert app.auto_play_timer.interval() == 7000
+
+
+def test_a_replay_falls_back_to_the_settings_once_the_script_runs_out(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.min_dur = app.max_dur = 2.0
+    app.start(script=_replay_script([{"at_sec": 0.0, "path": str(tmp_path / "a.png")}]))
+
+    app.recalc_autoplay_timer()  # the single recorded gap is already spent
+
+    assert app.auto_play_timer.interval() == 2000
+
+
+def test_ignoring_the_paths_uses_the_loaded_playlist(app, tmp_path):
+    """Replaying someone else's difficulty against your own library."""
+    mine = tmp_path / "mine.png"
+    mine.write_bytes(b"")
+    app.playlist = [mine]
+    script = _replay_script([{"at_sec": 0.0, "path": r"C:\someone\else.png"}], ignore_paths=True)
+
+    app.start(script=script)
+
+    shown = [path for _at, path in app.session_recorder._media]
+    assert shown == [str(mine)]
+
+
+def test_a_replay_without_paths_keeps_the_recorded_gaps(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.min_dur = app.max_dur = 99.0
+    script = _replay_script([{"at_sec": 0.0}, {"at_sec": 6.0}], ignore_paths=True)
+
+    app.start(script=script)
+
+    assert app.auto_play_timer.interval() == 6000
+
+
+def test_a_replayed_video_does_not_escape_its_recorded_gap(app, tmp_path, monkeypatch):
+    """load_media normally stops the autoplay timer for video and advances on EndOfMedia -
+    in a replay the recorded gap wins and cuts the clip where it was cut before."""
+    app.media_player = MagicMock()
+    app.audio_output = MagicMock()
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"")
+    script = _replay_script([{"at_sec": 0.0, "path": str(clip)}, {"at_sec": 5.0, "path": str(clip)}])
+
+    app.start(script=script)
+
+    assert app.auto_play_timer.isActive()
+    assert app.auto_play_timer.interval() == 5000
+
+
+def test_a_normal_session_afterwards_is_not_scripted(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.min_dur = app.max_dur = 3.0
+    app.start(script=_replay_script([{"at_sec": 0.0, "path": str(tmp_path / "a.png")},
+                                     {"at_sec": 9.0, "path": str(tmp_path / "a.png")}]))
+    app._end_session(show_statistics=False)
+
+    app.start()
+
+    assert app.auto_play_timer.interval() == 3000
+
+
+def test_a_video_starting_a_session_is_not_cut_short_by_the_autoplay_timer(app, tmp_path):
+    """load_media deliberately leaves video off the autoplay timer - it advances on
+    EndOfMedia, honouring video_min_dur. start() used to restart the timer right after,
+    so the first clip of a session was cut after a random 0.5-4s."""
+    app.media_player = MagicMock()
+    app.audio_output = MagicMock()
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"")
+    app.playlist = [clip]
+
+    app.start()
+
+    assert app.auto_play_timer.isActive() is False
+
+
+# --- saving a session for later ---
+
+
+def _recorded_timeline():
+    return {
+        "started_at": 100.0,
+        "ended_at": 200.0,
+        "climax_at": 190.0,
+        "climax_outcome": "real",
+        "fake_climaxes": [150.0],
+        "segments": [
+            {"kind": "beat", "pattern": "My Rhythm", "freq": 2.0, "start": 100.0, "end": 160.0,
+             "media": [{"path": "a.png", "start": 100.0, "end": 160.0, "carried_over": False}]},
+            {"kind": "finale", "pattern": "Standard Beat", "freq": 5.0, "start": 160.0,
+             "end": 200.0, "media": []},
+        ],
+    }
+
+
+def test_saving_the_session_puts_it_on_the_shelf(app, monkeypatch):
+    monkeypatch.setattr(app.session_recorder, "timeline", _recorded_timeline)
+
+    assert app.save_current_session() is True
+
+    stored = session_files.load_saved_sessions(app.data_store)
+    assert len(stored) == 1
+    assert [s["kind"] for s in stored[0]["segments"]] == ["beat", "finale"]
+    assert stored[0]["climax"]["outcome"] == "real"
+
+
+def test_a_saved_session_carries_the_custom_rhythms_it_played(app, monkeypatch):
+    """Without the definition, a replay on another machine reaches that segment with
+    nothing to play."""
+    monkeypatch.setattr(app.session_recorder, "timeline", _recorded_timeline)
+    app.beat_handler.custom_beat_patterns = {"My Rhythm": [1, 2, -1], "Unused": [1]}
+
+    app.save_current_session()
+
+    stored = session_files.load_saved_sessions(app.data_store)
+    assert stored[0]["custom_patterns"] == {"My Rhythm": [1, 2, -1]}
+
+
+def test_the_statistics_dialog_is_handed_the_way_to_save(app, monkeypatch):
+    monkeypatch.setattr(app.session_recorder, "timeline", _recorded_timeline)
+    built = {}
+
+    class _FakeStats:
+        def __init__(self, *args, save_session=None, **kwargs):
+            built["save_session"] = save_session
+
+        def exec(self):
+            pass
+
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr("src.GoonerApp.StatisticsDialog", _FakeStats)
+
+    app.show_statistics()
+
+    assert built["save_session"] == app.save_current_session
+
+
+def test_a_replay_reaches_the_climax_handler_with_the_recorded_times(app, tmp_path):
+    """The planner is told the script directly; the climax only hears about the session
+    through session_planned_event, so the script has to travel with it."""
+    saved = session_files.to_saved_session(_recorded_timeline())
+    app.playlist = [tmp_path / "a.png"]
+
+    app.start(script=SessionScript(saved))
+
+    assert app.climax_handler.finale_at == pytest.approx(
+        app.beat_handler.session_start_time + 90.0
+    )
+    assert app.climax_handler.outcome == "real"
+    assert app.climax_handler.scripted_fake_count == 1
+
+
+# --- replaying a saved session ---
+
+
+def _saved_with_media(tmp_path, count=3):
+    files = []
+    for index in range(count):
+        path = tmp_path / f"rec{index}.png"
+        path.write_bytes(b"x")
+        files.append(str(path))
+    return {
+        "format": 1,
+        "duration_sec": 90.0,
+        "segments": [{"kind": "beat", "pattern": "Standard Beat", "freq": 2.0,
+                      "duration_sec": 90.0}],
+        "custom_patterns": {},
+        "climax": {"at_sec": 80.0, "outcome": "real"},
+        "fake_climaxes": [],
+        "media": [{"at_sec": index * 30.0, "path": path} for index, path in enumerate(files)],
+    }
+
+
+def test_replaying_a_session_plays_the_recorded_files_in_the_recorded_order(app, tmp_path):
+    """Not shuffled: the order is part of what was saved, and it is what the scripted gaps
+    were measured against."""
+    saved = _saved_with_media(tmp_path)
+
+    assert app.replay_session(saved) is True
+
+    assert [str(path) for path in app.playlist] == session_files.recorded_paths(saved)
+    assert app.current_index == 0
+    assert app.is_running is True
+
+
+def test_replaying_a_session_replays_its_segments_and_its_climax(app, tmp_path):
+    saved = _saved_with_media(tmp_path)
+
+    app.replay_session(saved)
+
+    assert app.beat_handler.current_segment.duration_sec == pytest.approx(90.0)
+    assert app.climax_handler.outcome == "real"
+
+
+def test_replaying_against_your_own_library_leaves_the_playlist_alone(app, tmp_path):
+    saved = _saved_with_media(tmp_path)
+    mine = [tmp_path / "mine1.png", tmp_path / "mine2.png"]
+    app.playlist = list(mine)
+
+    assert app.replay_session(saved, ignore_paths=True) is True
+
+    assert app.playlist == mine
+
+
+def test_replaying_against_your_own_library_needs_one_to_be_loaded(app, tmp_path):
+    saved = _saved_with_media(tmp_path)
+    app.playlist = []
+
+    assert app.replay_session(saved, ignore_paths=True) is False
+    assert app.is_running is False
+
+
+def test_a_replay_ends_the_session_that_is_already_running(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    ended = []
+    app.session_ended_event.connect(lambda: ended.append(True))
+
+    app.replay_session(_saved_with_media(tmp_path))
+
+    assert ended == [True]
+    assert app.is_running is True
+
+
+def test_a_replay_starts_its_recording_fresh(app, tmp_path):
+    """The replay is a session of its own - it can be saved again, and what it records has
+    to be what it just played, not the tail of whatever came before."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.show_next()
+
+    app.replay_session(_saved_with_media(tmp_path))
+
+    assert len(app.session_recorder._media) == 1
+
+
+def test_the_sessions_menu_opens_the_saved_sessions_manager(app, monkeypatch):
+    from PyQt6.QtWidgets import QMenu
+
+    captured = {}
+
+    class FakeDialog(_FakeDialogBase):
+        def __init__(self, main_app, parent=None):
+            captured["main_app"] = main_app
+
+        def exec(self):
+            pass
+
+    monkeypatch.setattr("src.SavedSessionsDialog.SavedSessionsDialog", FakeDialog)
+
+    menu_bar = app.menuBar()
+    sessions_menu = next(m for m in menu_bar.findChildren(QMenu) if m.title() == "Sessions")
+    action = next(a for a in sessions_menu.actions() if a.text() == "Saved Sessions...")
+    action.trigger()
+
+    assert captured.get("main_app") is app
+
+
+def test_replaying_against_your_own_library_starts_it_at_the_beginning(app, tmp_path):
+    """The index is left over from whatever played before - and a replay of a long session
+    leaves it far past the end of a short own library, which walked straight off it."""
+    app.playlist = [tmp_path / "mine1.png", tmp_path / "mine2.png"]
+    app.current_index = 7
+
+    assert app.replay_session(_saved_with_media(tmp_path), ignore_paths=True) is True
+
+    assert app.current_index == 0

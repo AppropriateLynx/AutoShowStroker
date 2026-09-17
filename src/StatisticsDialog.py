@@ -15,7 +15,8 @@ from src.ScoreTracker import ScoreTracker
 
 
 class StatisticsDialog(QDialog):
-    def __init__(self, stats_data: dict, new_records: dict | None = None, timeline=None, parent=None):
+    def __init__(self, stats_data: dict, new_records: dict | None = None, timeline=None,
+                 save_session=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Session Statistics")
         self.setModal(True)
@@ -55,6 +56,7 @@ class StatisticsDialog(QDialog):
 
         # Added before _populate_table() below, which freezes the dialog size - a button
         # appended afterwards would sit outside it and never be seen.
+        self._save_session = save_session
         self.explorer_button = self._build_explorer_button(timeline)
         if self.explorer_button is not None:
             main_layout.addWidget(self.explorer_button)
@@ -83,7 +85,7 @@ class StatisticsDialog(QDialog):
         # thumbnail machinery, and most sessions close this dialog without opening it.
         from src.SessionExplorerDialog import SessionExplorerDialog
 
-        dialog = SessionExplorerDialog(timeline, parent=self)
+        dialog = SessionExplorerDialog(timeline, save_session=self._save_session, parent=self)
         dialog.exec()
         dialog.deleteLater()
 

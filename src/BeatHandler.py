@@ -102,12 +102,16 @@ class BeatHandler(QObject):
     # same pattern CalloutHandler/ClimaxHandler already use for their GoonerApp-owned labels.
     beat_meter_update_event = pyqtSignal(str, str)
     # The session plan, announced to whoever wants to shape or read it.
-    # session_planned_event carries the session's start time, and is emitted before the
-    # first segment is planned so a listener can still place a finale into it (see
-    # set_finale_at). plan_extended_event carries the newly planned segments;
+    # session_planned_event carries the session's start time and the SessionScript this
+    # session is replaying (None when it is being drawn), and is emitted before the first
+    # segment is planned so a listener can still place a finale into it (see set_finale_at).
+    # The script travels with the signal because the planner is not the only one reading
+    # it: the climax hears about a session only through here, and had no other way to learn
+    # that the times were recorded rather than to be drawn.
+    # plan_extended_event carries the newly planned segments;
     # segment_started_event the Segment now on the air - the whole thing rather than its
     # index, so a consumer can record what actually played without reaching back in here.
-    session_planned_event = pyqtSignal(float)
+    session_planned_event = pyqtSignal(float, object)
     plan_extended_event = pyqtSignal(list)
     segment_started_event = pyqtSignal(object)
 
@@ -143,6 +147,10 @@ class BeatHandler(QObject):
         self._current_segment = None
         self._current_segment_end = 0.0
         self._holding = False
+        self._script = None
+        # Rhythms a replayed session brought with it. Kept apart from custom_beat_patterns
+        # so borrowing someone else's session never quietly adopts their pattern library.
+        self._borrowed_patterns = {}
 
         # Whatever the user has saved wins over the defaults above.
         if self.settings:
@@ -208,7 +216,7 @@ class BeatHandler(QObject):
         self.current_beat_pattern = None
         self.current_beat_pattern_name = None
         self.current_beat_position = 0
-        self.available_beat_patterns = {**self.BEAT_PATTERNS_MAP, **self.custom_beat_patterns}
+        self._refresh_available_patterns()
         self.beat_pattern_mutex = QMutex()
         self._pattern_audible_count = 1
         self._pattern_inv_sum = 1.0
@@ -291,6 +299,12 @@ class BeatHandler(QObject):
         pause_loop() always recalculated a fresh one on the way out.
         """
         index = self._next_index
+        if self._script is not None:
+            scripted = self._script.next_segment(index)
+            if scripted is not None:
+                # No finale rule: a replayed session already has its run-in recorded, and
+                # reshaping it would make the replay something other than what was saved.
+                return scripted
         if self._last_planned_kind() not in (None, "pause") and random.uniform(0, 1) < self.pause_chance:
             # sorted() because randint - unlike the uniform() calls everywhere else - raises on
             # an inverted range. SettingsDialog refuses to save min above max, but a registry
@@ -392,7 +406,12 @@ class BeatHandler(QObject):
 
     # --- running the beat ---
 
-    def start_beat(self):
+    def start_beat(self, script=None):
+        """Starts a session. With a `script` (see SessionScript) the planner replays the
+        recorded segments instead of drawing its own, until the script runs out."""
+        self._script = script
+        self._borrowed_patterns = dict(script.custom_patterns) if script else {}
+        self._refresh_available_patterns()
         self.session_start_time = time.time()
         self.ramp_target_duration = random.uniform(self.min_ramp_duration, self.max_ramp_duration)
         self._plan.clear()
@@ -402,7 +421,7 @@ class BeatHandler(QObject):
         self._holding = False
         self._plan_end_time = self.session_start_time
         # Before the plan is built, so a listener still gets to place a finale into it.
-        self.session_planned_event.emit(self.session_start_time)
+        self.session_planned_event.emit(self.session_start_time, script)
         self._extend_plan()
         self._begin_next_segment()
 
@@ -598,6 +617,15 @@ class BeatHandler(QObject):
         window_min = self.min_beat_freq + progress * (corridor - width)
         return window_min, window_min + width
 
+    def _refresh_available_patterns(self):
+        """What recalc can actually play: the built-ins, the user's own, and anything a
+        replayed session brought with it."""
+        self.available_beat_patterns = {
+            **self.BEAT_PATTERNS_MAP,
+            **self.custom_beat_patterns,
+            **self._borrowed_patterns,
+        }
+
     def _usable_pattern_names(self):
         """Selected pattern names that actually have a definition - never empty.
 
@@ -697,8 +725,12 @@ class BeatHandler(QObject):
         self.beat_meter_timer.stop()
         # Length comes from the planned segment - see _plan_one_segment for the guard
         # against an inverted min/max range written by an older build.
+        # Rounded, not truncated: a drawn pause is a whole number of seconds, but a
+        # *replayed* one carries the length it was measured at, and int(1.9987) turned every
+        # replayed pause into a shorter one than the session it was reproducing. The floor
+        # of 1 is for the same reason - a pause of 0 ends in pause_loop()'s first tick.
         if self._current_segment is not None and self._current_segment.kind == "pause":
-            self.cur_pause_dur = int(self._current_segment.duration_sec)
+            self.cur_pause_dur = max(1, round(self._current_segment.duration_sec))
         else:
             low, high = sorted((self.min_pause_dur, self.max_pause_dur))
             self.cur_pause_dur = random.randint(low, high)
@@ -760,7 +792,7 @@ class BeatHandler(QObject):
 
         log.info("Custom pattern %r saved with %d steps", name, len(steps))
         self.custom_beat_patterns[name] = list(steps)
-        self.available_beat_patterns = {**self.BEAT_PATTERNS_MAP, **self.custom_beat_patterns}
+        self._refresh_available_patterns()
         if name not in self.selected_beat_patterns:
             self.selected_beat_patterns.append(name)
         self._save_custom_patterns()
@@ -768,7 +800,7 @@ class BeatHandler(QObject):
     def delete_custom_pattern(self, name):
         log.info("Custom pattern %r deleted", name)
         self.custom_beat_patterns.pop(name, None)
-        self.available_beat_patterns = {**self.BEAT_PATTERNS_MAP, **self.custom_beat_patterns}
+        self._refresh_available_patterns()
         if name in self.selected_beat_patterns:
             self.selected_beat_patterns.remove(name)
         self._save_custom_patterns()
@@ -781,7 +813,7 @@ class BeatHandler(QObject):
         data deletion, not a rhythm reset."""
         log.info("Clearing %d custom pattern(s)", len(self.custom_beat_patterns))
         self.custom_beat_patterns = {}
-        self.available_beat_patterns = dict(self.BEAT_PATTERNS_MAP)
+        self._refresh_available_patterns()
         self.selected_beat_patterns = [
             name for name in self._usable_pattern_names() if name in self.BEAT_PATTERNS_MAP
         ]

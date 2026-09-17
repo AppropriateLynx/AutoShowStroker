@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src import applog, changelog, media_kinds, theme
+from src import applog, changelog, media_kinds, session_files, theme
 from src.BeatHandler import BeatHandler
 from src.BeatTrackWidget import BeatTrackWidget
 from src.CalloutHandler import CalloutHandler
@@ -31,6 +31,7 @@ from src.MediaFolderPickerDialog import MediaFolderPickerDialog
 from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
 from src.SessionRecorder import SessionRecorder
+from src.SessionScript import SessionScript
 from src.SettingsDialog import SettingsDialog
 from src.StatisticsDialog import StatisticsDialog
 from src.UpdateChecker import UpdateChecker
@@ -355,6 +356,8 @@ class GoonerApp(QMainWindow):
         # Keeps the running session's timeline for the Session Explorer. In memory only -
         # it holds media paths, which never go near the data directory. See SessionRecorder.
         self.session_recorder = SessionRecorder()
+        # Set while replaying a saved session - see start(). None for a live one.
+        self._script = None
         self._session_start_bests = {}
 
         self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
@@ -516,6 +519,12 @@ class GoonerApp(QMainWindow):
         check_updates_action = QAction("Check for Updates...", self)
         check_updates_action.triggered.connect(self.check_for_updates)
         help_menu.addAction(check_updates_action)
+
+        sessions_menu = menu_bar.addMenu("Sessions")
+
+        saved_sessions_action = QAction("Saved Sessions...", self)
+        saved_sessions_action.triggered.connect(self.show_saved_sessions)
+        sessions_menu.addAction(saved_sessions_action)
 
         stats_menu = menu_bar.addMenu("Statistics")
 
@@ -695,6 +704,17 @@ class GoonerApp(QMainWindow):
         self.show_next()
 
     def recalc_autoplay_timer(self):
+        """How long the medium now on screen stays up.
+
+        A replay takes the recorded gap - the pacing is as much a part of the saved session
+        as the beats are, and it is most of what "the same session" means when the pictures
+        are someone else's. Once the script runs out the settings take over again.
+        """
+        if self._script is not None:
+            scripted = self._script.next_media_gap()
+            if scripted is not None:
+                self.auto_play_timer.start(int(scripted * 1000))
+                return
         self.auto_play_timer.start(int(random.uniform(self.min_dur, self.max_dur) * 1000))
 
     def open_folder(self):
@@ -732,9 +752,16 @@ class GoonerApp(QMainWindow):
         self.load_current_index()
 
     def load_current_index(self):
+        scripted = self._script.next_media_path() if self._script is not None else None
+        if scripted is not None:
+            self._show_media_path(scripted)
+            return
         if not self.playlist:
             return
         file_path = str(self.playlist[self.current_index])
+        self._show_media_path(file_path)
+
+    def _show_media_path(self, file_path):
         # Never logged, only recorded in memory - a media path is exactly what the privacy
         # rules keep out of the log and the data directory.
         self.media_shown_event.emit(file_path)
@@ -750,7 +777,13 @@ class GoonerApp(QMainWindow):
             self.current_movie = None
 
         if kind == "video":
-            self.auto_play_timer.stop()
+            # Live, a clip runs to EndOfMedia and is not on the autoplay timer at all. In a
+            # replay the recorded gap wins instead: the saved session says where this clip
+            # was actually cut, and that is the thing being replayed.
+            if self._script is None:
+                self.auto_play_timer.stop()
+            else:
+                self.recalc_autoplay_timer()
 
             self.media_stack.setCurrentWidget(self.video_widget)
             self.media_player.setSource(QUrl.fromLocalFile(file_path))
@@ -827,8 +860,11 @@ class GoonerApp(QMainWindow):
         if show_statistics:
             self.show_statistics()
 
-    def start(self):
+    def start(self, script=None):
+        """Starts a session. With a `script` (see SessionScript) the beats, the climax and
+        the media pacing are replayed from a saved session instead of drawn."""
         if not self.is_running:
+            self._script = script
             # A denied outcome from the previous session may still have a stop pending -
             # 5 seconds is comfortably enough to stop, close the stats and start again,
             # and it would then kill the fresh session instead.
@@ -842,10 +878,14 @@ class GoonerApp(QMainWindow):
             self.btn_next.setEnabled(True)
             self.btn_prev.setEnabled(True)
             self.btn_stop.setEnabled(True)
-            self.beat_handler.start_beat()
+            self.beat_handler.start_beat(script=script)
             self.btn_load.setText("Change Gooning Folder.")
+        # No recalc_autoplay_timer() here: load_media() already schedules the next change
+        # for an image or a gif, and deliberately does not for a video, which advances on
+        # EndOfMedia instead. Rescheduling here restarted the timer it had just stopped, so
+        # the first clip of a session was cut after a random 0.5-4s - and in a replay it
+        # burned a second recorded gap.
         self.load_current_index()
-        self.recalc_autoplay_timer()
 
     def _on_climax_outcome(self, outcome):
         log.info("Climax outcome: %s", outcome)
@@ -958,8 +998,67 @@ class GoonerApp(QMainWindow):
             self.score_tracker.deliver_infos(),
             new_records=self.score_tracker.last_session_new_records,
             timeline=self.session_recorder.timeline(),
+            save_session=self.save_current_session,
             parent=self,
         )
+        dialog.exec()
+        dialog.deleteLater()
+
+    def replay_session(self, saved, ignore_paths=False) -> bool:
+        """Plays a saved session again. Returns whether it started.
+
+        With the recorded paths, they *are* the playlist - in the recorded order, not
+        shuffled, because that order is what the saved gaps were measured against. With
+        ignore_paths the user's own loaded playlist is used instead and only the pacing is
+        replayed, so there has to be one loaded; the alternative would be a session of
+        empty frames.
+        """
+        if ignore_paths:
+            if not self.playlist:
+                log.warning("Cannot replay against your own library: nothing is loaded.")
+                return False
+            # From the top of the loaded playlist. The index is left over from whatever
+            # played last, and after a replay of a long session it points well past the end
+            # of a shorter own library.
+            self.current_index = 0
+        else:
+            self.playlist = [Path(path) for path in session_files.recorded_paths(saved)]
+            self.current_index = 0
+            if not self.playlist:
+                log.warning("That saved session carries no media paths to replay.")
+                return False
+
+        if self.is_running:
+            # No statistics: the user asked for a replay, not for a recap of what they
+            # interrupted. It does end the session properly, so the recorder starts clean.
+            self._end_session(show_statistics=False)
+
+        self._update_climax_status_label("neutral")
+        log.info("Replaying a saved session (own library: %s)", ignore_paths)
+        self.start(script=SessionScript(saved, ignore_paths=ignore_paths))
+        return True
+
+    def save_current_session(self) -> bool:
+        """Puts the session just played on the shelf so it can be replayed. Returns whether
+        it landed.
+
+        This is the one place in the app that writes media paths to disk, and it only runs
+        because the user pressed Save - see src/session_files.py.
+        """
+        saved = session_files.to_saved_session(
+            self.session_recorder.timeline(), self.beat_handler.custom_beat_patterns
+        )
+        if not session_files.store_session(self.data_store, saved):
+            return False
+        log.info("Session saved for replay: %d segments", len(saved["segments"]))
+        return True
+
+    def show_saved_sessions(self):
+        # Imported here rather than at module scope, same as the other on-demand dialogs:
+        # most runs never open it.
+        from src.SavedSessionsDialog import SavedSessionsDialog
+
+        dialog = SavedSessionsDialog(self, parent=self)
         dialog.exec()
         dialog.deleteLater()
 
