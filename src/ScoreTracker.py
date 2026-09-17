@@ -18,6 +18,7 @@ class ScoreTracker:
     # builds simply lack the keys.
     HISTORY_EXTRA_FIELDS = (
         "climax_outcome", "reported_outcome", "fakeouts_fallen_for", "edge_count",
+        "was_replay",
     )
     PR_METRIC_LABELS = {
         "total_dur_sec": "Total Duration",
@@ -74,6 +75,7 @@ class ScoreTracker:
         self.fakeout_count = 0
         self.fakeouts_fallen_for = 0
         self.edge_count = 0
+        self.was_replay = False
         self.history = self._load_history()
         self.last_session_new_records = {}
 
@@ -95,6 +97,11 @@ class ScoreTracker:
 
     def edge_reached(self):
         self.edge_count += 1
+
+    def replay_started(self):
+        """This session is a saved one being played again. Set after session_started(),
+        which clears it - a replay is otherwise indistinguishable in every number."""
+        self.was_replay = True
 
     def beat_paused(self):
         log.info("Beat paused")
@@ -134,6 +141,7 @@ class ScoreTracker:
         self.fakeout_count = 0
         self.fakeouts_fallen_for = 0
         self.edge_count = 0
+        self.was_replay = False
 
     def session_ended(self):
         log.info("Score tracking ended")
@@ -180,6 +188,7 @@ class ScoreTracker:
             'fakeout_count': self.fakeout_count,
             'fakeouts_fallen_for': self.fakeouts_fallen_for,
             'edge_count': self.edge_count,
+            'was_replay': self.was_replay,
         }
 
     def beat_changed(self, _, new_pattern):

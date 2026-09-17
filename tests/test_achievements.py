@@ -1,0 +1,265 @@
+"""The achievement catalogue and the tracker that judges it.
+
+Qt-free: an achievement is a predicate over a session's stats and the history behind it.
+"""
+import pytest
+
+from src import achievements
+from src.achievements import Achievement, AchievementTracker
+from src.user_data import UserDataStore
+
+
+def entry(**overrides):
+    """One history entry, as ScoreTracker writes it."""
+    base = {
+        "ended_at": "2026-09-17 20:00",
+        "total_dur_sec": 600.0,
+        "total_num_beat": 1200,
+        "average_beat_speed_active": 2.0,
+        "fakeout_count": 0,
+        "climax_outcome": None,
+        "reported_outcome": None,
+        "fakeouts_fallen_for": 0,
+        "edge_count": 0,
+    }
+    base.update(overrides)
+    return base
+
+
+def stats(**overrides):
+    """What ScoreTracker.deliver_infos() hands over for the session just ended."""
+    return entry(**overrides)
+
+
+@pytest.fixture
+def tracker(tmp_path):
+    return AchievementTracker(data_store=UserDataStore(base_dir=tmp_path / "data"))
+
+
+# --- the catalogue itself ---
+
+
+def test_every_achievement_has_a_unique_id():
+    ids = [item.id for item in achievements.CATALOGUE]
+    assert len(ids) == len(set(ids))
+
+
+def test_every_achievement_names_an_icon_file_that_exists():
+    """A typo here is invisible until the dialog is opened, and there is no compiler to
+    catch it."""
+    for item in achievements.CATALOGUE:
+        assert achievements.icon_path(item).exists(), f"{item.id} -> {item.icon}.svg"
+
+
+def test_every_achievement_says_what_it_wants_unless_it_is_secret():
+    for item in achievements.CATALOGUE:
+        assert item.name
+        if not item.secret:
+            assert item.description
+
+
+def test_the_catalogue_has_secret_entries_and_they_are_the_minority():
+    secret = [item for item in achievements.CATALOGUE if item.secret]
+    assert secret
+    assert len(secret) < len(achievements.CATALOGUE) / 2
+
+
+# --- unlocking ---
+
+
+def test_a_long_session_unlocks_the_endurance_tier(tracker):
+    history = [entry(total_dur_sec=45 * 60)]
+
+    unlocked = tracker.evaluate(stats(total_dur_sec=45 * 60), history)
+
+    assert "endurance_45" in [item.id for item in unlocked]
+
+
+def test_a_short_session_unlocks_nothing_it_has_not_earned(tracker):
+    history = [entry(total_dur_sec=60.0, total_num_beat=100)]
+
+    unlocked = tracker.evaluate(stats(total_dur_sec=60.0, total_num_beat=100), history)
+
+    assert [item.id for item in unlocked] == []
+
+
+def test_an_achievement_is_only_ever_announced_once(tracker):
+    history = [entry(total_dur_sec=45 * 60)]
+    tracker.evaluate(stats(total_dur_sec=45 * 60), history)
+
+    again = tracker.evaluate(stats(total_dur_sec=45 * 60), history + [entry()])
+
+    assert "endurance_45" not in [item.id for item in again]
+
+
+def test_unlocking_is_remembered_across_restarts(tmp_path):
+    store = UserDataStore(base_dir=tmp_path / "data")
+    AchievementTracker(data_store=store).evaluate(
+        stats(total_dur_sec=45 * 60), [entry(total_dur_sec=45 * 60)]
+    )
+
+    reopened = AchievementTracker(data_store=store)
+
+    assert reopened.is_unlocked("endurance_45") is True
+    assert reopened.unlocked_at("endurance_45")
+
+
+def test_lifetime_beats_add_up_across_every_session(tracker):
+    history = [entry(total_num_beat=20_000) for _ in range(5)]
+
+    unlocked = tracker.evaluate(stats(total_num_beat=20_000), history)
+
+    assert "lifetime_beats_100k" in [item.id for item in unlocked]
+
+
+def test_coming_back_is_its_own_achievement(tracker):
+    history = [entry() for _ in range(5)]
+
+    unlocked = tracker.evaluate(stats(), history)
+
+    assert "returner_5" in [item.id for item in unlocked]
+
+
+# --- obedience is only obedience when it cost something ---
+
+
+def test_obeying_a_denial_counts(tracker):
+    history = [entry(climax_outcome="denied", reported_outcome="stopped")]
+
+    unlocked = tracker.evaluate(stats(), history)
+
+    assert "obedient_1" in [item.id for item in unlocked]
+
+
+def test_obeying_a_ruin_counts(tracker):
+    history = [entry(climax_outcome="ruined", reported_outcome="ruined")]
+
+    assert "obedient_1" in [item.id for item in tracker.evaluate(stats(), history)]
+
+
+def test_being_told_to_come_and_coming_is_not_obedience(tracker):
+    """It is doing what you were going to do anyway - letting it count would make the whole
+    track free."""
+    history = [entry(climax_outcome="real", reported_outcome="came") for _ in range(20)]
+
+    unlocked = tracker.evaluate(stats(), history)
+
+    assert "obedient_1" not in [item.id for item in unlocked]
+
+
+def test_coming_after_a_denial_is_disobedience(tracker):
+    history = [entry(climax_outcome="denied", reported_outcome="came")]
+
+    assert "disobedient_1" in [item.id for item in tracker.evaluate(stats(), history)]
+
+
+def test_a_session_nobody_answered_for_counts_as_neither(tracker):
+    history = [entry(climax_outcome="denied", reported_outcome=None) for _ in range(20)]
+
+    ids = [item.id for item in tracker.evaluate(stats(), history)]
+
+    assert "obedient_1" not in ids
+    assert "disobedient_1" not in ids
+
+
+# --- fake-outs and edges ---
+
+
+def test_surviving_three_fake_outs_in_one_session_counts(tracker):
+    assert "fakeouts_3" in [
+        item.id for item in tracker.evaluate(stats(fakeout_count=3), [entry(fakeout_count=3)])
+    ]
+
+
+def test_falling_for_one_spoils_the_clean_sweep(tracker):
+    played = stats(fakeout_count=4, fakeouts_fallen_for=1)
+
+    ids = [item.id for item in tracker.evaluate(played, [entry(**played)])]
+
+    assert "fakeouts_3" in ids
+    assert "fakeouts_unfooled" not in ids
+
+
+def test_a_clean_sweep_of_fake_outs_counts(tracker):
+    played = stats(fakeout_count=3, fakeouts_fallen_for=0)
+
+    assert "fakeouts_unfooled" in [item.id for item in tracker.evaluate(played, [entry(**played)])]
+
+
+def test_edging_your_way_through_a_session_counts(tracker):
+    assert "edges_10" in [
+        item.id for item in tracker.evaluate(stats(edge_count=10), [entry(edge_count=10)])
+    ]
+
+
+def test_a_long_session_without_a_single_edge_counts(tracker):
+    played = stats(total_dur_sec=45 * 60, edge_count=0)
+
+    assert "edges_none" in [item.id for item in tracker.evaluate(played, [entry(**played)])]
+
+
+# --- progress on the ones still locked ---
+
+
+def test_a_locked_achievement_reports_how_far_along_you_are(tracker):
+    endurance = next(item for item in achievements.CATALOGUE if item.id == "endurance_45")
+
+    current, target = endurance.progress(stats(total_dur_sec=20 * 60), [entry()])
+
+    assert target == 45 * 60
+    assert current == pytest.approx(20 * 60)
+
+
+def test_progress_never_reads_past_its_target(tracker):
+    """A progress bar at 300% is a bug, not a flourish."""
+    for item in achievements.CATALOGUE:
+        if item.progress is None:
+            continue
+        huge = stats(total_dur_sec=10**6, total_num_beat=10**7, fakeout_count=500,
+                     edge_count=500)
+        current, target = item.progress(huge, [huge] * 500)
+        assert current <= target, item.id
+
+
+# --- clearing it all ---
+
+
+def test_everything_can_be_deleted(tracker):
+    tracker.evaluate(stats(total_dur_sec=45 * 60), [entry(total_dur_sec=45 * 60)])
+
+    tracker.clear()
+
+    assert tracker.unlocked == {}
+    assert tracker.is_unlocked("endurance_45") is False
+
+
+def test_a_tracker_without_a_store_still_works(tmp_path):
+    """Same shape as ScoreTracker: no store means nothing is persisted, not a crash."""
+    bare = AchievementTracker(data_store=None)
+
+    unlocked = bare.evaluate(stats(total_dur_sec=45 * 60), [entry(total_dur_sec=45 * 60)])
+
+    # A 45 minute session with no edges earns the endurance tier and "Never Asked" both.
+    assert "endurance_45" in [item.id for item in unlocked]
+    assert bare.is_unlocked("endurance_45") is True
+
+
+def test_a_corrupt_unlock_file_does_not_stop_the_app(tmp_path):
+    store = UserDataStore(base_dir=tmp_path / "data")
+    store.save("achievements", ["not", "a", "mapping"])
+
+    assert AchievementTracker(data_store=store).unlocked == {}
+
+
+def test_an_achievement_whose_check_explodes_is_skipped(tracker):
+    """One bad predicate must not cost the user every other unlock in the same session."""
+    broken = Achievement(
+        id="boom", name="Boom", description="explodes", icon="tip",
+        check=lambda played, history: 1 / 0,
+    )
+    tracker.catalogue = (broken, *achievements.CATALOGUE)
+
+    unlocked = tracker.evaluate(stats(total_dur_sec=45 * 60), [entry(total_dur_sec=45 * 60)])
+
+    assert "endurance_45" in [item.id for item in unlocked]
+    assert "boom" not in [item.id for item in unlocked]

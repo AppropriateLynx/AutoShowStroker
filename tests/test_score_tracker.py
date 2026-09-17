@@ -561,3 +561,27 @@ def test_a_new_session_starts_at_zero_edges():
     tracker.edge_reached()
     tracker.session_started()
     assert tracker.edge_count == 0
+
+
+def test_a_replayed_session_is_marked_as_one(tmp_path, monkeypatch):
+    """Otherwise nothing downstream can tell a replay from a fresh session - they look
+    identical in every number."""
+    from src.user_data import UserDataStore
+
+    store = UserDataStore(base_dir=tmp_path / "data")
+    tracker = ScoreTracker(data_store=store)
+    tracker.session_started()
+    tracker.replay_started()
+    monkeypatch.setattr(time, "time", lambda: tracker.session_start_time + 1.0)
+
+    tracker.session_ended()
+
+    assert tracker.deliver_infos()["was_replay"] is True
+    assert tracker.get_history()[-1]["was_replay"] is True
+
+
+def test_a_fresh_session_is_not_marked_as_a_replay():
+    tracker = ScoreTracker()
+    tracker.replay_started()
+    tracker.session_started()
+    assert tracker.deliver_infos()["was_replay"] is False
