@@ -288,7 +288,7 @@ CHANGELOG = {
         "</ul>"
         "Go on then. See if you can still find the seams."
     ),
-    "0.13.2": (
+    "0.13.3": (
         "The session that wrecked you does not have to be a one-off any more. Keep it. "
         "Take it again. Hand it to someone else and watch them try."
         "<ul>"
@@ -324,6 +324,10 @@ CHANGELOG = {
         "out when you fell for one, and has something to say about it. A denial cuts the "
         "Strokemeter dead on the spot, too. Whatever you do after that is entirely on "
         "you</li>"
+        "<li><b>And now there is a wall to put it all on.</b> Statistics &gt; Achievements "
+        "shows every one there is - including the ones you have not earned, with what "
+        "they want and how close you got. A few stay <i>???</i> until you trip over them. "
+        "Obedience only counts when it costs you something, naturally</li>"
         "</ul>"
         "Find the one that broke you. Then find out if it still can."
     ),
