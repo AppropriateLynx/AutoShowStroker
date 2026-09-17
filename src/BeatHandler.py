@@ -750,7 +750,10 @@ class BeatHandler(QObject):
         self.beat_meter_pause_timer.start(1000)
         self.beat_meter_update_event.emit(f"Pause: {self.cur_pause_dur} seconds left.", "pause")
 
-    def stop(self):
+    def stop(self, message=None):
+        """Ends the rhythm. `message` is what the meter reads afterwards - the default says
+        the app is idle, which is wrong when a session is still running and only the beat is
+        over (a denied climax, see ClimaxHandler)."""
         self.beat_meter_timer.stop()
         self.beat_meter_pause_timer.stop()
         self._plan.clear()
@@ -758,7 +761,7 @@ class BeatHandler(QObject):
         self._finale_at = None
         self._holding = False
         self.cur_freq = 0
-        self.beat_meter_update_event.emit("Strokemeter appears here.", "idle")
+        self.beat_meter_update_event.emit(message or "Strokemeter appears here.", "idle")
 
     def register_beat_pause_events(self, pause_start_event, pause_resume_event):
         self.beat_paused_event.connect(pause_start_event)

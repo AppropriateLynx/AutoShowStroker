@@ -329,10 +329,16 @@ class ClimaxHandler(QObject):
 
     def _trigger_real_climax(self):
         self.climax_triggered = True
-        # The rhythm she said it over is the one that stays. Without this a new beat, a
-        # pause or a beat-change callout would land on top of the climax.
-        self.beat_handler.hold_final_segment()
         outcome = self.outcome or self._resolve_outcome()
+        if outcome == "denied":
+            # No rhythm to ride out a denial. Stopping it here is what makes disobedience
+            # mean anything: whatever happens next is the user's own doing rather than the
+            # app still driving them through it.
+            self.beat_handler.stop("Hands off.")
+        else:
+            # The rhythm she said it over is the one that stays. Without this a new beat, a
+            # pause or a beat-change callout would land on top of the climax.
+            self.beat_handler.hold_final_segment()
         category = {"real": "climax_real", "ruined": "climax_ruined", "denied": "climax_denied"}[outcome]
         status = {"real": "cum", "ruined": "ruined", "denied": "denied"}[outcome]
         self.callout_handler.force_output_sentence(category)

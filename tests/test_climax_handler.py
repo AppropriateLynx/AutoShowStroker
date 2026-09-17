@@ -721,3 +721,35 @@ def test_a_new_live_session_forgets_the_script(handler, beat_handler):
     handler.on_session_planned(6000.0)
 
     assert handler.finale_at == 6100.0
+
+
+# --- a denial ends the rhythm on the spot ---
+
+
+def test_a_denied_climax_stops_the_beat_immediately(handler, beat_handler):
+    """There is nothing left to stroke to, and that is the point: carrying on after a denial
+    has to be the user's own doing, not the app still driving them."""
+    handler.climax_active = True
+    handler.denied_orgasm_active = True
+    handler.denied_orgasm_chance = 1.0
+    handler.ruined_orgasm_active = False
+
+    handler.on_session_planned(time.time() - 1)
+    handler._on_climax_due()
+
+    assert handler.outcome == "denied"
+    beat_handler.stop.assert_called_once()
+    beat_handler.hold_final_segment.assert_not_called()
+
+
+def test_a_real_climax_still_carries_the_beat_through_it(handler, beat_handler):
+    handler.climax_active = True
+    handler.ruined_orgasm_active = False
+    handler.denied_orgasm_active = False
+
+    handler.on_session_planned(time.time() - 1)
+    handler._on_climax_due()
+
+    assert handler.outcome == "real"
+    beat_handler.hold_final_segment.assert_called_once()
+    beat_handler.stop.assert_not_called()
