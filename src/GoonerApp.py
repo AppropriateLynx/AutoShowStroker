@@ -57,6 +57,17 @@ class GoonerApp(QMainWindow):
     # session cannot sit there forever.
     DENIED_ANSWER_TIMEOUT_MS = 30000
 
+    # The footer is a fixed height so the media area above never wobbles as the climax
+    # banner comes and goes. The outcome buttons are the one thing allowed to change it:
+    # squeezed into the normal height they left the note track 29px tall and themselves
+    # too small to hit. It grows once, for a question, and shrinks straight back.
+    FOOTER_HEIGHT = 110
+    # Fixed rather than left to the buttons' size hint: the row shares a fixed-height
+    # container with a stretching note track, which otherwise takes the slack and leaves
+    # the buttons a few pixels tall.
+    OUTCOME_ROW_HEIGHT = 38
+    FOOTER_HEIGHT_WITH_OUTCOME = FOOTER_HEIGHT + OUTCOME_ROW_HEIGHT
+
     DISCORD_INVITE_URL = "https://discord.gg/qqkcxvq37Z"
 
     session_started_event = pyqtSignal()
@@ -333,8 +344,9 @@ class GoonerApp(QMainWindow):
         # Fixed total height so the media area above never wobbles when the climax label
         # appears/disappears - only the split *within* this container changes (beat_meter
         # expands to fill it via stretch when the label is hidden, shrinks when it's shown).
+        # The one exception is the outcome row - see FOOTER_HEIGHT_WITH_OUTCOME.
         self.footer_container = QWidget()
-        self.footer_container.setFixedHeight(110)
+        self.footer_container.setFixedHeight(self.FOOTER_HEIGHT)
         self.footer_layout = QVBoxLayout(self.footer_container)
         self.footer_layout.setContentsMargins(0, 0, 0, 0)
         self.footer_layout.setSpacing(0)
@@ -941,11 +953,14 @@ class GoonerApp(QMainWindow):
         the user fell for it.
         """
         self.outcome_row = QWidget()
+        self.outcome_row.setFixedHeight(self.OUTCOME_ROW_HEIGHT)
         row = QHBoxLayout(self.outcome_row)
-        row.setContentsMargins(6, 0, 6, 0)
+        row.setContentsMargins(6, 2, 6, 2)
 
+        # All three deliberately styled the same. Marking one "primary" would put a
+        # recommended answer under a question whose only value is an honest one - and under
+        # a denial the highlighted button would be the disobedient one.
         self.btn_came = QPushButton("I Came")
-        self.btn_came.setObjectName("primary")
         self.btn_ruined = QPushButton("I Ruined It")
         self.btn_stopped = QPushButton("I Stopped")
 
@@ -968,11 +983,13 @@ class GoonerApp(QMainWindow):
         if not self.ask_for_outcome or not self.is_running:
             return
         self._outcome_context = context
+        self.footer_container.setFixedHeight(self.FOOTER_HEIGHT_WITH_OUTCOME)
         self.outcome_row.show()
 
     def _hide_outcome_buttons(self):
         self._outcome_context = None
         self.outcome_row.hide()
+        self.footer_container.setFixedHeight(self.FOOTER_HEIGHT)
 
     def _on_outcome_reported(self, reported):
         context = self._outcome_context

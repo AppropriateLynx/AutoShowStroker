@@ -1954,3 +1954,27 @@ def test_falling_for_a_fake_out_gets_its_own_line(app, tmp_path, monkeypatch):
     app.btn_came.click()
 
     assert spoken == ["fake_climax_fell_for"]
+
+
+def test_the_outcome_buttons_do_not_crush_the_beat_track(app, qtbot):
+    """The footer has a fixed height so the media above never wobbles. Squeezing a third
+    widget into it left the note track 29px tall and the buttons too small to hit, so the
+    footer grows for the question instead and shrinks back afterwards."""
+    app.resize(1280, 800)
+    app.showMaximized()
+    qtbot.waitExposed(app)
+    app.is_running = True
+    app._update_climax_status_label("cum")
+    qtbot.wait(10)
+    track_without_question = app.beat_track.height()
+
+    app._show_outcome_buttons("climax")
+    qtbot.wait(10)
+
+    assert app.beat_track.height() >= track_without_question
+    assert app.outcome_row.height() >= GoonerApp.OUTCOME_ROW_HEIGHT
+    assert app.footer_container.height() > GoonerApp.FOOTER_HEIGHT
+
+    app._hide_outcome_buttons()
+    qtbot.wait(10)
+    assert app.footer_container.height() == GoonerApp.FOOTER_HEIGHT
