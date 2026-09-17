@@ -787,7 +787,7 @@ def test_show_statistics_passes_new_records(app, monkeypatch):
     captured = {}
 
     class FakeDialog(_FakeDialogBase):
-        def __init__(self, stats_data, new_records=None, timeline=None, parent=None, **kwargs):
+        def __init__(self, stats_data, new_records=None, **kwargs):
             captured["new_records"] = new_records
 
         def exec(self):
@@ -2095,3 +2095,76 @@ def test_an_edge_the_planner_refuses_costs_nothing(app, tmp_path, monkeypatch):
 
     assert app.score_tracker.edge_count == 0
     assert app.btn_edge.isEnabled() is True
+
+
+# --- achievements ---
+
+
+def test_finishing_a_session_judges_it_for_achievements(app, tmp_path, monkeypatch):
+    """Evaluated after the session is already in the history, so a rule that counts sessions
+    can count this one."""
+    seen = {}
+
+    def fake_evaluate(played, history):
+        seen["history_length"] = len(history)
+        return []
+
+    monkeypatch.setattr(app.achievement_tracker, "evaluate", fake_evaluate)
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app._end_session(show_statistics=False)
+
+    assert seen["history_length"] == len(app.score_tracker.get_history())
+
+
+def test_newly_earned_achievements_reach_the_statistics_dialog(app, tmp_path, monkeypatch):
+    from src.achievements import CATALOGUE
+
+    captured = {}
+
+    class FakeStats(_FakeDialogBase):
+        def __init__(self, *args, new_achievements=None, **kwargs):
+            captured["new_achievements"] = new_achievements
+
+        def exec(self):
+            pass
+
+    monkeypatch.setattr("src.GoonerApp.StatisticsDialog", FakeStats)
+    monkeypatch.setattr(app.achievement_tracker, "evaluate", lambda played, history: [CATALOGUE[0]])
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app._end_session(show_statistics=True)
+
+    assert captured["new_achievements"] == [CATALOGUE[0]]
+
+
+def test_replaying_a_session_says_so_in_the_stats(app, tmp_path):
+    saved = _saved_with_media(tmp_path)
+
+    app.replay_session(saved)
+
+    assert app.score_tracker.was_replay is True
+
+
+def test_the_statistics_menu_opens_the_achievements(app, monkeypatch):
+    from PyQt6.QtWidgets import QMenu
+
+    captured = {}
+
+    class FakeDialog(_FakeDialogBase):
+        def __init__(self, tracker, history, parent=None):
+            captured["tracker"] = tracker
+
+        def exec(self):
+            pass
+
+    monkeypatch.setattr("src.AchievementsDialog.AchievementsDialog", FakeDialog)
+
+    menu_bar = app.menuBar()
+    stats_menu = next(m for m in menu_bar.findChildren(QMenu) if m.title() == "Statistics")
+    action = next(a for a in stats_menu.actions() if a.text() == "Achievements")
+    action.trigger()
+
+    assert captured["tracker"] is app.achievement_tracker

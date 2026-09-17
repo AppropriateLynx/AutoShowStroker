@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src import applog, changelog, media_kinds, session_files, theme
+from src.achievements import AchievementTracker
 from src.BeatHandler import BeatHandler
 from src.BeatTrackWidget import BeatTrackWidget
 from src.CalloutHandler import CalloutHandler
@@ -394,6 +395,7 @@ class GoonerApp(QMainWindow):
         self.callout_handler = CalloutHandler(self.settings, data_store=self.data_store)
 
         self.score_tracker = ScoreTracker(settings=self.settings, data_store=self.data_store)
+        self.achievement_tracker = AchievementTracker(data_store=self.data_store)
         # Keeps the running session's timeline for the Session Explorer. In memory only -
         # it holds media paths, which never go near the data directory. See SessionRecorder.
         self.session_recorder = SessionRecorder()
@@ -403,6 +405,8 @@ class GoonerApp(QMainWindow):
         # a second time for something the climax buttons already answered.
         self._outcome_answered = False
         self._announced_outcome = None
+        # What the session just ended earned, held between judging it and showing the recap.
+        self._new_achievements = []
         self._session_start_bests = {}
 
         self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
@@ -582,6 +586,10 @@ class GoonerApp(QMainWindow):
         long_term_stats_action = QAction("Long-term Statistics", self)
         long_term_stats_action.triggered.connect(self.show_long_term_statistics)
         stats_menu.addAction(long_term_stats_action)
+
+        achievements_action = QAction("Achievements", self)
+        achievements_action.triggered.connect(self.show_achievements)
+        stats_menu.addAction(achievements_action)
 
         socials_menu = menu_bar.addMenu("Socials")
 
@@ -915,6 +923,9 @@ class GoonerApp(QMainWindow):
         )
         self.session_recorder.session_ended()
         self.session_ended_event.emit()
+        # After the signal, because ScoreTracker writes the session into the history from it
+        # and a rule that counts sessions has to be able to count this one.
+        self._new_achievements = self._judge_achievements()
         if show_statistics:
             self.show_statistics()
 
@@ -1204,10 +1215,26 @@ class GoonerApp(QMainWindow):
     def register_media_repeat_event(self, handler):
         self.media_repeated_event.connect(handler)
 
+    def _judge_achievements(self):
+        return self.achievement_tracker.evaluate(
+            self.score_tracker.deliver_infos(), self.score_tracker.get_history()
+        )
+
+    def show_achievements(self):
+        # Imported here rather than at module scope, like the other on-demand dialogs.
+        from src.AchievementsDialog import AchievementsDialog
+
+        dialog = AchievementsDialog(
+            self.achievement_tracker, self.score_tracker.get_history(), parent=self
+        )
+        dialog.exec()
+        dialog.deleteLater()
+
     def show_statistics(self):
         dialog = StatisticsDialog(
             self.score_tracker.deliver_infos(),
             new_records=self.score_tracker.last_session_new_records,
+            new_achievements=self._new_achievements,
             timeline=self.session_recorder.timeline(),
             save_session=self.save_current_session,
             parent=self,
@@ -1247,6 +1274,8 @@ class GoonerApp(QMainWindow):
         self._update_climax_status_label("neutral")
         log.info("Replaying a saved session (own library: %s)", ignore_paths)
         self.start(script=SessionScript(saved, ignore_paths=ignore_paths))
+        # After start(), which resets the tracker for the new session.
+        self.score_tracker.replay_started()
         return True
 
     def save_current_session(self) -> bool:

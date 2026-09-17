@@ -35,6 +35,8 @@ class PrivacyDataDialog(QDialog):
         ("saved_sessions", "Saved sessions",
          "the sessions you saved to replay - the one thing here that stores the paths of "
          "your media files"),
+        ("achievements", "Achievements",
+         "which achievements you have unlocked, and when"),
         ("custom_patterns", "Custom rhythm patterns", "the patterns you built in the pattern editor"),
         ("custom_phrase_files", "Custom phrase files", "the callout files you added"),
         ("last_selected_folders", "Last used media folders", "the folder paths the picker remembers"),
@@ -207,6 +209,7 @@ class PrivacyDataDialog(QDialog):
         return {
             "session_history": len(self.main_app.score_tracker.get_history()),
             "saved_sessions": len(session_files.load_saved_sessions(store)),
+            "achievements": len(self.main_app.achievement_tracker.unlocked),
             "custom_patterns": len(self.main_app.beat_handler.custom_beat_patterns),
             "custom_phrase_files": len(self.main_app.callout_handler.custom_phrase_files),
             "last_selected_folders": len(store.load("last_selected_folders", [])),
@@ -256,6 +259,9 @@ class PrivacyDataDialog(QDialog):
                 self.main_app.score_tracker.clear_history()
             elif key == "saved_sessions":
                 self.main_app.data_store.delete(session_files.SAVED_SESSIONS_KEY)
+            elif key == "achievements":
+                # Cleared in memory too, or the next session end would write them back.
+                self.main_app.achievement_tracker.clear()
             elif key == "custom_patterns":
                 self.main_app.beat_handler.clear_custom_patterns()
             elif key == "custom_phrase_files":
