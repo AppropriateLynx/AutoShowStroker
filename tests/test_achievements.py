@@ -381,3 +381,13 @@ def test_no_mark_is_shipped_that_nothing_uses():
     used = {item.icon for item in achievements.CATALOGUE}
 
     assert shipped == used
+
+
+def test_the_fake_out_track_is_secret_too():
+    """Its condition gives the mechanic away: a goal that reads "let fake cues pass without
+    acting on one" tells the user fakes exist and that they should hesitate at every climax
+    announcement - which is the one thing a fake-out cannot survive."""
+    fakes = [item for item in achievements.CATALOGUE if item.track == "Not Falling For It"]
+
+    assert fakes
+    assert all(item.secret for item in fakes)

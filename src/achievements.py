@@ -281,6 +281,11 @@ CATALOGUE = (
         "tongue",
         _unfooled_by,
         (1, 3, 5),
+        # Secret for a different reason than the disobedience track: this one's condition
+        # gives the mechanic away. Listed as a goal it tells the user that fake cues exist
+        # and that the winning move is to hesitate at every climax announcement - and a
+        # fake-out only works while it is indistinguishable from the real thing.
+        secret=True,
     ),
     Achievement(
         id="edges_10",
