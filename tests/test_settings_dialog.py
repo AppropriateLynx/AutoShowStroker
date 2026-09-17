@@ -601,3 +601,13 @@ def test_the_save_button_shows_its_ampersand(dialog):
     """Qt reads a single & as a mnemonic prefix and swallows it - the button read
     'Save  Close Settings' with a hole in the middle. && is the literal one."""
     assert dialog.button_ok.text() == "Save && Close Settings"
+
+
+def test_the_outcome_question_can_be_turned_off_and_saved(app, dialog):
+    assert dialog.ask_for_outcome_checkbox.isChecked() is True
+
+    dialog.ask_for_outcome_checkbox.setChecked(False)
+    dialog.accept_settings()
+
+    assert app.ask_for_outcome is False
+    assert app.settings.value("GoonerApp/ask_for_outcome", type=bool) is False

@@ -51,6 +51,12 @@ log = applog.get_logger(__name__)
 class GoonerApp(QMainWindow):
     SETTINGS_GROUP = "GoonerApp"  # see BeatHandler.SETTINGS_GROUP
 
+    # How long a denied session waits for the user to say what they actually did before
+    # ending on its own. Long, because the answer is the point and the old five seconds
+    # took the buttons away before anyone could reach them; capped, so an unanswered
+    # session cannot sit there forever.
+    DENIED_ANSWER_TIMEOUT_MS = 30000
+
     DISCORD_INVITE_URL = "https://discord.gg/qqkcxvq37Z"
 
     session_started_event = pyqtSignal()
@@ -69,6 +75,7 @@ class GoonerApp(QMainWindow):
         "show_startup_splash": True,
         "show_record_chase": True,
         "show_session_timer": True,
+        "ask_for_outcome": True,
         "diagnostic_log": False,
         "diagnostic_log_level": applog.DEFAULT_LEVEL,
     }
@@ -294,6 +301,9 @@ class GoonerApp(QMainWindow):
         self.show_session_timer = bool(
             self.settings.value("GoonerApp/show_session_timer", self.DEFAULTS["show_session_timer"], type=bool)
         )
+        self.ask_for_outcome = bool(
+            self.settings.value("GoonerApp/ask_for_outcome", self.DEFAULTS["ask_for_outcome"], type=bool)
+        )
 
         media_layout.addWidget(self.controls_container)
         self.main_splitter.addWidget(media_container)
@@ -329,6 +339,7 @@ class GoonerApp(QMainWindow):
         self.footer_layout.setContentsMargins(0, 0, 0, 0)
         self.footer_layout.setSpacing(0)
         self.footer_layout.addWidget(self.climax_status_label, stretch=0)
+        self.footer_layout.addWidget(self._build_outcome_row(), stretch=0)
         self.footer_layout.addWidget(self.beat_track, stretch=1)
         self.main_splitter.addWidget(self.footer_container)
 
@@ -358,6 +369,10 @@ class GoonerApp(QMainWindow):
         self.session_recorder = SessionRecorder()
         # Set while replaying a saved session - see start(). None for a live one.
         self._script = None
+        # Whether this session's outcome has already been reported, so Stop does not ask
+        # a second time for something the climax buttons already answered.
+        self._outcome_answered = False
+        self._announced_outcome = None
         self._session_start_bests = {}
 
         self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
@@ -452,6 +467,12 @@ class GoonerApp(QMainWindow):
         self.climax_handler.register_outcome_event(self._on_climax_outcome)
         self.climax_handler.register_status_event(self._update_climax_status_label)
         self.climax_handler.register_fake_climax_event(self.score_tracker.fake_climax_triggered)
+        self.climax_handler.fake_climax_triggered_event.connect(
+            lambda: self._show_outcome_buttons("fake")
+        )
+        # An unanswered fake takes its buttons back at the reveal - leaving them up would
+        # hand the user a second, stale set when the real climax arrives.
+        self.climax_handler.fake_climax_revealed_event.connect(self._hide_outcome_buttons)
 
         self.register_start_event(self.score_tracker.session_started)
         self.register_start_event(self.session_recorder.session_started)
@@ -820,8 +841,13 @@ class GoonerApp(QMainWindow):
         settings_dialog.deleteLater()
 
     def stop(self):
-        if self.is_running:
-            self._end_session(show_statistics=True)
+        if not self.is_running:
+            return
+        if self.ask_for_outcome and not self._outcome_answered:
+            reported = self._ask_how_it_ended()
+            if reported is not None:
+                self.score_tracker.outcome_reported(reported)
+        self._end_session(show_statistics=True)
 
     def closeEvent(self, event):
         """Records a session still in progress before the window goes away.
@@ -869,6 +895,9 @@ class GoonerApp(QMainWindow):
             # 5 seconds is comfortably enough to stop, close the stats and start again,
             # and it would then kill the fresh session instead.
             self._denied_stop_timer.stop()
+            self._outcome_answered = False
+            self._announced_outcome = None
+            self._hide_outcome_buttons()
             # Set before the signal: handlers reacting to "a session started" should see a
             # running session. _start_session_timer/_start_record_chase both now check it,
             # and would have hidden their overlays the moment they were meant to appear.
@@ -889,8 +918,99 @@ class GoonerApp(QMainWindow):
 
     def _on_climax_outcome(self, outcome):
         log.info("Climax outcome: %s", outcome)
+        # Remembered from the signal rather than read back off ClimaxHandler when the answer
+        # comes in - what was announced to *this* user is what the answer is measured against.
+        self._announced_outcome = outcome
+        self._show_outcome_buttons("climax")
         if outcome == "denied":
-            self._denied_stop_timer.start(DENIED_STOP_DELAY_MS)
+            # Waits for the answer when there is one to wait for, or the buttons would be
+            # taken off screen five seconds after being put there.
+            waiting = self.outcome_row.isVisibleTo(self)
+            self._denied_stop_timer.start(
+                self.DENIED_ANSWER_TIMEOUT_MS if waiting else DENIED_STOP_DELAY_MS
+            )
+
+    # --- what actually happened ---
+
+    def _build_outcome_row(self):
+        """The three answers, shown under the climax banner.
+
+        They appear at real *and* fake climaxes, identically. Putting them only on the real
+        one would make them the announcement - a fake only works while it is
+        indistinguishable - and asking at a fake is also the only way to find out whether
+        the user fell for it.
+        """
+        self.outcome_row = QWidget()
+        row = QHBoxLayout(self.outcome_row)
+        row.setContentsMargins(6, 0, 6, 0)
+
+        self.btn_came = QPushButton("I Came")
+        self.btn_came.setObjectName("primary")
+        self.btn_ruined = QPushButton("I Ruined It")
+        self.btn_stopped = QPushButton("I Stopped")
+
+        for button, reported in (
+            (self.btn_came, "came"),
+            (self.btn_ruined, "ruined"),
+            (self.btn_stopped, "stopped"),
+        ):
+            # NoFocus for the same reason as the transport buttons: a focused QPushButton
+            # swallows Space before keyPressEvent ever sees it, which would kill Panic.
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.clicked.connect(lambda _checked=False, answer=reported: self._on_outcome_reported(answer))
+            row.addWidget(button)
+
+        self.outcome_row.hide()
+        self._outcome_context = None
+        return self.outcome_row
+
+    def _show_outcome_buttons(self, context):
+        if not self.ask_for_outcome or not self.is_running:
+            return
+        self._outcome_context = context
+        self.outcome_row.show()
+
+    def _hide_outcome_buttons(self):
+        self._outcome_context = None
+        self.outcome_row.hide()
+
+    def _on_outcome_reported(self, reported):
+        context = self._outcome_context
+        self._hide_outcome_buttons()
+        if context == "fake":
+            # Not the session's outcome - the real climax is still to come. What it does
+            # record is that the fake worked.
+            if reported in ("came", "ruined"):
+                self.score_tracker.fell_for_fake_climax()
+                self.callout_handler.force_output_sentence("fake_climax_fell_for")
+            return
+
+        self.score_tracker.outcome_reported(reported)
+        self._outcome_answered = True
+        if self._announced_outcome == "denied":
+            # The question was the only reason the session was still open.
+            self._denied_stop_timer.stop()
+            self._end_session(show_statistics=True)
+
+    def _ask_how_it_ended(self):
+        """Asks a user who stopped by hand what they actually did. None if they'd rather not
+        say, which is recorded as exactly that rather than guessed at."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("How did that end?")
+        box.setText("Before the recap - what actually happened?")
+        box.setInformativeText(
+            "Without an answer this session counts as one that never finished, which drags "
+            "every average you are tracking."
+        )
+        answers = {
+            box.addButton("I Came", QMessageBox.ButtonRole.AcceptRole): "came",
+            box.addButton("I Ruined It", QMessageBox.ButtonRole.AcceptRole): "ruined",
+            box.addButton("I Stopped", QMessageBox.ButtonRole.AcceptRole): "stopped",
+        }
+        box.addButton("Rather not say", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        return answers.get(box.clickedButton())
 
     CLIMAX_STATUS_COLORS = {
         "cum": (theme.ACCENT, theme.ACCENT_HOVER),

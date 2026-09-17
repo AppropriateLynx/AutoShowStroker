@@ -495,8 +495,9 @@ def test_beat_meter_gets_stretch_priority_over_climax_label(app):
     # climax_status_label: index 0, stretch 0 (fixed to its own size hint when visible, 0
     # space when hidden). beat_meter: index 1, stretch 1 (absorbs whatever space the label
     # isn't using) - this is what lets the Strokebar reclaim full height when idle.
-    assert app.footer_layout.stretch(0) == 0
-    assert app.footer_layout.stretch(1) == 1
+    assert app.footer_layout.stretch(app.footer_layout.indexOf(app.climax_status_label)) == 0
+    assert app.footer_layout.stretch(app.footer_layout.indexOf(app.outcome_row)) == 0
+    assert app.footer_layout.stretch(app.footer_layout.indexOf(app.beat_track)) == 1
 
 
 def test_climax_status_label_hidden_by_default(app):
@@ -1766,3 +1767,174 @@ def test_replaying_against_your_own_library_starts_it_at_the_beginning(app, tmp_
     assert app.replay_session(_saved_with_media(tmp_path), ignore_paths=True) is True
 
     assert app.current_index == 0
+
+
+# --- reporting what actually happened ---
+
+
+def test_the_outcome_buttons_stay_hidden_until_something_is_announced(app):
+    assert app.outcome_row.isVisible() is False
+
+
+def test_a_real_climax_asks_what_happened(app, tmp_path, qtbot):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.showMaximized()
+    qtbot.waitExposed(app)
+
+    app.climax_handler.outcome_decided_event.emit("real")
+
+    assert app.outcome_row.isVisible() is True
+
+
+def test_a_fake_climax_asks_exactly_the_same_thing(app, tmp_path, qtbot):
+    """If the buttons only showed up for the real one they would *be* the announcement -
+    a fake only works while it is indistinguishable."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.showMaximized()
+    qtbot.waitExposed(app)
+
+    app.climax_handler.fake_climax_triggered_event.emit()
+
+    assert app.outcome_row.isVisible() is True
+    assert app.btn_came.text() == "I Came"
+
+
+def test_reporting_at_a_real_climax_is_written_down(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.climax_handler.outcome_decided_event.emit("denied")
+
+    app.btn_came.click()
+
+    assert app.score_tracker.reported_outcome == "came"
+    assert app.score_tracker.climax_outcome == "denied"
+
+
+def test_reporting_hides_the_buttons_again(app, tmp_path, qtbot):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.showMaximized()
+    qtbot.waitExposed(app)
+    app.climax_handler.outcome_decided_event.emit("real")
+
+    app.btn_ruined.click()
+
+    assert app.outcome_row.isVisible() is False
+    assert app.score_tracker.reported_outcome == "ruined"
+
+
+def test_coming_at_a_fake_out_counts_as_falling_for_it(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.climax_handler.fake_climax_triggered_event.emit()
+
+    app.btn_came.click()
+
+    assert app.score_tracker.fakeouts_fallen_for == 1
+    # Not the session's outcome: the session is still running, and the real one is still due.
+    assert app.score_tracker.reported_outcome is None
+
+
+def test_holding_out_through_a_fake_out_is_not_counted_as_falling_for_it(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.climax_handler.fake_climax_triggered_event.emit()
+
+    app.btn_stopped.click()
+
+    assert app.score_tracker.fakeouts_fallen_for == 0
+
+
+def test_an_unanswered_fake_out_takes_its_buttons_away_at_the_reveal(app, tmp_path, qtbot):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.showMaximized()
+    qtbot.waitExposed(app)
+    app.climax_handler.fake_climax_triggered_event.emit()
+
+    app.climax_handler.fake_climax_revealed_event.emit()
+
+    assert app.outcome_row.isVisible() is False
+    assert app.score_tracker.fakeouts_fallen_for == 0
+
+
+def test_a_denied_session_waits_for_the_answer_instead_of_stopping_after_five_seconds(
+    app, tmp_path
+):
+    """The buttons would otherwise be gone before the user could reach them."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app.climax_handler.outcome_decided_event.emit("denied")
+
+    assert app.is_running is True
+    assert app._denied_stop_timer.isActive() is True
+    assert app._denied_stop_timer.interval() == GoonerApp.DENIED_ANSWER_TIMEOUT_MS
+
+
+def test_answering_after_a_denial_ends_the_session(app, tmp_path, monkeypatch):
+    ended = []
+    monkeypatch.setattr(app, "_end_session", lambda show_statistics: ended.append(show_statistics))
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.climax_handler.outcome_decided_event.emit("denied")
+
+    app.btn_came.click()
+
+    assert ended == [True]
+
+
+def test_stopping_by_hand_asks_how_it_ended(app, tmp_path, monkeypatch):
+    """A session the user ends has no outcome at all otherwise, and every average silently
+    counts it as a session that never climaxed."""
+    monkeypatch.setattr(app, "_ask_how_it_ended", lambda: "stopped")
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app.stop()
+
+    assert app.score_tracker.get_history()[-1]["reported_outcome"] == "stopped"
+
+
+def test_stopping_does_not_ask_again_when_the_climax_already_did(app, tmp_path, monkeypatch):
+    asked = []
+    monkeypatch.setattr(app, "_ask_how_it_ended", lambda: asked.append(True) or "came")
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.climax_handler.outcome_decided_event.emit("real")
+    app.btn_came.click()
+
+    app.stop()
+
+    assert asked == []
+
+
+def test_closing_the_window_never_asks(app, tmp_path, monkeypatch):
+    """Someone who just hit the X wants the window gone, not a question - same reasoning
+    that already keeps the statistics recap out of closeEvent."""
+    from PyQt6.QtGui import QCloseEvent
+
+    asked = []
+    monkeypatch.setattr(app, "_ask_how_it_ended", lambda: asked.append(True) or "came")
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app.closeEvent(QCloseEvent())
+
+    assert asked == []
+
+
+def test_the_question_can_be_switched_off(app, tmp_path, monkeypatch):
+    asked = []
+    monkeypatch.setattr(app, "_ask_how_it_ended", lambda: asked.append(True) or "came")
+    app.ask_for_outcome = False
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app.climax_handler.outcome_decided_event.emit("real")
+    assert app.outcome_row.isVisible() is False
+
+    app.stop()
+    assert asked == []

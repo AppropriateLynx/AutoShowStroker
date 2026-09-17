@@ -151,6 +151,15 @@ class SettingsDialog(QDialog):
         self.add_setting(
             "Fake climax reveal delay Max. (s)", "max_fake_climax_delay", self.climax_handler, float, 1.0, 30.0, 0.5
         )
+        self.ask_for_outcome_checkbox = QCheckBox("Ask what actually happened")
+        self.ask_for_outcome_checkbox.setToolTip(
+            "Offers I Came / I Ruined It / I Stopped at every climax cue, and asks once when "
+            "you stop a session yourself - otherwise the app only ever records what it told "
+            "you to do."
+        )
+        self.ask_for_outcome_checkbox.setChecked(self.main_app.ask_for_outcome)
+        self._current_layout.addWidget(self.ask_for_outcome_checkbox)
+
         self.climax_reset_button = self.add_reset_button(
             [
                 "min_climax_after", "max_climax_after",
@@ -166,6 +175,7 @@ class SettingsDialog(QDialog):
                 (self.ruined_orgasm_active_checkbox, self.climax_handler.DEFAULTS["ruined_orgasm_active"]),
                 (self.denied_orgasm_active_checkbox, self.climax_handler.DEFAULTS["denied_orgasm_active"]),
                 (self.fake_climax_active_checkbox, self.climax_handler.DEFAULTS["fake_climax_active"]),
+                (self.ask_for_outcome_checkbox, self.main_app.DEFAULTS["ask_for_outcome"]),
             ],
         )
         self._current_layout.addStretch()
@@ -332,6 +342,8 @@ class SettingsDialog(QDialog):
 
         settings.setValue("GoonerApp/show_session_timer", self.show_session_timer_checkbox.isChecked())
         self.main_app.show_session_timer = self.show_session_timer_checkbox.isChecked()
+        settings.setValue("GoonerApp/ask_for_outcome", self.ask_for_outcome_checkbox.isChecked())
+        self.main_app.ask_for_outcome = self.ask_for_outcome_checkbox.isChecked()
         self.main_app._update_session_timer()
 
         new_selected_patterns = []
