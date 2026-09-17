@@ -1755,3 +1755,14 @@ def test_the_sessions_menu_opens_the_saved_sessions_manager(app, monkeypatch):
     action.trigger()
 
     assert captured.get("main_app") is app
+
+
+def test_replaying_against_your_own_library_starts_it_at_the_beginning(app, tmp_path):
+    """The index is left over from whatever played before - and a replay of a long session
+    leaves it far past the end of a short own library, which walked straight off it."""
+    app.playlist = [tmp_path / "mine1.png", tmp_path / "mine2.png"]
+    app.current_index = 7
+
+    assert app.replay_session(_saved_with_media(tmp_path), ignore_paths=True) is True
+
+    assert app.current_index == 0

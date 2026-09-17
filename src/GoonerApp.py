@@ -1017,6 +1017,10 @@ class GoonerApp(QMainWindow):
             if not self.playlist:
                 log.warning("Cannot replay against your own library: nothing is loaded.")
                 return False
+            # From the top of the loaded playlist. The index is left over from whatever
+            # played last, and after a replay of a long session it points well past the end
+            # of a shorter own library.
+            self.current_index = 0
         else:
             self.playlist = [Path(path) for path in session_files.recorded_paths(saved)]
             self.current_index = 0

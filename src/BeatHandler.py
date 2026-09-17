@@ -725,8 +725,12 @@ class BeatHandler(QObject):
         self.beat_meter_timer.stop()
         # Length comes from the planned segment - see _plan_one_segment for the guard
         # against an inverted min/max range written by an older build.
+        # Rounded, not truncated: a drawn pause is a whole number of seconds, but a
+        # *replayed* one carries the length it was measured at, and int(1.9987) turned every
+        # replayed pause into a shorter one than the session it was reproducing. The floor
+        # of 1 is for the same reason - a pause of 0 ends in pause_loop()'s first tick.
         if self._current_segment is not None and self._current_segment.kind == "pause":
-            self.cur_pause_dur = int(self._current_segment.duration_sec)
+            self.cur_pause_dur = max(1, round(self._current_segment.duration_sec))
         else:
             low, high = sorted((self.min_pause_dur, self.max_pause_dur))
             self.cur_pause_dur = random.randint(low, high)
