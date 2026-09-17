@@ -178,3 +178,78 @@ def test_a_session_gets_a_readable_label():
 def test_a_session_without_paths_says_so_in_its_label():
     saved = session_files.strip_paths(session_files.to_saved_session(timeline()))
     assert "no media" in session_files.describe(saved).lower()
+
+
+# --- the shelf of saved sessions ---
+
+
+def test_a_saved_session_lands_in_the_data_store(data_store):
+    session_files.store_session(data_store, session_files.to_saved_session(timeline()))
+
+    stored = session_files.load_saved_sessions(data_store)
+
+    assert len(stored) == 1
+    assert stored[0]["climax"]["outcome"] == "ruined"
+
+
+def test_saved_sessions_keep_their_order(data_store):
+    for outcome in ("real", "ruined", "denied"):
+        saved = session_files.to_saved_session(timeline(climax_outcome=outcome))
+        session_files.store_session(data_store, saved)
+
+    stored = session_files.load_saved_sessions(data_store)
+
+    assert [entry["climax"]["outcome"] for entry in stored] == ["real", "ruined", "denied"]
+
+
+def test_the_shelf_is_capped_so_it_cannot_grow_forever(data_store, monkeypatch):
+    """A saved session is orders of magnitude bigger than a history entry - a few hundred
+    media paths each - so the cap is much lower than ScoreTracker's."""
+    monkeypatch.setattr(session_files, "MAX_SAVED_SESSIONS", 3)
+    for index in range(5):
+        saved = session_files.to_saved_session(timeline())
+        saved["saved_at"] = f"entry {index}"
+        session_files.store_session(data_store, saved)
+
+    stored = session_files.load_saved_sessions(data_store)
+
+    assert [entry["saved_at"] for entry in stored] == ["entry 2", "entry 3", "entry 4"]
+
+
+def test_a_saved_session_can_be_deleted_again(data_store):
+    for index in range(3):
+        saved = session_files.to_saved_session(timeline())
+        saved["saved_at"] = f"entry {index}"
+        session_files.store_session(data_store, saved)
+
+    session_files.delete_saved_session(data_store, 1)
+
+    stored = session_files.load_saved_sessions(data_store)
+    assert [entry["saved_at"] for entry in stored] == ["entry 0", "entry 2"]
+
+
+def test_deleting_something_that_is_not_there_is_harmless(data_store):
+    session_files.store_session(data_store, session_files.to_saved_session(timeline()))
+
+    assert session_files.delete_saved_session(data_store, 7) is False
+    assert len(session_files.load_saved_sessions(data_store)) == 1
+
+
+def test_a_data_file_that_is_not_a_list_reads_as_an_empty_shelf(data_store):
+    data_store.save(session_files.SAVED_SESSIONS_KEY, {"not": "a list"})
+
+    assert session_files.load_saved_sessions(data_store) == []
+
+
+def test_an_exported_session_reads_back_from_the_file_it_was_written_to(tmp_path):
+    saved = session_files.to_saved_session(timeline())
+
+    assert session_files.write_session_file(tmp_path / "out.gooner", saved) is True
+
+    assert session_files.read_session_file(tmp_path / "out.gooner")["climax"]["outcome"] == "ruined"
+
+
+def test_an_export_that_cannot_be_written_reports_failure_rather_than_raising(tmp_path):
+    saved = session_files.to_saved_session(timeline())
+
+    assert session_files.write_session_file(tmp_path / "no" / "such" / "dir" / "o.json", saved) is False

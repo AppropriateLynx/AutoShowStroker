@@ -140,3 +140,53 @@ def describe(saved: dict) -> str:
     if not has_paths(saved):
         parts.append("no media paths")
     return "  -  ".join(parts)
+
+
+def write_session_file(path, saved: dict) -> bool:
+    """Exports one session to a file the user picked. Returns whether it landed.
+
+    Never raises: the caller is a file dialog's OK button, and a read-only stick or a
+    vanished network drive should get a "could not write that" box, not a traceback over
+    the app.
+    """
+    try:
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(saved, handle, ensure_ascii=False, indent=2)
+    except OSError as error:
+        log.error("Could not write the session file: %s", error)
+        return False
+    return True
+
+
+# --- the shelf of saved sessions ---
+
+SAVED_SESSIONS_KEY = "saved_sessions"
+# Far below ScoreTracker.MAX_HISTORY_ENTRIES on purpose: a history entry is a handful of
+# numbers, a saved session carries every segment and every medium it showed.
+MAX_SAVED_SESSIONS = 50
+
+
+def load_saved_sessions(data_store) -> list:
+    """Every saved session, oldest first."""
+    stored = data_store.load(SAVED_SESSIONS_KEY, [])
+    if not isinstance(stored, list):
+        log.warning("The saved sessions file did not contain a list - ignoring it.")
+        return []
+    return stored
+
+
+def store_session(data_store, saved: dict) -> bool:
+    """Puts one session on the shelf, dropping the oldest once it is full."""
+    sessions = load_saved_sessions(data_store)
+    sessions.append(saved)
+    return data_store.save(SAVED_SESSIONS_KEY, sessions[-MAX_SAVED_SESSIONS:])
+
+
+def delete_saved_session(data_store, index: int) -> bool:
+    """Removes one session from the shelf. Returns whether there was one at that index."""
+    sessions = load_saved_sessions(data_store)
+    if not 0 <= index < len(sessions):
+        return False
+    del sessions[index]
+    data_store.save(SAVED_SESSIONS_KEY, sessions)
+    return True
