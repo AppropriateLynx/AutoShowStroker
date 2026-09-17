@@ -279,3 +279,17 @@ def test_missing_files_are_reported_so_the_replay_can_offer_another_library(tmp_
     ]}
 
     assert session_files.missing_paths(saved) == [str(tmp_path / "gone.png")]
+
+
+def test_a_session_stopped_before_the_climax_is_marked_as_such():
+    """Replaying it does something different from replaying a complete one - it carries on
+    past the recording - so it has to be tellable apart in the list."""
+    saved = session_files.to_saved_session(timeline(climax_at=None, climax_outcome=None))
+
+    assert "stopped early" in session_files.describe(saved).lower()
+
+
+def test_a_complete_session_is_not_marked_as_stopped_early():
+    assert "stopped early" not in session_files.describe(
+        session_files.to_saved_session(timeline())
+    ).lower()

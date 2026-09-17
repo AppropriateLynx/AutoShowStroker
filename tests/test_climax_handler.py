@@ -596,11 +596,16 @@ def test_session_started_resets_state(handler):
 # --- replaying a saved session ---
 
 
-def script(climax_at=180.0, outcome="ruined", fakes=(40.0, 120.0)):
+def script(climax_at=180.0, outcome="ruined", fakes=(40.0, 120.0), segments=6,
+           duration=200.0):
     from src.SessionScript import SessionScript
 
+    recorded = [
+        {"kind": "beat", "pattern": "Standard Beat", "freq": 2.0, "duration_sec": 20.0}
+        for _ in range(segments)
+    ]
     return SessionScript({
-        "duration_sec": 200.0, "segments": [], "custom_patterns": {}, "media": [],
+        "duration_sec": duration, "segments": recorded, "custom_patterns": {}, "media": [],
         "climax": None if climax_at is None else {"at_sec": climax_at, "outcome": outcome},
         "fake_climaxes": list(fakes),
     })
@@ -629,8 +634,35 @@ def test_a_replay_is_not_clamped_to_the_ramp(handler, beat_handler):
     assert handler.finale_at == 5100.0
 
 
-def test_a_replay_of_a_session_without_a_climax_plans_none(handler, beat_handler):
+def test_a_replay_of_a_session_that_never_climaxed_draws_one(handler, beat_handler):
+    """A recording that stops before the climax is almost always one the user did not last
+    through - replaying it to try again has to be a session that can actually be finished,
+    so from the end of the recording on it is an ordinary session."""
     handler.climax_active = True
+    handler.min_climax_after = handler.max_climax_after = 500.0
+
+    handler.on_session_planned(5000.0, script=script(climax_at=None))
+
+    assert handler.finale_at == 5500.0
+    assert handler.outcome in ("real", "ruined", "denied")
+    beat_handler.set_finale_at.assert_called_once_with(5500.0)
+
+
+def test_the_drawn_climax_never_lands_inside_the_recording(handler):
+    """Otherwise the retry would end sooner than the session it is retrying - backwards,
+    and the run-in cannot be built into segments that are read from the file anyway."""
+    handler.climax_active = True
+    handler.min_climax_after = handler.max_climax_after = 30.0
+
+    handler.on_session_planned(5000.0, script=script(climax_at=None, duration=200.0))
+
+    assert handler.finale_at >= 5200.0
+
+
+def test_a_replay_of_a_session_without_a_climax_still_obeys_the_climax_switch(
+    handler, beat_handler
+):
+    handler.climax_active = False
 
     handler.on_session_planned(5000.0, script=script(climax_at=None))
 
@@ -651,10 +683,22 @@ def test_a_replay_does_not_roll_fake_outs_of_its_own(handler):
     handler.fake_climax_active = True
     handler.fake_climax_chance = 1.0  # would roll one on every boundary live
 
-    handler.on_session_planned(5000.0, script=script(fakes=()))
-    handler.on_plan_extended(beats(3, 4, 5))
+    handler.on_session_planned(5000.0, script=script(fakes=(), segments=6))
+    handler.on_plan_extended(beats(3, 4, 5))  # all still inside the recording
 
     assert handler.planned_fake_boundaries == set()
+
+
+def test_fake_outs_start_again_past_the_end_of_the_recording(handler):
+    """The stretch after the recording is an ordinary session, and an ordinary session has
+    fake-outs in it."""
+    handler.fake_climax_active = True
+    handler.fake_climax_chance = 1.0
+
+    handler.on_session_planned(5000.0, script=script(climax_at=None, fakes=(), segments=4))
+    handler.on_plan_extended(beats(2, 3, 4, 5))
+
+    assert handler.planned_fake_boundaries == {4, 5}
 
 
 def test_a_scripted_fake_out_fires_when_its_moment_arrives(handler, callout_handler, qtbot):

@@ -384,3 +384,19 @@ def test_the_dialog_needs_nothing_from_the_app_but_the_store_and_the_replay(tmp_
     qtbot.addWidget(dialog)
 
     assert dialog.session_list.count() == 1
+
+
+def test_a_session_that_never_climaxed_is_marked_in_the_list(make_dialog):
+    """It replays differently - the recording plays out and then it carries on as a normal
+    session - so the list has to say which kind it is."""
+    incomplete = saved()
+    incomplete["climax"] = None
+    dialog = make_dialog([incomplete])
+
+    assert "stopped early" in dialog.session_list.item(0).text().lower()
+
+
+def test_the_manager_explains_what_replaying_an_unfinished_session_does(make_dialog):
+    dialog = make_dialog([])
+
+    assert "stopped early" in dialog.intro_label.text().lower()

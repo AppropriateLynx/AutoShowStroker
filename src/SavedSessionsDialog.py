@@ -57,14 +57,17 @@ class SavedSessionsDialog(QDialog):
         title.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {theme.ACCENT};")
         layout.addWidget(title)
 
-        intro = QLabel(
+        self.intro_label = QLabel(
             "A saved session plays again exactly as it went: the same rhythms, the same "
             "pauses, the same climax, the same pacing. The callouts stay random, so two "
-            "runs of the same session are still comparable."
+            "runs of the same session are still comparable.<br><br>"
+            "One marked <b>Stopped early</b> was saved before it ever climaxed - usually "
+            "because you did not last that long. It replays as recorded and then carries "
+            "on as an ordinary session, so this time you can finish it."
         )
-        intro.setWordWrap(True)
-        intro.setStyleSheet(f"color: {theme.TEXT};")
-        layout.addWidget(intro)
+        self.intro_label.setWordWrap(True)
+        self.intro_label.setStyleSheet(f"color: {theme.TEXT};")
+        layout.addWidget(self.intro_label)
 
         self.session_list = QListWidget()
         self.session_list.currentRowChanged.connect(self._update_buttons)

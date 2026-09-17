@@ -37,6 +37,21 @@ class SessionScript:
     def has_segments_left(self) -> bool:
         return self._segment_pos < len(self._segments)
 
+    @property
+    def segment_count(self) -> int:
+        """How many segments were recorded, cursor or no cursor.
+
+        BeatHandler numbers a session's segments from 0 and hands the script those indices,
+        so anything numbered at or above this was drawn rather than replayed - which is how
+        the climax tells the recorded stretch from the improvised tail behind it.
+        """
+        return len(self._segments)
+
+    @property
+    def duration(self) -> float:
+        """How long the recorded session ran."""
+        return self._duration
+
     def next_segment(self, index):
         """The next recorded segment as a real Segment, or None once the script is spent.
 

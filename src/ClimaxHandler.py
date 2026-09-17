@@ -167,19 +167,33 @@ class ClimaxHandler(QObject):
         if script is not None:
             self._replay_session_planned(session_start_time, script)
             return
+        self._draw_climax(session_start_time)
+
+    def _draw_climax(self, session_start_time, not_before=None):
+        """Places a climax the ordinary way: drawn into the window, outcome resolved now.
+
+        not_before holds it back past the end of a recording that had no climax of its own
+        - see _replay_session_planned.
+        """
         if not self.climax_active:
-            self.finale_at = None
-            self._drawn_finale_at = None
-            self.outcome = None
-            self._climax_timer.stop()
-            self.beat_handler.set_finale_at(None)
+            self._disarm()
             return
         low, high = sorted((self.min_climax_after, self.max_climax_after))
-        self._drawn_finale_at = session_start_time + random.uniform(low, high)
+        drawn = session_start_time + random.uniform(low, high)
+        self._drawn_finale_at = drawn if not_before is None else max(drawn, not_before)
         self.finale_at = self._clamped_finale_at()
         self.outcome = self._resolve_outcome()
         self._arm_climax_timer()
         self.beat_handler.set_finale_at(self.finale_at)
+
+    def _disarm(self):
+        """No climax this session - nothing armed, and the planner told not to build a
+        run-in for one."""
+        self.finale_at = None
+        self._drawn_finale_at = None
+        self.outcome = None
+        self._climax_timer.stop()
+        self.beat_handler.set_finale_at(None)
 
     def _clamped_finale_at(self):
         """The drawn moment, held back to the end of the ramp if the user asked for that.
@@ -207,11 +221,14 @@ class ClimaxHandler(QObject):
             self._scripted_fake_timers.append(timer)
 
         if script.climax_offset is None:
-            self.finale_at = None
-            self._drawn_finale_at = None
-            self.outcome = None
-            self._climax_timer.stop()
-            self.beat_handler.set_finale_at(None)
+            # The recording was stopped before any climax - almost always because the user
+            # did not last that long, which is exactly the session someone saves to try
+            # again. So it is not replayed as a session that can never finish: the recorded
+            # stretch plays as recorded, and from its end on this is an ordinary session,
+            # climax and all. Held past that end rather than drawn freely, or the retry
+            # could finish sooner than the run it is retrying - and the run-in cannot be
+            # built into segments that come out of the file anyway.
+            self._draw_climax(session_start_time, not_before=session_start_time + script.duration)
             return
         self.finale_at = session_start_time + script.climax_offset
         self._drawn_finale_at = self.finale_at
@@ -234,14 +251,17 @@ class ClimaxHandler(QObject):
 
     def on_plan_extended(self, segments):
         """Rolls the fake climaxes for boundaries that have just been planned."""
-        if self._script is not None:
-            return  # a replay's fake-outs are on their own timers, recorded not rolled
         if not self.fake_climax_active:
             return
         for segment in segments:
             # Never on the finale: a fake at the exact moment the real one is due would
             # put the "only joking" reveal on top of the real announcement.
             if segment.kind == "finale":
+                continue
+            # A recorded segment's fake-outs are recorded too and already have their own
+            # timers. Only what the planner drew *past* the end of the recording is rolled
+            # for - that stretch is an ordinary session and should feel like one.
+            if self._script is not None and segment.index < self._script.segment_count:
                 continue
             if random.uniform(0, 1) < self.fake_climax_chance:
                 self._planned_fakes.add(segment.index)

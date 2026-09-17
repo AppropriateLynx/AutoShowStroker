@@ -135,6 +135,10 @@ def describe(saved: dict) -> str:
     climax = saved.get("climax")
     if climax:
         parts.append(OUTCOME_LABELS.get(climax.get("outcome"), str(climax.get("outcome"))))
+    else:
+        # Worth calling out, because it replays differently: the recording plays out and
+        # the session then carries on and draws a climax of its own (see ClimaxHandler).
+        parts.append("Stopped early")
     fakes = len(saved.get("fake_climaxes", []))
     if fakes:
         parts.append(f"{fakes} fake-out{'s' if fakes > 1 else ''}")
