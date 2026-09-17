@@ -76,6 +76,17 @@ class SettingsDialog(QDialog):
         self.add_setting("Pause Max. duration (s):", "max_pause_dur", self.beat_handler, int, 1, 180, 1)
         self.add_setting("Pause chance (per beat change)", "pause_chance", self.beat_handler, float, 0.001, 1, 0.001)
 
+        self.add_section_header("Edge Relief")
+        self.edge_relief_active_checkbox = QCheckBox("\"I reached my Edge\" button active")
+        self.edge_relief_active_checkbox.setToolTip(
+            "Press E during a session for a pause now and a gentler rhythm behind it. The "
+            "climax waits out the break rather than being paid for with it."
+        )
+        self.edge_relief_active_checkbox.setChecked(self.beat_handler.edge_relief_active)
+        self._current_layout.addWidget(self.edge_relief_active_checkbox)
+        self.add_setting("Edge pause duration (s):", "edge_pause_dur", self.beat_handler, int, 5, 300, 5)
+        self.add_setting("Edge cooldown (s):", "edge_cooldown_sec", self.beat_handler, int, 0, 900, 10)
+
         self.add_section_header("Difficulty Ramping")
         self.ramping_active_checkbox = QCheckBox("Difficulty ramping active")
         self.ramping_active_checkbox.setChecked(self.beat_handler.ramping_active)
@@ -95,10 +106,12 @@ class SettingsDialog(QDialog):
             [
                 "min_beat_freq", "max_beat_freq", "min_beat_dur", "max_beat_dur",
                 "min_pause_dur", "max_pause_dur", "pause_chance",
+                "edge_pause_dur", "edge_cooldown_sec",
                 "min_ramp_duration", "max_ramp_duration", "ramp_window_width",
             ],
             checkbox_defaults=[
                 (self.ramping_active_checkbox, self.beat_handler.DEFAULTS["ramping_active"]),
+                (self.edge_relief_active_checkbox, self.beat_handler.DEFAULTS["edge_relief_active"]),
             ],
             extra_reset=lambda: [cb.setChecked(True) for cb in self.beat_checkboxes.values()],
         )
@@ -356,6 +369,12 @@ class SettingsDialog(QDialog):
 
         settings.setValue("BeatHandler/ramping_active", self.ramping_active_checkbox.isChecked())
         self.beat_handler.ramping_active = self.ramping_active_checkbox.isChecked()
+
+        settings.setValue("BeatHandler/edge_relief_active", self.edge_relief_active_checkbox.isChecked())
+        self.beat_handler.edge_relief_active = self.edge_relief_active_checkbox.isChecked()
+        # Applied at once rather than at the next session: a button that is still there but
+        # switched off would do nothing when pressed.
+        self.main_app._reset_edge_button()
 
         settings.setValue("ClimaxHandler/climax_active", self.climax_active_checkbox.isChecked())
         self.climax_handler.climax_active = self.climax_active_checkbox.isChecked()

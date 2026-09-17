@@ -1978,3 +1978,118 @@ def test_the_outcome_buttons_do_not_crush_the_beat_track(app, qtbot):
     app._hide_outcome_buttons()
     qtbot.wait(10)
     assert app.footer_container.height() == GoonerApp.FOOTER_HEIGHT
+
+
+# --- "I reached my Edge" ---
+
+
+def test_the_edge_button_is_only_live_during_a_session(app, tmp_path):
+    assert app.btn_edge.isEnabled() is False
+
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    assert app.btn_edge.isEnabled() is True
+
+
+def test_reaching_your_edge_buys_a_pause_and_pushes_the_climax_back(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.beat_handler.edge_pause_dur = 15
+    app.climax_handler.climax_active = True
+    app.climax_handler.min_climax_after = app.climax_handler.max_climax_after = 600.0
+    app.start()
+    climax_before = app.climax_handler.finale_at
+
+    app.btn_edge.click()
+
+    assert app.beat_handler.current_segment.kind == "pause"
+    assert app.climax_handler.finale_at == pytest.approx(climax_before + 15.0)
+    assert app.score_tracker.edge_count == 1
+
+
+def test_reaching_your_edge_gets_its_own_line(app, tmp_path, monkeypatch):
+    spoken = []
+    monkeypatch.setattr(
+        app.callout_handler, "force_output_sentence", lambda key: spoken.append(key)
+    )
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app.btn_edge.click()
+
+    assert spoken == ["edge_reached"]
+
+
+def test_a_second_edge_is_refused_until_the_cooldown_is_up(app, tmp_path):
+    """Holding the key down would otherwise turn the session into a nap."""
+    app.playlist = [tmp_path / "a.png"]
+    app.beat_handler.edge_cooldown_sec = 60
+    app.start()
+    app.btn_edge.click()
+
+    app.btn_edge.click()
+
+    assert app.score_tracker.edge_count == 1
+    assert app.btn_edge.isEnabled() is False
+    assert "60" in app.btn_edge.text()
+
+
+def test_the_cooldown_gives_the_button_back(app, tmp_path, qtbot):
+    app.playlist = [tmp_path / "a.png"]
+    app.beat_handler.edge_cooldown_sec = 1
+    app.start()
+    app.btn_edge.click()
+    assert app.btn_edge.isEnabled() is False
+
+    qtbot.waitUntil(lambda: app.btn_edge.isEnabled(), timeout=4000)
+
+    assert app.btn_edge.text() == GoonerApp.EDGE_BUTTON_TEXT
+
+
+def test_the_edge_button_goes_away_at_the_climax(app, tmp_path, qtbot):
+    """Nothing left to be relieved of, and the planner refuses it anyway."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.showMaximized()
+    qtbot.waitExposed(app)
+
+    app.climax_handler.outcome_decided_event.emit("real")
+
+    assert app.btn_edge.isVisible() is False
+
+
+def test_a_new_session_hands_the_edge_button_back(app, tmp_path, qtbot):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.showMaximized()
+    qtbot.waitExposed(app)
+    app.climax_handler.outcome_decided_event.emit("real")
+    app._end_session(show_statistics=False)
+
+    app.start()
+
+    assert app.btn_edge.isVisible() is True
+    assert app.btn_edge.isEnabled() is True
+
+
+def test_the_edge_button_hides_entirely_when_switched_off(app, tmp_path, qtbot):
+    app.beat_handler.edge_relief_active = False
+    app.playlist = [tmp_path / "a.png"]
+    app.showMaximized()
+    qtbot.waitExposed(app)
+
+    app.start()
+
+    assert app.btn_edge.isVisible() is False
+
+
+def test_an_edge_the_planner_refuses_costs_nothing(app, tmp_path, monkeypatch):
+    """Refused mid-pause or after the climax - it must not burn the cooldown or count."""
+    monkeypatch.setattr(app.beat_handler, "edge_relief", lambda: 0.0)
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+
+    app.btn_edge.click()
+
+    assert app.score_tracker.edge_count == 0
+    assert app.btn_edge.isEnabled() is True

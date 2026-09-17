@@ -66,6 +66,8 @@ class GoonerApp(QMainWindow):
     # container with a stretching note track, which otherwise takes the slack and leaves
     # the buttons a few pixels tall.
     OUTCOME_ROW_HEIGHT = 38
+
+    EDGE_BUTTON_TEXT = "I reached my Edge"
     FOOTER_HEIGHT_WITH_OUTCOME = FOOTER_HEIGHT + OUTCOME_ROW_HEIGHT
 
     DISCORD_INVITE_URL = "https://discord.gg/qqkcxvq37Z"
@@ -265,6 +267,14 @@ class GoonerApp(QMainWindow):
         self.btn_stop.setShortcut("Ctrl+Space")
         self.btn_stop.setToolTip("Ctrl+Space")
 
+        self.btn_edge = QPushButton(self.EDGE_BUTTON_TEXT)
+        self.btn_edge.clicked.connect(self.edge_reached)
+        self.btn_edge.setEnabled(False)
+        # A single letter, because the whole point is hitting it without looking. Space is
+        # Panic, Ctrl+Space is Stop, M is Mute, the arrows navigate - E is free and obvious.
+        self.btn_edge.setShortcut("E")
+        self.btn_edge.setToolTip("E - a pause now, and a gentler beat behind it")
+
         self.btn_mute = QPushButton("Mute")
         self.btn_mute.setCheckable(True)
         self.btn_mute.clicked.connect(self.set_muted)
@@ -274,13 +284,15 @@ class GoonerApp(QMainWindow):
         # whichever button currently has keyboard focus before it ever reaches keyPressEvent,
         # so Panic would silently fail to fire while any of these had focus. NoFocus keeps them
         # mouse/shortcut-clickable but out of the keyboard-focus chain entirely.
-        for button in (self.btn_prev, self.btn_load, self.btn_next, self.btn_stop, self.btn_mute):
+        for button in (self.btn_prev, self.btn_load, self.btn_next, self.btn_stop,
+                       self.btn_edge, self.btn_mute):
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         controls_layout.addWidget(self.btn_prev)
         controls_layout.addWidget(self.btn_load)
         controls_layout.addWidget(self.btn_stop)
         controls_layout.addWidget(self.btn_next)
+        controls_layout.addWidget(self.btn_edge)
         controls_layout.addWidget(self.btn_mute)
 
         self.auto_play_timer = QTimer()
@@ -288,6 +300,12 @@ class GoonerApp(QMainWindow):
 
         # Held rather than a fire-and-forget QTimer.singleShot so start() can cancel it -
         # and so a test can check it without monkeypatching QTimer itself.
+        # Ticks once a second while the edge button is cooling down, so the button can
+        # count down rather than just sitting there dead.
+        self._edge_cooldown_timer = QTimer(self)
+        self._edge_cooldown_timer.timeout.connect(self._tick_edge_cooldown)
+        self._edge_cooldown_left = 0
+
         self._denied_stop_timer = QTimer(self)
         self._denied_stop_timer.setSingleShot(True)
         self._denied_stop_timer.timeout.connect(self.stop)
@@ -887,6 +905,8 @@ class GoonerApp(QMainWindow):
         self.btn_next.setEnabled(False)
         self.btn_prev.setEnabled(False)
         self.btn_stop.setEnabled(False)
+        self._edge_cooldown_timer.stop()
+        self.btn_edge.setEnabled(False)
         self._freeze_climax_blink()
         log.info(
             "Session ended after %s (statistics shown: %s)",
@@ -919,6 +939,8 @@ class GoonerApp(QMainWindow):
             self.btn_next.setEnabled(True)
             self.btn_prev.setEnabled(True)
             self.btn_stop.setEnabled(True)
+            # After is_running, which is what decides whether the button is live.
+            self._reset_edge_button()
             self.beat_handler.start_beat(script=script)
             self.btn_load.setText("Change Gooning Folder.")
         # No recalc_autoplay_timer() here: load_media() already schedules the next change
@@ -933,6 +955,9 @@ class GoonerApp(QMainWindow):
         # Remembered from the signal rather than read back off ClimaxHandler when the answer
         # comes in - what was announced to *this* user is what the answer is measured against.
         self._announced_outcome = outcome
+        # Nothing left to be relieved of, and the planner would refuse it anyway.
+        self.btn_edge.hide()
+        self._edge_cooldown_timer.stop()
         self._show_outcome_buttons("climax")
         if outcome == "denied":
             # Waits for the answer when there is one to wait for, or the buttons would be
@@ -1008,6 +1033,55 @@ class GoonerApp(QMainWindow):
             # The question was the only reason the session was still open.
             self._denied_stop_timer.stop()
             self._end_session(show_statistics=True)
+
+    # --- reaching your edge ---
+
+    def edge_reached(self):
+        """A pause now, a gentler rhythm behind it, and the climax pushed back to match.
+
+        Three separate things have to move together, which is why this lives here rather
+        than in any one of them: BeatHandler grants the pause, ClimaxHandler is told to wait
+        the same amount (it is on an absolute clock, so without that the break would be paid
+        for out of the session rather than added to it), and only then does it count.
+        """
+        if not self.is_running or self._edge_cooldown_left > 0:
+            return
+        seconds = self.beat_handler.edge_relief()
+        if not seconds:
+            return  # refused - mid-pause, or the climax has already been announced
+
+        self.climax_handler.postpone(seconds)
+        self.score_tracker.edge_reached()
+        self.callout_handler.force_output_sentence("edge_reached")
+        log.info("Edge relief taken: %.0fs", seconds)
+        self._start_edge_cooldown()
+
+    def _start_edge_cooldown(self):
+        self._edge_cooldown_left = int(self.beat_handler.edge_cooldown_sec)
+        if self._edge_cooldown_left <= 0:
+            return
+        self._update_edge_button()
+        self._edge_cooldown_timer.start(1000)
+
+    def _tick_edge_cooldown(self):
+        self._edge_cooldown_left -= 1
+        if self._edge_cooldown_left <= 0:
+            self._edge_cooldown_timer.stop()
+        self._update_edge_button()
+
+    def _update_edge_button(self):
+        cooling = self._edge_cooldown_left > 0
+        self.btn_edge.setEnabled(self.is_running and not cooling)
+        self.btn_edge.setText(
+            f"Edge ({self._edge_cooldown_left}s)" if cooling else self.EDGE_BUTTON_TEXT
+        )
+
+    def _reset_edge_button(self):
+        """Back to a fresh session: visible if the feature is on, live, off cooldown."""
+        self._edge_cooldown_timer.stop()
+        self._edge_cooldown_left = 0
+        self.btn_edge.setVisible(self.beat_handler.edge_relief_active)
+        self._update_edge_button()
 
     def _ask_how_it_ended(self):
         """Asks a user who stopped by hand what they actually did. None if they'd rather not
