@@ -574,3 +574,98 @@ def test_session_planned_event_carries_the_script_of_a_replay(handler, qtbot):
     with qtbot.waitSignal(handler.session_planned_event, timeout=1000) as blocker:
         handler.start_beat(script=script)
     assert blocker.args[1] is script
+
+
+# --- relief on demand ---
+
+
+def test_an_edge_cuts_the_running_segment_short_for_a_pause(handler):
+    pin(handler, beat_dur=60.0)
+    handler.edge_pause_dur = 12
+    handler.start_beat()
+    assert handler.current_segment.kind == "beat"
+
+    given = handler.edge_relief()
+
+    assert given == pytest.approx(12.0)
+    assert handler.current_segment.kind == "pause"
+    assert handler.is_paused() is True
+
+
+def test_the_rhythm_behind_an_edge_comes_back_at_the_bottom_of_the_window(handler):
+    """A gap on its own is not relief - what follows has to be gentler than what drove the
+    user to press the button."""
+    pin(handler)
+    handler.min_beat_freq, handler.max_beat_freq = 1.0, 5.0
+    handler.start_beat()
+
+    handler.edge_relief()
+
+    assert handler.planned_segments[0].freq == pytest.approx(1.0)
+
+
+def test_only_the_first_segment_after_an_edge_is_slowed(handler):
+    pin(handler)
+    handler.min_beat_freq, handler.max_beat_freq = 1.0, 1.0
+    handler.start_beat()
+    handler.edge_relief()
+    handler.min_beat_freq, handler.max_beat_freq = 4.0, 4.0
+
+    # Everything queued behind the relief segment is drawn normally again.
+    handler._plan.clear()
+    handler._extend_plan()
+
+    assert handler.planned_segments[0].freq == pytest.approx(4.0)
+
+
+def test_an_edge_during_a_pause_does_nothing(handler):
+    """Nothing to be relieved of - and it would hand out a free second pause."""
+    pin(handler, pause_chance=1.0, pause_dur=10)
+    handler.start_beat()
+    handler._begin_next_segment()
+    assert handler.is_paused() is True
+
+    assert handler.edge_relief() == 0.0
+
+
+def test_an_edge_after_the_climax_does_nothing(handler):
+    pin(handler)
+    handler.start_beat()
+    handler.hold_final_segment()
+
+    assert handler.edge_relief() == 0.0
+
+
+def test_an_edge_keeps_the_segment_counter_climbing(handler):
+    """The pause is a real segment - the recorder and the explorer both index by it."""
+    pin(handler)
+    handler.start_beat()
+    before = handler.current_segment.index
+
+    handler.edge_relief()
+
+    assert handler.current_segment.index > before
+
+
+def test_an_edge_announces_its_pause_like_any_other_segment(handler, qtbot):
+    pin(handler)
+    handler.start_beat()
+
+    with qtbot.waitSignal(handler.segment_started_event, timeout=1000) as blocker:
+        handler.edge_relief()
+
+    assert blocker.args[0].kind == "pause"
+
+
+def test_an_edge_still_leaves_a_fast_run_in_to_the_climax(handler):
+    """The run-in is rebuilt from the replan - a pause pressed just before the climax must
+    not swallow it."""
+    pin(handler, beat_dur=20.0)
+    handler.min_beat_freq, handler.max_beat_freq = 1.0, 5.0
+    handler.edge_pause_dur = 5
+    handler.start_beat()
+    handler.set_finale_at(handler.session_start_time + 40.0)
+
+    handler.edge_relief()
+
+    assert any(segment.kind == "finale" for segment in handler.planned_segments)

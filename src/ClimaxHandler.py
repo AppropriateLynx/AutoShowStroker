@@ -239,6 +239,30 @@ class ClimaxHandler(QObject):
         self._arm_climax_timer()
         self.beat_handler.set_finale_at(self.finale_at)
 
+    def postpone(self, seconds):
+        """Pushes the climax, and a replay's recorded fake-outs, back by `seconds`.
+
+        Called when the user takes an edge break. The climax sits on an absolute clock, so
+        without this a pause would not buy them time - it would quietly spend the rhythm
+        that was leading up to the climax, and in the worst case leave the run-in with
+        nothing to run in over. Thematically it is also the right answer: you edged, so you
+        wait longer for it.
+        """
+        if seconds <= 0 or self.climax_triggered or self.finale_at is None:
+            return
+        self.finale_at += seconds
+        # The pre-clamp moment moves with it, or the next settings save would re-clamp from
+        # the old value and snap the climax back to before the break.
+        if self._drawn_finale_at is not None:
+            self._drawn_finale_at += seconds
+        self._arm_climax_timer()
+        self.beat_handler.set_finale_at(self.finale_at)
+        # Live fake-outs need nothing - they are pinned to segment indices and move with the
+        # plan by themselves. A replay's are on absolute timers, like the climax.
+        for timer in self._scripted_fake_timers:
+            if timer.isActive():
+                timer.start(timer.remainingTime() + int(seconds * 1000))
+
     def _on_scripted_fake_due(self):
         if self.climax_triggered or self._fake_climax_pending:
             return

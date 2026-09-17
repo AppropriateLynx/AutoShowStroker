@@ -16,7 +16,9 @@ class ScoreTracker:
     # nobody chases a personal best in being denied - but achievements read them back across
     # sessions, which only works if they were stored at the time. Entries written by older
     # builds simply lack the keys.
-    HISTORY_EXTRA_FIELDS = ("climax_outcome", "reported_outcome", "fakeouts_fallen_for")
+    HISTORY_EXTRA_FIELDS = (
+        "climax_outcome", "reported_outcome", "fakeouts_fallen_for", "edge_count",
+    )
     PR_METRIC_LABELS = {
         "total_dur_sec": "Total Duration",
         "total_num_beat": "Total Beats",
@@ -71,6 +73,7 @@ class ScoreTracker:
         self.reported_outcome = None
         self.fakeout_count = 0
         self.fakeouts_fallen_for = 0
+        self.edge_count = 0
         self.history = self._load_history()
         self.last_session_new_records = {}
 
@@ -89,6 +92,9 @@ class ScoreTracker:
 
     def fell_for_fake_climax(self):
         self.fakeouts_fallen_for += 1
+
+    def edge_reached(self):
+        self.edge_count += 1
 
     def beat_paused(self):
         log.info("Beat paused")
@@ -127,6 +133,7 @@ class ScoreTracker:
         self.reported_outcome = None
         self.fakeout_count = 0
         self.fakeouts_fallen_for = 0
+        self.edge_count = 0
 
     def session_ended(self):
         log.info("Score tracking ended")
@@ -172,6 +179,7 @@ class ScoreTracker:
             'reported_outcome': self.reported_outcome,
             'fakeout_count': self.fakeout_count,
             'fakeouts_fallen_for': self.fakeouts_fallen_for,
+            'edge_count': self.edge_count,
         }
 
     def beat_changed(self, _, new_pattern):

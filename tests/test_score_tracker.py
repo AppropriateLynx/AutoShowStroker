@@ -538,3 +538,26 @@ def test_the_history_remembers_both_outcomes_so_achievements_can_look_back(tmp_p
     assert entry["climax_outcome"] == "denied"
     assert entry["reported_outcome"] == "came"
     assert entry["fakeouts_fallen_for"] == 1
+
+
+def test_edges_are_counted_and_remembered(tmp_path, monkeypatch):
+    from src.user_data import UserDataStore
+
+    store = UserDataStore(base_dir=tmp_path / "data")
+    tracker = ScoreTracker(data_store=store)
+    tracker.session_started()
+    tracker.edge_reached()
+    tracker.edge_reached()
+    monkeypatch.setattr(time, "time", lambda: tracker.session_start_time + 1.0)
+
+    tracker.session_ended()
+
+    assert tracker.deliver_infos()["edge_count"] == 2
+    assert tracker.get_history()[-1]["edge_count"] == 2
+
+
+def test_a_new_session_starts_at_zero_edges():
+    tracker = ScoreTracker()
+    tracker.edge_reached()
+    tracker.session_started()
+    assert tracker.edge_count == 0
