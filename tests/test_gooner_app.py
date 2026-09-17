@@ -2168,3 +2168,33 @@ def test_the_statistics_menu_opens_the_achievements(app, monkeypatch):
     action.trigger()
 
     assert captured["tracker"] is app.achievement_tracker
+
+
+def test_answering_after_any_climax_ends_the_session(app, tmp_path, monkeypatch):
+    """You have said what happened - the session is over. It used to end only after a
+    denial, so a real or ruined climax left the beat running with nothing left to come."""
+    ended = []
+    monkeypatch.setattr(app, "_end_session", lambda show_statistics: ended.append(show_statistics))
+    for announced in ("real", "ruined", "denied"):
+        ended.clear()
+        app.playlist = [tmp_path / "a.png"]
+        app.is_running = True
+        app.climax_handler.outcome_decided_event.emit(announced)
+
+        app.btn_came.click()
+
+        assert ended == [True], announced
+        assert app._denied_stop_timer.isActive() is False
+
+
+def test_reporting_at_a_fake_out_leaves_the_session_running(app, tmp_path, monkeypatch):
+    """The real climax is still to come - ending here would cut the session short on a joke."""
+    ended = []
+    monkeypatch.setattr(app, "_end_session", lambda show_statistics: ended.append(show_statistics))
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.climax_handler.fake_climax_triggered_event.emit()
+
+    app.btn_came.click()
+
+    assert ended == []

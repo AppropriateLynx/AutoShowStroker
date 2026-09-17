@@ -1040,10 +1040,11 @@ class GoonerApp(QMainWindow):
 
         self.score_tracker.outcome_reported(reported)
         self._outcome_answered = True
-        if self._announced_outcome == "denied":
-            # The question was the only reason the session was still open.
-            self._denied_stop_timer.stop()
-            self._end_session(show_statistics=True)
+        # Whatever the answer, the session is over: the climax has landed and the user has
+        # just said what became of it. Leaving the beat running afterwards only means they
+        # have to reach for Stop to be told what they already know.
+        self._denied_stop_timer.stop()
+        self._end_session(show_statistics=True)
 
     # --- reaching your edge ---
 

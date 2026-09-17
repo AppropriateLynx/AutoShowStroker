@@ -22,6 +22,8 @@ log = applog.get_logger(__name__)
 MARK_SIZE = 48
 LOCKED_COLOR = "#6a6175"
 COLUMNS = 2
+PIP_EARNED = "●"
+PIP_LOCKED = "○"
 
 
 def tinted_mark(path, color, size=MARK_SIZE) -> QPixmap:
@@ -42,16 +44,33 @@ def tinted_mark(path, color, size=MARK_SIZE) -> QPixmap:
 
 
 class AchievementCard(QFrame):
-    """One achievement: its mark, its name, and either when you got it or how close you are."""
+    """One tile: a mark, a name, how many of its levels are earned, and what the next wants.
 
-    def __init__(self, achievement, unlocked_at, progress, secret_title, parent=None):
+    A tiered track is a single achievement with three stages rather than three achievements
+    that happen to look alike, so it gets one tile with three pips. A standalone one is the
+    same tile with a single stage.
+    """
+
+    def __init__(self, levels, tracker, played, history, secret_title, parent=None):
         super().__init__(parent)
-        self.achievement = achievement
-        self.unlocked = unlocked_at is not None
+        self.levels = levels
+        self.achievement = levels[0]
+        self.level_count = len(levels)
+        self.earned = [item for item in levels if tracker.is_unlocked(item.id)]
+        self._dates = [tracker.unlocked_at(item.id) or "" for item in self.earned]
+        self.levels_earned = len(self.earned)
+        self.unlocked = bool(self.earned)
         self.glow = None
         self.progress_bar = None
+        self.pips = None
 
-        hidden = achievement.secret and not self.unlocked
+        self.next_level = next(
+            (item for item in levels if not tracker.is_unlocked(item.id)), None
+        )
+        # A secret stays hidden only while nothing of it is earned. A secret *track* hides
+        # its steps as well until then: the pips would give away that there is more of it,
+        # which is half of what was being kept back.
+        hidden = self.achievement.secret and not self.unlocked
 
         # Scoped by object name on purpose: QLabel is a QFrame subclass, so a bare
         # "QFrame { ... }" rule here paints the mark and the text with the card's own
@@ -62,12 +81,17 @@ class AchievementCard(QFrame):
             "border-radius: 10px; padding: 8px; }"
         )
         row = QHBoxLayout(self)
+        row.addWidget(self._build_mark())
+        row.addLayout(self._build_text(tracker, played, history, secret_title, hidden), 1)
 
+    # --- construction ---
+
+    def _build_mark(self):
         self.mark = QLabel()
         self.mark.setFixedSize(MARK_SIZE, MARK_SIZE)
         self.mark.setPixmap(
             tinted_mark(
-                achievements.icon_path(achievement),
+                achievements.icon_path(self.achievement),
                 theme.ACCENT if self.unlocked else LOCKED_COLOR,
             )
         )
@@ -79,46 +103,93 @@ class AchievementCard(QFrame):
             self.glow.setBlurRadius(24)
             self.glow.setOffset(0, 0)
             self.mark.setGraphicsEffect(self.glow)
-        row.addWidget(self.mark)
+        return self.mark
 
+    def _build_text(self, tracker, played, history, secret_title, hidden):
         text = QVBoxLayout()
-        self.title = QLabel(secret_title if hidden else achievement.name)
+
+        heading = QHBoxLayout()
+        self.title = QLabel(secret_title if hidden else self._tile_name())
         self.title.setStyleSheet(
             f"color: {theme.ACCENT if self.unlocked else theme.TEXT}; font-weight: bold; "
             "font-size: 14px;"
         )
-        text.addWidget(self.title)
+        heading.addWidget(self.title)
+        heading.addStretch()
+        if self.level_count > 1 and not hidden:
+            self.pips = self._build_pips()
+            heading.addWidget(self.pips)
+        text.addLayout(heading)
 
-        self.detail = QLabel(self._detail_for(achievement, unlocked_at, hidden))
+        self.detail = QLabel(self._detail_for(hidden))
         self.detail.setWordWrap(True)
         self.detail.setStyleSheet(f"color: {theme.TEXT}; font-size: 12px;")
         text.addWidget(self.detail)
 
-        if not self.unlocked and not hidden and progress is not None:
-            current, target = progress
-            self.progress_bar = QProgressBar()
-            self.progress_bar.setRange(0, int(target))
-            self.progress_bar.setValue(int(current))
-            self.progress_bar.setTextVisible(False)
-            self.progress_bar.setFixedHeight(6)
-            # Qt's default chunk is a flat green that belongs to another application.
-            self.progress_bar.setStyleSheet(
-                f"QProgressBar {{ background-color: {theme.SURFACE_DARKEST}; "
-                "border: none; border-radius: 3px; }"
-                f"QProgressBar::chunk {{ background-color: {theme.ACCENT}; "
-                "border-radius: 3px; }"
-            )
-            text.addWidget(self.progress_bar)
+        self.status = QLabel(self._status_for())
+        self.status.setStyleSheet(f"color: {LOCKED_COLOR}; font-size: 11px;")
+        self.status.setVisible(bool(self.status.text()))
+        text.addWidget(self.status)
 
-        row.addLayout(text, 1)
+        if self.next_level is not None and not hidden:
+            self._build_progress(tracker, played, history, text)
+        return text
 
-    @staticmethod
-    def _detail_for(achievement, unlocked_at, hidden) -> str:
-        if unlocked_at is not None:
-            return f"Earned {unlocked_at}"
+    def _build_pips(self):
+        """One dot per level, filled for the ones earned - the whole point of a tile is that
+        the track's shape is visible at a glance."""
+        pips = QLabel(
+            PIP_EARNED * self.levels_earned + PIP_LOCKED * (self.level_count - self.levels_earned)
+        )
+        pips.setStyleSheet(
+            f"color: {theme.ACCENT if self.unlocked else LOCKED_COLOR}; "
+            "font-size: 13px; letter-spacing: 3px;"
+        )
+        return pips
+
+    def _build_progress(self, tracker, played, history, text):
+        progress = tracker.progress_for(self.next_level, played, history)
+        if progress is None:
+            return
+        current, target = progress
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, int(target))
+        self.progress_bar.setValue(int(current))
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(6)
+        # Qt's default chunk is a flat green that belongs to another application.
+        self.progress_bar.setStyleSheet(
+            f"QProgressBar {{ background-color: {theme.SURFACE_DARKEST}; "
+            "border: none; border-radius: 3px; }"
+            f"QProgressBar::chunk {{ background-color: {theme.ACCENT}; border-radius: 3px; }}"
+        )
+        text.addWidget(self.progress_bar)
+
+    # --- what the tile says ---
+
+    def _tile_name(self) -> str:
+        return self.achievement.track or self.achievement.name
+
+    def _detail_for(self, hidden) -> str:
         if hidden:
             return "Not everything announces itself in advance."
-        return achievement.description
+        if self.next_level is None:
+            return self.levels[-1].description
+        return self.next_level.description
+
+    def _status_for(self) -> str:
+        """When the highest earned level was earned, and how far up the track that is."""
+        if not self.earned:
+            return ""
+        when = self._latest_date()
+        if self.level_count == 1:
+            return f"Earned {when}"
+        return f"Level {self.levels_earned} of {self.level_count} - earned {when}"
+
+    def _latest_date(self) -> str:
+        """The highest level's date, which is the most recent one - levels are only ever
+        earned in order, since a higher one implies every lower one."""
+        return self._dates[-1] if self._dates else ""
 
     # Read by tests and by nothing else - the widgets themselves are the interface.
     def title_text(self) -> str:
@@ -126,6 +197,9 @@ class AchievementCard(QFrame):
 
     def detail_text(self) -> str:
         return self.detail.text()
+
+    def status_text(self) -> str:
+        return self.status.text()
 
 
 class AchievementsDialog(QDialog):
@@ -175,12 +249,9 @@ class AchievementsDialog(QDialog):
         grid = QGridLayout(container)
         grid.setContentsMargins(0, 0, 0, 0)
 
-        for index, achievement in enumerate(self.tracker.catalogue):
+        for index, levels in enumerate(achievements.grouped(self.tracker.catalogue)):
             card = AchievementCard(
-                achievement,
-                self.tracker.unlocked_at(achievement.id),
-                self.tracker.progress_for(achievement, latest, list(history)),
-                self.SECRET_TITLE,
+                levels, self.tracker, latest, list(history), self.SECRET_TITLE
             )
             self.cards.append(card)
             grid.addWidget(card, index // COLUMNS, index % COLUMNS)
@@ -192,6 +263,12 @@ class AchievementsDialog(QDialog):
         return scroll
 
     def card_for(self, achievement_id):
+        """The tile an achievement lives on - a whole track shares one."""
         return next(
-            (card for card in self.cards if card.achievement.id == achievement_id), None
+            (
+                card
+                for card in self.cards
+                if any(item.id == achievement_id for item in card.levels)
+            ),
+            None,
         )

@@ -40,6 +40,11 @@ class Achievement(NamedTuple):
     progress: Callable | None = None
     # Shown as ??? until it fires. For the ones that are more fun found than aimed at.
     secret: bool = False
+    # Three levels of the same thing are one achievement with three stages, not three
+    # achievements that look alike - `track` is the tile's name and `level` the step within
+    # it. None/0 for a standalone one.
+    track: str | None = None
+    level: int = 0
 
 
 def icon_path(achievement: Achievement) -> Path:
@@ -101,6 +106,26 @@ def _sessions_at_least(target):
     return check, progress
 
 
+def _unfooled_by(target):
+    """Survived `target` fake cues in one session without acting on a single one.
+
+    Counting the cues alone was the old rule, and it handed "Not Falling For It" to people
+    who fell for every one of them. A session the user was fooled in shows no progress
+    either - a bar filling to the top on a session that earned nothing is a lie.
+    """
+    def check(played, _history):
+        return (played.get("fakeout_count") or 0) >= target and not played.get(
+            "fakeouts_fallen_for"
+        )
+
+    def progress(played, _history):
+        if played.get("fakeouts_fallen_for"):
+            return 0, target
+        return min(played.get("fakeout_count") or 0, target), target
+
+    return check, progress
+
+
 def _history_count_at_least(predicate, target):
     def check(_played, history):
         return _count(history, predicate) >= target
@@ -111,8 +136,9 @@ def _history_count_at_least(predicate, target):
     return check, progress
 
 
-def _tiers(prefix, name_for, description_for, icon, builder, targets, id_for=None):
-    """One achievement per threshold, all sharing a rule and a mark.
+def _tiers(prefix, track, name_for, description_for, icon, builder, targets, id_for=None,
+           secret=False):
+    """The levels of one track, in order. They share a name, a mark and a rule.
 
     id_for keeps the stored id readable where the raw target is not: a 45 minute tier is
     "endurance_45", not "endurance_2k" seconds. Ids end up in the user's data file, so
@@ -120,7 +146,7 @@ def _tiers(prefix, name_for, description_for, icon, builder, targets, id_for=Non
     """
     id_for = id_for or _suffix
     entries = []
-    for target in targets:
+    for level, target in enumerate(targets, start=1):
         check, progress = builder(target)
         entries.append(
             Achievement(
@@ -130,9 +156,31 @@ def _tiers(prefix, name_for, description_for, icon, builder, targets, id_for=Non
                 icon=icon,
                 check=check,
                 progress=progress,
+                track=track,
+                level=level,
+                secret=secret,
             )
         )
     return entries
+
+
+def grouped(catalogue=None) -> list:
+    """The catalogue as tiles: a whole track is one entry, everything else is its own.
+
+    Order is preserved, and nothing is dropped - the tiles are just how the same list is
+    drawn.
+    """
+    tiles, current = [], []
+    for achievement in (CATALOGUE if catalogue is None else catalogue):
+        if achievement.track and current and current[-1].track == achievement.track:
+            current.append(achievement)
+            continue
+        if current:
+            tiles.append(tuple(current))
+        current = [achievement]
+    if current:
+        tiles.append(tuple(current))
+    return tiles
 
 
 def _rule(pair) -> dict:
@@ -158,16 +206,18 @@ def _minutes(seconds) -> int:
 CATALOGUE = (
     *_tiers(
         "endurance",
-        lambda t: f"{_minutes(t)} Minutes",
+        "Endurance",
+        lambda t: f"{_minutes(t)} minutes",
         lambda t: f"Last {_minutes(t)} minutes in a single session.",
-        "leaking_tip",
+        "candle",
         lambda t: _session_at_least("total_dur_sec", t),
         (45 * 60, 90 * 60, 120 * 60),
         id_for=lambda t: str(_minutes(t)),
     ),
     *_tiers(
         "beats",
-        lambda t: f"{t:,} Strokes".replace(",", " "),
+        "Strokes In One Session",
+        lambda t: f"{t:,}".replace(",", " "),
         lambda t: f"Take {t:,} beats in a single session.".replace(",", " "),
         "note_run",
         lambda t: _session_at_least("total_num_beat", t),
@@ -175,7 +225,8 @@ CATALOGUE = (
     ),
     *_tiers(
         "lifetime_beats",
-        lambda t: f"{_suffix(t).upper()} All Told",
+        "Strokes All Told",
+        lambda t: _suffix(t).upper(),
         lambda t: f"Take {t:,} beats across every session you have ever played.".replace(",", " "),
         "endless_loop",
         lambda t: _lifetime_at_least("total_num_beat", t),
@@ -183,7 +234,8 @@ CATALOGUE = (
     ),
     *_tiers(
         "returner",
-        lambda t: f"Back for More ({t})",
+        "Back For More",
+        lambda t: f"{t} sessions",
         lambda t: f"Come back and play {t} sessions.",
         "hooked",
         _sessions_at_least,
@@ -191,7 +243,8 @@ CATALOGUE = (
     ),
     *_tiers(
         "obedient",
-        lambda t: f"Good Boy ({t})" if t > 1 else "Good Boy",
+        "Good Boy",
+        lambda t: f"{t} times" if t > 1 else "once",
         lambda t: (
             f"Do as you are told {t} times when you are denied or told to ruin it. "
             "Being told to come and coming does not count."
@@ -205,34 +258,40 @@ CATALOGUE = (
     ),
     *_tiers(
         "disobedient",
-        lambda t: f"Couldn't Help It ({t})" if t > 1 else "Couldn't Help It",
+        "Couldn't Help It",
+        lambda t: f"{t} times" if t > 1 else "once",
         lambda t: f"Come anyway after being denied, {t} times." if t > 1 else
         "Come anyway after being denied.",
         "snapped_leash",
         lambda t: _history_count_at_least(_disobedient, t),
         (1, 10, 50),
+        # Never advertised. Listing "come anyway after being denied" as a goal is an
+        # invitation rather than a record of one - it is found, not aimed at.
+        secret=True,
     ),
-    Achievement(
-        id="fakeouts_3",
-        name="Not Falling For It",
-        description="Survive 3 fake climax cues in one session.",
-        icon="tongue",
-        **_rule(_session_at_least("fakeout_count", 3)),
-    ),
-    Achievement(
-        id="fakeouts_unfooled",
-        name="Read Her Like A Book",
-        description="Survive 3 or more fake cues in one session without falling for a single one.",
-        icon="open_eye",
-        check=lambda played, _history: (
-            (played.get("fakeout_count") or 0) >= 3 and not played.get("fakeouts_fallen_for")
+    *_tiers(
+        "fakeouts",
+        "Not Falling For It",
+        lambda t: f"{t} in one session" if t > 1 else "one",
+        lambda t: (
+            f"Let {t} fake climax cues pass in a single session without acting on one of them."
+            if t > 1 else
+            "Let a fake climax cue pass without acting on it."
         ),
+        "silent_bell",
+        _unfooled_by,
+        (1, 3, 5),
+        # Secret for a different reason than the disobedience track: this one's condition
+        # gives the mechanic away. Listed as a goal it tells the user that fake cues exist
+        # and that the winning move is to hesitate at every climax announcement - and a
+        # fake-out only works while it is indistinguishable from the real thing.
+        secret=True,
     ),
     Achievement(
         id="edges_10",
         name="Ten Times Close",
         description="Reach your edge 10 times in one session and say so every time.",
-        icon="hanging_drop",
+        icon="gauge_max",
         **_rule(_session_at_least("edge_count", 10)),
     ),
     Achievement(
@@ -242,16 +301,6 @@ CATALOGUE = (
         icon="hourglass",
         check=lambda played, _history: (
             (played.get("total_dur_sec") or 0) >= 45 * 60 and not played.get("edge_count")
-        ),
-    ),
-    Achievement(
-        id="caught",
-        name="Caught",
-        description="",
-        icon="snapped_leash",
-        secret=True,
-        check=lambda played, _history: (
-            played.get("climax_outcome") == "denied" and played.get("reported_outcome") == "came"
         ),
     ),
     Achievement(
