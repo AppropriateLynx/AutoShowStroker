@@ -278,7 +278,7 @@ CATALOGUE = (
             if t > 1 else
             "Let a fake climax cue pass without acting on it."
         ),
-        "mask",
+        "silent_bell",
         _unfooled_by,
         (1, 3, 5),
         # Secret for a different reason than the disobedience track: this one's condition
@@ -291,7 +291,7 @@ CATALOGUE = (
         id="edges_10",
         name="Ten Times Close",
         description="Reach your edge 10 times in one session and say so every time.",
-        icon="hanging_drop",
+        icon="gauge_max",
         **_rule(_session_at_least("edge_count", 10)),
     ),
     Achievement(
