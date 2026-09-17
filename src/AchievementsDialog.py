@@ -62,12 +62,14 @@ class AchievementCard(QFrame):
         self.unlocked = bool(self.earned)
         self.glow = None
         self.progress_bar = None
+        self.pips = None
 
         self.next_level = next(
             (item for item in levels if not tracker.is_unlocked(item.id)), None
         )
-        # A secret stays hidden only while nothing of it is earned - the tiered tracks are
-        # never secret, so this always concerns a single-level tile.
+        # A secret stays hidden only while nothing of it is earned. A secret *track* hides
+        # its steps as well until then: the pips would give away that there is more of it,
+        # which is half of what was being kept back.
         hidden = self.achievement.secret and not self.unlocked
 
         # Scoped by object name on purpose: QLabel is a QFrame subclass, so a bare
@@ -114,8 +116,9 @@ class AchievementCard(QFrame):
         )
         heading.addWidget(self.title)
         heading.addStretch()
-        if self.level_count > 1:
-            heading.addWidget(self._build_pips())
+        if self.level_count > 1 and not hidden:
+            self.pips = self._build_pips()
+            heading.addWidget(self.pips)
         text.addLayout(heading)
 
         self.detail = QLabel(self._detail_for(hidden))

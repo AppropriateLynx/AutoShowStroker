@@ -109,7 +109,7 @@ def test_a_finished_track_stops_asking_for_more(make_dialog, tracker):
 def test_a_standalone_achievement_has_no_level_pips(make_dialog):
     dialog = make_dialog()
 
-    assert dialog.card_for("fakeouts_3").level_count == 1
+    assert dialog.card_for("edges_10").level_count == 1
 
 
 def test_a_locked_achievement_shows_how_far_along_you_are(make_dialog):
@@ -154,8 +154,31 @@ def test_a_secret_achievement_gives_itself_up_once_earned(make_dialog, tracker):
     tracker.unlocked[secret.id] = "2026-09-17 21:00"
 
     dialog = make_dialog()
+    card = dialog.card_for(secret.id)
 
-    assert dialog.card_for(secret.id).title_text() == secret.name
+    assert card.title_text() == (secret.track or secret.name)
+
+
+def test_a_secret_track_hides_how_many_steps_it_has(make_dialog):
+    """The pips would give away that there is more of it, which is half of what is secret."""
+    secret = next(item for item in achievements.CATALOGUE if item.secret and item.track)
+    dialog = make_dialog()
+
+    card = dialog.card_for(secret.id)
+
+    assert card.title_text() == AchievementsDialog.SECRET_TITLE
+    assert card.pips is None
+
+
+def test_a_secret_track_shows_its_steps_once_it_is_out(make_dialog, tracker):
+    secret = next(item for item in achievements.CATALOGUE if item.secret and item.track)
+    tracker.unlocked[secret.id] = "2026-09-17 21:00"
+
+    card = make_dialog().card_for(secret.id)
+
+    assert card.pips is not None
+    assert card.levels_earned == 1
+    assert card.level_count == 3
 
 
 # --- the marks ---
@@ -166,7 +189,7 @@ def test_a_mark_lights_up_as_soon_as_any_level_is_earned(make_dialog, tracker):
     dialog = make_dialog()
 
     assert dialog.card_for("endurance_45").glow is not None
-    assert dialog.card_for("fakeouts_3").glow is None
+    assert dialog.card_for("edges_10").glow is None
 
 
 def test_a_mark_whose_file_is_missing_does_not_stop_the_dialog(make_dialog, tracker, qtbot):

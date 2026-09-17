@@ -106,6 +106,26 @@ def _sessions_at_least(target):
     return check, progress
 
 
+def _unfooled_by(target):
+    """Survived `target` fake cues in one session without acting on a single one.
+
+    Counting the cues alone was the old rule, and it handed "Not Falling For It" to people
+    who fell for every one of them. A session the user was fooled in shows no progress
+    either - a bar filling to the top on a session that earned nothing is a lie.
+    """
+    def check(played, _history):
+        return (played.get("fakeout_count") or 0) >= target and not played.get(
+            "fakeouts_fallen_for"
+        )
+
+    def progress(played, _history):
+        if played.get("fakeouts_fallen_for"):
+            return 0, target
+        return min(played.get("fakeout_count") or 0, target), target
+
+    return check, progress
+
+
 def _history_count_at_least(predicate, target):
     def check(_played, history):
         return _count(history, predicate) >= target
@@ -116,7 +136,8 @@ def _history_count_at_least(predicate, target):
     return check, progress
 
 
-def _tiers(prefix, track, name_for, description_for, icon, builder, targets, id_for=None):
+def _tiers(prefix, track, name_for, description_for, icon, builder, targets, id_for=None,
+           secret=False):
     """The levels of one track, in order. They share a name, a mark and a rule.
 
     id_for keeps the stored id readable where the raw target is not: a 45 minute tier is
@@ -137,6 +158,7 @@ def _tiers(prefix, track, name_for, description_for, icon, builder, targets, id_
                 progress=progress,
                 track=track,
                 level=level,
+                secret=secret,
             )
         )
     return entries
@@ -243,22 +265,22 @@ CATALOGUE = (
         "snapped_leash",
         lambda t: _history_count_at_least(_disobedient, t),
         (1, 10, 50),
+        # Never advertised. Listing "come anyway after being denied" as a goal is an
+        # invitation rather than a record of one - it is found, not aimed at.
+        secret=True,
     ),
-    Achievement(
-        id="fakeouts_3",
-        name="Not Falling For It",
-        description="Survive 3 fake climax cues in one session.",
-        icon="tongue",
-        **_rule(_session_at_least("fakeout_count", 3)),
-    ),
-    Achievement(
-        id="fakeouts_unfooled",
-        name="Read Her Like A Book",
-        description="Survive 3 or more fake cues in one session without falling for a single one.",
-        icon="open_eye",
-        check=lambda played, _history: (
-            (played.get("fakeout_count") or 0) >= 3 and not played.get("fakeouts_fallen_for")
+    *_tiers(
+        "fakeouts",
+        "Not Falling For It",
+        lambda t: f"{t} in one session" if t > 1 else "one",
+        lambda t: (
+            f"Let {t} fake climax cues pass in a single session without acting on one of them."
+            if t > 1 else
+            "Let a fake climax cue pass without acting on it."
         ),
+        "tongue",
+        _unfooled_by,
+        (1, 3, 5),
     ),
     Achievement(
         id="edges_10",
@@ -274,16 +296,6 @@ CATALOGUE = (
         icon="hourglass",
         check=lambda played, _history: (
             (played.get("total_dur_sec") or 0) >= 45 * 60 and not played.get("edge_count")
-        ),
-    ),
-    Achievement(
-        id="caught",
-        name="Caught",
-        description="",
-        icon="snapped_leash",
-        secret=True,
-        check=lambda played, _history: (
-            played.get("climax_outcome") == "denied" and played.get("reported_outcome") == "came"
         ),
     ),
     Achievement(

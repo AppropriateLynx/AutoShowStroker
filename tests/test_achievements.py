@@ -171,19 +171,8 @@ def test_surviving_three_fake_outs_in_one_session_counts(tracker):
     ]
 
 
-def test_falling_for_one_spoils_the_clean_sweep(tracker):
-    played = stats(fakeout_count=4, fakeouts_fallen_for=1)
-
-    ids = [item.id for item in tracker.evaluate(played, [entry(**played)])]
-
-    assert "fakeouts_3" in ids
-    assert "fakeouts_unfooled" not in ids
 
 
-def test_a_clean_sweep_of_fake_outs_counts(tracker):
-    played = stats(fakeout_count=3, fakeouts_fallen_for=0)
-
-    assert "fakeouts_unfooled" in [item.id for item in tracker.evaluate(played, [entry(**played)])]
 
 
 def test_edging_your_way_through_a_session_counts(tracker):
@@ -276,10 +265,10 @@ def test_a_tiered_achievement_knows_its_track_and_level():
 
 
 def test_a_standalone_achievement_has_no_track():
-    fakeouts = next(item for item in achievements.CATALOGUE if item.id == "fakeouts_3")
+    edges = next(item for item in achievements.CATALOGUE if item.id == "edges_10")
 
-    assert fakeouts.track is None
-    assert fakeouts.level == 0
+    assert edges.track is None
+    assert edges.level == 0
 
 
 def test_grouping_puts_a_whole_track_in_one_tile():
@@ -294,7 +283,7 @@ def test_grouping_puts_a_whole_track_in_one_tile():
 def test_grouping_leaves_standalone_achievements_alone():
     groups = achievements.grouped()
 
-    single = next(g for g in groups if g[0].id == "fakeouts_3")
+    single = next(g for g in groups if g[0].id == "edges_10")
     assert len(single) == 1
 
 
@@ -309,3 +298,86 @@ def test_a_tier_is_named_for_its_step_not_for_the_whole_track():
     endurance = [item for item in achievements.CATALOGUE if item.track == "Endurance"]
 
     assert [item.name for item in endurance] == ["45 minutes", "90 minutes", "120 minutes"]
+
+
+# --- fake-outs are a track, and surviving means surviving ---
+
+
+def test_the_fake_out_track_has_three_steps():
+    fakes = [item for item in achievements.CATALOGUE if item.track == "Not Falling For It"]
+
+    assert [item.level for item in fakes] == [1, 2, 3]
+    assert [item.id for item in fakes] == ["fakeouts_1", "fakeouts_3", "fakeouts_5"]
+
+
+def test_surviving_fake_outs_means_not_falling_for_them(tracker):
+    """The rule used to count the cues and ignore what you did about them, so "Not Falling
+    For It" was handed out to people who fell for every single one."""
+    fell_for_all = stats(fakeout_count=3, fakeouts_fallen_for=3)
+
+    unlocked = tracker.evaluate(fell_for_all, [entry(**fell_for_all)])
+
+    assert [item.id for item in unlocked if item.id.startswith("fakeouts")] == []
+
+
+def test_one_survived_fake_out_is_already_worth_something(tracker):
+    played = stats(fakeout_count=1, fakeouts_fallen_for=0)
+
+    unlocked = [item.id for item in tracker.evaluate(played, [entry(**played)])]
+
+    assert "fakeouts_1" in unlocked
+    assert "fakeouts_3" not in unlocked
+
+
+def test_five_survived_fake_outs_take_the_whole_track(tracker):
+    played = stats(fakeout_count=5, fakeouts_fallen_for=0)
+
+    unlocked = [item.id for item in tracker.evaluate(played, [entry(**played)])]
+
+    assert {"fakeouts_1", "fakeouts_3", "fakeouts_5"} <= set(unlocked)
+
+
+def test_a_session_you_were_fooled_in_makes_no_progress_at_all(tracker):
+    """A bar filling to the top on a session that earned nothing would be a lie."""
+    fakes_1 = next(item for item in achievements.CATALOGUE if item.id == "fakeouts_1")
+
+    current, _target = fakes_1.progress(stats(fakeout_count=4, fakeouts_fallen_for=1), [])
+
+    assert current == 0
+
+
+# --- disobedience is discovered, never advertised ---
+
+
+def test_the_disobedience_track_is_secret(tracker):
+    """Listing "come anyway after being denied" as a goal is an invitation, not a record."""
+    disobedient = [item for item in achievements.CATALOGUE if item.track == "Couldn't Help It"]
+
+    assert disobedient
+    assert all(item.secret for item in disobedient)
+
+
+def test_obedience_is_not_secret():
+    obedient = [item for item in achievements.CATALOGUE if item.track == "Good Boy"]
+
+    assert obedient
+    assert not any(item.secret for item in obedient)
+
+
+def test_a_secret_track_still_unlocks_normally(tracker):
+    disobeyed = entry(climax_outcome="denied", reported_outcome="came")
+
+    unlocked = [item.id for item in tracker.evaluate(stats(), [disobeyed])]
+
+    assert "disobedient_1" in unlocked
+
+
+def test_no_mark_is_shipped_that_nothing_uses():
+    """An unused SVG is dead weight in the bundle and, worse, a thing somebody redraws for
+    nothing."""
+    from src.utils import get_project_root
+
+    shipped = {p.stem for p in (get_project_root() / achievements.ICON_DIR).glob("*.svg")}
+    used = {item.icon for item in achievements.CATALOGUE}
+
+    assert shipped == used
