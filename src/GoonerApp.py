@@ -28,6 +28,7 @@ from src.BeatTrackWidget import BeatTrackWidget
 from src.CalloutHandler import CalloutHandler
 from src.ClimaxHandler import ClimaxHandler
 from src.HelpDialog import HelpDialog
+from src.IntifaceController import IntifaceController
 from src.MediaFolderPickerDialog import MediaFolderPickerDialog
 from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
@@ -413,6 +414,9 @@ class GoonerApp(QMainWindow):
 
         self.update_checker = UpdateChecker(get_current_version())
 
+        self.intiface_controller = IntifaceController(self.settings, parent=self)
+        self.intiface_controller.shutdown_finished.connect(self.close)
+
         self._setup_signal_handler()
 
     def keyPressEvent(self, event):
@@ -451,6 +455,7 @@ class GoonerApp(QMainWindow):
         """Instant hide-and-silence: minimizes the window and mutes audio in one keypress.
         Deliberately does not stop/pause the session (see Ctrl+Space) or auto-unmute on
         restore - the user decides when sound comes back, same as toggling Mute normally."""
+        self.intiface_controller.emergency_stop()
         self.set_muted(True)
         self.showMinimized()
 
@@ -473,6 +478,12 @@ class GoonerApp(QMainWindow):
         self.callout_label.setText("")
 
     def _setup_signal_handler(self):
+        self.register_start_event(self.intiface_controller.session_started)
+        self.register_end_event(self.intiface_controller.session_ended)
+        self.beat_handler.linear_movement_planned.connect(self.intiface_controller.on_movement_planned)
+        self.beat_handler.register_beat_pause_events(
+            self.intiface_controller.pause, self.intiface_controller.pause_ended,
+        )
         self.beat_handler.register_beat_pause_events(self.score_tracker.beat_paused, self.score_tracker.beat_resumed)
         self.beat_handler.register_beat_pause_events(self.callout_handler.pause_started,
                                                      self.callout_handler.pause_ended)
@@ -879,6 +890,7 @@ class GoonerApp(QMainWindow):
         settings_dialog.deleteLater()
 
     def stop(self):
+        self.intiface_controller.emergency_stop()
         if not self.is_running:
             return
         if self.ask_for_outcome and not self._outcome_answered:
@@ -896,9 +908,16 @@ class GoonerApp(QMainWindow):
         """
         if self.is_running:
             self._end_session(show_statistics=False)
+        self.intiface_controller.shutdown()
+        if self.intiface_controller.has_worker:
+            # Keep the event loop responsive while the worker delivers Stop and closes.
+            # shutdown_finished calls close() again once its thread has exited.
+            event.ignore()
+            return
         super().closeEvent(event)
 
     def _end_session(self, show_statistics: bool):
+        self.intiface_controller.emergency_stop()
         self.auto_play_timer.stop()
         # Playback was left running: the video kept playing (with sound) behind the
         # modal statistics dialog, and its EndOfMedia then restarted the whole
@@ -960,6 +979,12 @@ class GoonerApp(QMainWindow):
         # the first clip of a session was cut after a random 0.5-4s - and in a replay it
         # burned a second recorded gap.
         self.load_current_index()
+
+    def resume_intiface_sync(self):
+        self.intiface_controller.resume_sync()
+        movement = self.beat_handler.next_linear_movement()
+        if movement is not None:
+            self.intiface_controller.on_movement_planned(*movement)
 
     def _on_climax_outcome(self, outcome):
         log.info("Climax outcome: %s", outcome)
