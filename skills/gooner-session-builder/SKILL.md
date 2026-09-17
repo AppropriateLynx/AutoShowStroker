@@ -25,8 +25,15 @@ them - guessing produces a flat file:
 4. **Cruel touches?** Fake climaxes - the app announces the climax, they act on it, and then
    it admits it was lying. Two or three in a long session.
 
-If they only say "make me a session", ask anyway. If they refuse to be pinned down, build 40
-minutes, moderate, ruined, two fake-outs - and say that is what you chose.
+If they only say "make me a session", ask anyway.
+
+If they would rather not decide, **decide for them and say what you decided** - "an hour,
+building hard, and it denies you at the end; tell me if you want it gentler". Commit to a
+shape rather than reaching for a safe middle: the app already draws its own session at random
+every time somebody presses start, so a deliberately average composed one is the single thing
+here with no reason to exist. Use whatever you know about them - the hour, how the
+conversation has gone, what they asked for last time - and make it specific. Two people who
+both shrug should not get the same file.
 
 ## Shape the arc, do not fill a table
 
