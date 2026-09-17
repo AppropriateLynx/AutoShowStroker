@@ -326,3 +326,134 @@ def test_a_segment_without_a_planned_length_falls_back_to_what_it_measured():
     saved = session_files.to_saved_session(timeline())
 
     assert saved["segments"][0]["duration_sec"] == pytest.approx(60.0)
+
+
+# --- refusing a file the app cannot actually play ---
+
+
+def handwritten(**overrides):
+    """A session as an LLM would write one - no media paths, minimal but complete."""
+    base = {
+        "format": session_files.FORMAT_VERSION,
+        "duration_sec": 120.0,
+        "segments": [
+            {"kind": "beat", "pattern": "Standard Beat", "freq": 2.0, "duration_sec": 60.0},
+            {"kind": "pause", "pattern": None, "freq": None, "duration_sec": 10.0},
+            {"kind": "finale", "pattern": "Quick Swing", "freq": 4.5, "duration_sec": 50.0},
+        ],
+        "custom_patterns": {},
+        "climax": {"at_sec": 100.0, "outcome": "ruined"},
+        "fake_climaxes": [40.0],
+        "media": [{"at_sec": 0.0}, {"at_sec": 30.0}],
+    }
+    base.update(overrides)
+    return base
+
+
+def test_a_well_formed_handwritten_session_is_accepted():
+    assert session_files.validate_session(handwritten()) == []
+
+
+def test_a_session_with_no_media_at_all_is_fine():
+    """It replays against the reader's own library - an LLM should never have to invent a
+    path, and refusing this would force it to."""
+    assert session_files.validate_session(handwritten(media=[])) == []
+
+
+def test_an_unknown_rhythm_is_refused_by_name():
+    """The mistake an LLM will actually make."""
+    saved = handwritten()
+    saved["segments"][0]["pattern"] = "Furious Wiggle"
+
+    problems = session_files.validate_session(saved)
+
+    assert any("Furious Wiggle" in problem for problem in problems)
+
+
+def test_a_rhythm_the_file_defines_itself_is_accepted():
+    saved = handwritten(custom_patterns={"Furious Wiggle": [1, 2, -1]})
+    saved["segments"][0]["pattern"] = "Furious Wiggle"
+
+    assert session_files.validate_session(saved) == []
+
+
+def test_a_pattern_definition_has_to_be_playable():
+    saved = handwritten(custom_patterns={"Broken": [0, 9, "x"]})
+    saved["segments"][0]["pattern"] = "Broken"
+
+    assert session_files.validate_session(saved)
+
+
+def test_an_unknown_segment_kind_is_refused():
+    saved = handwritten()
+    saved["segments"][0]["kind"] = "crescendo"
+
+    assert any("crescendo" in problem for problem in session_files.validate_session(saved))
+
+
+def test_a_beat_without_a_speed_is_refused():
+    saved = handwritten()
+    saved["segments"][0]["freq"] = None
+
+    assert session_files.validate_session(saved)
+
+
+def test_a_segment_without_a_length_is_refused():
+    saved = handwritten()
+    del saved["segments"][0]["duration_sec"]
+
+    assert session_files.validate_session(saved)
+
+
+def test_a_zero_length_segment_is_refused():
+    saved = handwritten()
+    saved["segments"][0]["duration_sec"] = 0
+
+    assert session_files.validate_session(saved)
+
+
+def test_a_climax_past_the_end_of_the_session_is_refused():
+    """It would simply never fire, and the session would run on with nothing at the end."""
+    saved = handwritten()
+    saved["climax"]["at_sec"] = 999.0
+
+    assert session_files.validate_session(saved)
+
+
+def test_an_invented_climax_outcome_is_refused():
+    saved = handwritten()
+    saved["climax"]["outcome"] = "explosive"
+
+    assert any("explosive" in problem for problem in session_files.validate_session(saved))
+
+
+def test_a_fake_out_past_the_end_is_refused():
+    assert session_files.validate_session(handwritten(fake_climaxes=[999.0]))
+
+
+def test_media_moments_have_to_run_forwards():
+    assert session_files.validate_session(
+        handwritten(media=[{"at_sec": 30.0}, {"at_sec": 10.0}])
+    )
+
+
+def test_a_session_with_no_segments_is_refused():
+    assert session_files.validate_session(handwritten(segments=[]))
+
+
+def test_reading_a_broken_file_reports_what_is_actually_wrong(tmp_path):
+    """One flat "cannot be replayed" is useless to somebody iterating on a generated file."""
+    saved = handwritten()
+    saved["segments"][0]["pattern"] = "Furious Wiggle"
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps(saved), encoding="utf-8")
+
+    with pytest.raises(session_files.UnsupportedSessionFile) as raised:
+        session_files.read_session_file(path)
+
+    assert "Furious Wiggle" in str(raised.value)
+
+
+def test_a_session_the_app_recorded_itself_always_validates():
+    """The serialiser and the validator must not drift apart."""
+    assert session_files.validate_session(session_files.to_saved_session(timeline())) == []
