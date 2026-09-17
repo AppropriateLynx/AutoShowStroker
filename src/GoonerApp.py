@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src import applog, changelog, media_kinds, theme
+from src import applog, changelog, media_kinds, session_files, theme
 from src.BeatHandler import BeatHandler
 from src.BeatTrackWidget import BeatTrackWidget
 from src.CalloutHandler import CalloutHandler
@@ -991,10 +991,26 @@ class GoonerApp(QMainWindow):
             self.score_tracker.deliver_infos(),
             new_records=self.score_tracker.last_session_new_records,
             timeline=self.session_recorder.timeline(),
+            save_session=self.save_current_session,
             parent=self,
         )
         dialog.exec()
         dialog.deleteLater()
+
+    def save_current_session(self) -> bool:
+        """Puts the session just played on the shelf so it can be replayed. Returns whether
+        it landed.
+
+        This is the one place in the app that writes media paths to disk, and it only runs
+        because the user pressed Save - see src/session_files.py.
+        """
+        saved = session_files.to_saved_session(
+            self.session_recorder.timeline(), self.beat_handler.custom_beat_patterns
+        )
+        if not session_files.store_session(self.data_store, saved):
+            return False
+        log.info("Session saved for replay: %d segments", len(saved["segments"]))
+        return True
 
     def show_long_term_statistics(self):
         # Imported here, not at module scope: LongTermStatisticsDialog pulls in pyqtgraph and

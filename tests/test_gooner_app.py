@@ -7,7 +7,7 @@ import pytest
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import QDialog
 
-from src import applog
+from src import applog, session_files
 from src.BeatTrackWidget import BeatTrackWidget
 from src.GoonerApp import GoonerApp
 
@@ -785,7 +785,7 @@ def test_show_statistics_passes_new_records(app, monkeypatch):
     captured = {}
 
     class FakeDialog(_FakeDialogBase):
-        def __init__(self, stats_data, new_records=None, timeline=None, parent=None):
+        def __init__(self, stats_data, new_records=None, timeline=None, parent=None, **kwargs):
             captured["new_records"] = new_records
 
         def exec(self):
@@ -1434,7 +1434,7 @@ def test_the_timeline_reaches_the_statistics_dialog(app, tmp_path, monkeypatch):
     captured = {}
 
     class FakeStatisticsDialog:
-        def __init__(self, stats_data, new_records=None, timeline=None, parent=None):
+        def __init__(self, stats_data, new_records=None, timeline=None, parent=None, **kwargs):
             captured["timeline"] = timeline
 
         def exec(self):
@@ -1570,3 +1570,66 @@ def test_a_video_starting_a_session_is_not_cut_short_by_the_autoplay_timer(app, 
     app.start()
 
     assert app.auto_play_timer.isActive() is False
+
+
+# --- saving a session for later ---
+
+
+def _recorded_timeline():
+    return {
+        "started_at": 100.0,
+        "ended_at": 200.0,
+        "climax_at": 190.0,
+        "climax_outcome": "real",
+        "fake_climaxes": [150.0],
+        "segments": [
+            {"kind": "beat", "pattern": "My Rhythm", "freq": 2.0, "start": 100.0, "end": 160.0,
+             "media": [{"path": "a.png", "start": 100.0, "end": 160.0, "carried_over": False}]},
+            {"kind": "finale", "pattern": "Standard Beat", "freq": 5.0, "start": 160.0,
+             "end": 200.0, "media": []},
+        ],
+    }
+
+
+def test_saving_the_session_puts_it_on_the_shelf(app, monkeypatch):
+    monkeypatch.setattr(app.session_recorder, "timeline", _recorded_timeline)
+
+    assert app.save_current_session() is True
+
+    stored = session_files.load_saved_sessions(app.data_store)
+    assert len(stored) == 1
+    assert [s["kind"] for s in stored[0]["segments"]] == ["beat", "finale"]
+    assert stored[0]["climax"]["outcome"] == "real"
+
+
+def test_a_saved_session_carries_the_custom_rhythms_it_played(app, monkeypatch):
+    """Without the definition, a replay on another machine reaches that segment with
+    nothing to play."""
+    monkeypatch.setattr(app.session_recorder, "timeline", _recorded_timeline)
+    app.beat_handler.custom_beat_patterns = {"My Rhythm": [1, 2, -1], "Unused": [1]}
+
+    app.save_current_session()
+
+    stored = session_files.load_saved_sessions(app.data_store)
+    assert stored[0]["custom_patterns"] == {"My Rhythm": [1, 2, -1]}
+
+
+def test_the_statistics_dialog_is_handed_the_way_to_save(app, monkeypatch):
+    monkeypatch.setattr(app.session_recorder, "timeline", _recorded_timeline)
+    built = {}
+
+    class _FakeStats:
+        def __init__(self, *args, save_session=None, **kwargs):
+            built["save_session"] = save_session
+
+        def exec(self):
+            pass
+
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr("src.GoonerApp.StatisticsDialog", _FakeStats)
+
+    app.show_statistics()
+
+    assert built["save_session"] == app.save_current_session

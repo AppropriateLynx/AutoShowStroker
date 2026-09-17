@@ -271,3 +271,30 @@ def test_the_explorer_button_is_inside_the_locked_dialog_size(qtbot):
 
     button = dialog.explorer_button
     assert button.geometry().bottom() <= dialog.height()
+
+
+def test_the_explorer_is_given_the_way_to_save_the_session(qtbot, monkeypatch):
+    """The stats dialog does not save anything itself - it only carries the hook through to
+    the explorer, which is the dialog actually showing the session."""
+    built = {}
+
+    class _FakeExplorer:
+        def __init__(self, timeline, save_session=None, parent=None):
+            built["save_session"] = save_session
+
+        def exec(self):
+            pass
+
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr("src.SessionExplorerDialog.SessionExplorerDialog", _FakeExplorer)
+    saver = object()
+    dialog = StatisticsDialog(
+        dict(FULL_STATS), timeline=_timeline(), save_session=saver, parent=None
+    )
+    qtbot.addWidget(dialog)
+
+    dialog.explorer_button.click()
+
+    assert built["save_session"] is saver
