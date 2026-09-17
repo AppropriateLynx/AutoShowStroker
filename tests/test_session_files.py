@@ -253,3 +253,29 @@ def test_an_export_that_cannot_be_written_reports_failure_rather_than_raising(tm
     saved = session_files.to_saved_session(timeline())
 
     assert session_files.write_session_file(tmp_path / "no" / "such" / "dir" / "o.json", saved) is False
+
+
+# --- do the recorded files still exist? ---
+
+
+def test_the_recorded_paths_come_back_in_the_order_they_were_shown():
+    saved = session_files.to_saved_session(timeline())
+
+    assert session_files.recorded_paths(saved) == ["C:\\pics\\a.png", "C:\\pics\\b.png"]
+
+
+def test_a_stripped_session_has_no_recorded_paths():
+    saved = session_files.strip_paths(session_files.to_saved_session(timeline()))
+
+    assert session_files.recorded_paths(saved) == []
+
+
+def test_missing_files_are_reported_so_the_replay_can_offer_another_library(tmp_path):
+    there = tmp_path / "there.png"
+    there.write_bytes(b"x")
+    saved = {"format": 1, "segments": [], "media": [
+        {"at_sec": 0.0, "path": str(there)},
+        {"at_sec": 5.0, "path": str(tmp_path / "gone.png")},
+    ]}
+
+    assert session_files.missing_paths(saved) == [str(tmp_path / "gone.png")]

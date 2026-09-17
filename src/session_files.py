@@ -16,6 +16,7 @@ sender's account name, folder layout and file names along with it.
 """
 import json
 import time
+from pathlib import Path
 
 from src.applog import get_logger
 from src.utils import format_clock, get_current_version
@@ -190,3 +191,14 @@ def delete_saved_session(data_store, index: int) -> bool:
     del sessions[index]
     data_store.save(SAVED_SESSIONS_KEY, sessions)
     return True
+
+
+def recorded_paths(saved: dict) -> list:
+    """The media the session showed, in order. Empty when the paths were stripped."""
+    return [entry["path"] for entry in saved.get("media", []) if "path" in entry]
+
+
+def missing_paths(saved: dict) -> list:
+    """Recorded media that is no longer where it was, so the caller can offer to replay
+    against another library instead of showing a session of empty frames."""
+    return [path for path in recorded_paths(saved) if not Path(path).exists()]

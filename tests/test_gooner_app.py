@@ -1649,3 +1649,87 @@ def test_a_replay_reaches_the_climax_handler_with_the_recorded_times(app, tmp_pa
     )
     assert app.climax_handler.outcome == "real"
     assert app.climax_handler.scripted_fake_count == 1
+
+
+# --- replaying a saved session ---
+
+
+def _saved_with_media(tmp_path, count=3):
+    files = []
+    for index in range(count):
+        path = tmp_path / f"rec{index}.png"
+        path.write_bytes(b"x")
+        files.append(str(path))
+    return {
+        "format": 1,
+        "duration_sec": 90.0,
+        "segments": [{"kind": "beat", "pattern": "Standard Beat", "freq": 2.0,
+                      "duration_sec": 90.0}],
+        "custom_patterns": {},
+        "climax": {"at_sec": 80.0, "outcome": "real"},
+        "fake_climaxes": [],
+        "media": [{"at_sec": index * 30.0, "path": path} for index, path in enumerate(files)],
+    }
+
+
+def test_replaying_a_session_plays_the_recorded_files_in_the_recorded_order(app, tmp_path):
+    """Not shuffled: the order is part of what was saved, and it is what the scripted gaps
+    were measured against."""
+    saved = _saved_with_media(tmp_path)
+
+    assert app.replay_session(saved) is True
+
+    assert [str(path) for path in app.playlist] == session_files.recorded_paths(saved)
+    assert app.current_index == 0
+    assert app.is_running is True
+
+
+def test_replaying_a_session_replays_its_segments_and_its_climax(app, tmp_path):
+    saved = _saved_with_media(tmp_path)
+
+    app.replay_session(saved)
+
+    assert app.beat_handler.current_segment.duration_sec == pytest.approx(90.0)
+    assert app.climax_handler.outcome == "real"
+
+
+def test_replaying_against_your_own_library_leaves_the_playlist_alone(app, tmp_path):
+    saved = _saved_with_media(tmp_path)
+    mine = [tmp_path / "mine1.png", tmp_path / "mine2.png"]
+    app.playlist = list(mine)
+
+    assert app.replay_session(saved, ignore_paths=True) is True
+
+    assert app.playlist == mine
+
+
+def test_replaying_against_your_own_library_needs_one_to_be_loaded(app, tmp_path):
+    saved = _saved_with_media(tmp_path)
+    app.playlist = []
+
+    assert app.replay_session(saved, ignore_paths=True) is False
+    assert app.is_running is False
+
+
+def test_a_replay_ends_the_session_that_is_already_running(app, tmp_path):
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    ended = []
+    app.session_ended_event.connect(lambda: ended.append(True))
+
+    app.replay_session(_saved_with_media(tmp_path))
+
+    assert ended == [True]
+    assert app.is_running is True
+
+
+def test_a_replay_starts_its_recording_fresh(app, tmp_path):
+    """The replay is a session of its own - it can be saved again, and what it records has
+    to be what it just played, not the tail of whatever came before."""
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.show_next()
+
+    app.replay_session(_saved_with_media(tmp_path))
+
+    assert len(app.session_recorder._media) == 1

@@ -31,6 +31,7 @@ from src.MediaFolderPickerDialog import MediaFolderPickerDialog
 from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
 from src.SessionRecorder import SessionRecorder
+from src.SessionScript import SessionScript
 from src.SettingsDialog import SettingsDialog
 from src.StatisticsDialog import StatisticsDialog
 from src.UpdateChecker import UpdateChecker
@@ -996,6 +997,36 @@ class GoonerApp(QMainWindow):
         )
         dialog.exec()
         dialog.deleteLater()
+
+    def replay_session(self, saved, ignore_paths=False) -> bool:
+        """Plays a saved session again. Returns whether it started.
+
+        With the recorded paths, they *are* the playlist - in the recorded order, not
+        shuffled, because that order is what the saved gaps were measured against. With
+        ignore_paths the user's own loaded playlist is used instead and only the pacing is
+        replayed, so there has to be one loaded; the alternative would be a session of
+        empty frames.
+        """
+        if ignore_paths:
+            if not self.playlist:
+                log.warning("Cannot replay against your own library: nothing is loaded.")
+                return False
+        else:
+            self.playlist = [Path(path) for path in session_files.recorded_paths(saved)]
+            self.current_index = 0
+            if not self.playlist:
+                log.warning("That saved session carries no media paths to replay.")
+                return False
+
+        if self.is_running:
+            # No statistics: the user asked for a replay, not for a recap of what they
+            # interrupted. It does end the session properly, so the recorder starts clean.
+            self._end_session(show_statistics=False)
+
+        self._update_climax_status_label("neutral")
+        log.info("Replaying a saved session (own library: %s)", ignore_paths)
+        self.start(script=SessionScript(saved, ignore_paths=ignore_paths))
+        return True
 
     def save_current_session(self) -> bool:
         """Puts the session just played on the shelf so it can be replayed. Returns whether
