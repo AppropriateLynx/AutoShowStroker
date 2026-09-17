@@ -288,7 +288,7 @@ CHANGELOG = {
         "</ul>"
         "Go on then. See if you can still find the seams."
     ),
-    "0.13.0": (
+    "0.13.1": (
         "The session that wrecked you does not have to be a one-off any more. Keep it. "
         "Take it again. Hand it to someone else and watch them try."
         "<ul>"
@@ -311,6 +311,15 @@ CHANGELOG = {
         "whether to include your file paths, and says plainly what they give away. Saved "
         "sessions are listed and deletable in Help &gt; Privacy &amp; Data like everything "
         "else</li>"
+        "<li><b>And she finally asks what you actually did.</b> Every climax cue now offers "
+        "<i>I Came</i>, <i>I Ruined It</i>, <i>I Stopped</i> - because she only ever knew "
+        "what she <i>told</i> you to do. Obeying a denial and ignoring one used to look "
+        "identical in your stats. They do not any more</li>"
+        "<li><b>And the fake-outs ask too.</b> Same three buttons, exactly the same way, so "
+        "they never become the tell that gives one away - which also means she now finds "
+        "out when you fell for one, and has something to say about it. A denial cuts the "
+        "Strokemeter dead on the spot, too. Whatever you do after that is entirely on "
+        "you</li>"
         "</ul>"
         "Find the one that broke you. Then find out if it still can."
     ),

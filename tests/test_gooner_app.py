@@ -1938,3 +1938,19 @@ def test_the_question_can_be_switched_off(app, tmp_path, monkeypatch):
 
     app.stop()
     assert asked == []
+
+
+def test_falling_for_a_fake_out_gets_its_own_line(app, tmp_path, monkeypatch):
+    """Not the pause line and not the reveal - the reveal is still seconds out, and being
+    congratulated before being told it was never real is the whole point."""
+    spoken = []
+    monkeypatch.setattr(
+        app.callout_handler, "force_output_sentence", lambda key: spoken.append(key)
+    )
+    app.playlist = [tmp_path / "a.png"]
+    app.start()
+    app.climax_handler.fake_climax_triggered_event.emit()
+
+    app.btn_came.click()
+
+    assert spoken == ["fake_climax_fell_for"]

@@ -108,7 +108,22 @@ HELP_TOPICS = [
         "Strokemeter is taking one.</p>"
         "<h3>Climax Banner</h3>"
         "<p>Sits just above the Strokemeter and lights up with the session's outcome "
-        "(Cum / Ruined / Denied) once it's decided.</p>",
+        "(Cum / Ruined / Denied) once it's decided.</p>"
+        "<h3>What actually happened</h3>"
+        "<p>Underneath it, three buttons: <b>I Came</b>, <b>I Ruined It</b>, <b>I Stopped</b>. "
+        "The app knows what it <i>told</i> you to do; only you know what you did. Being denied "
+        "and obeying, and being denied and doing it anyway, are the same announcement and "
+        "opposite sessions - and the difference only exists in your statistics if you say so.</p>"
+        "<p>They appear at fake climax cues exactly as they do at the real one. That is "
+        "deliberate: if they only turned up for the real thing they would <i>be</i> the "
+        "announcement, and a fake-out only works while it is indistinguishable. It also means "
+        "the app finds out whether you fell for one.</p>"
+        "<p>A denied climax stops the Strokemeter the instant it is announced - there is "
+        "nothing left to stroke to, and whatever you do next is entirely on you. The session "
+        "waits for your answer before showing the recap. Stopping a session yourself asks once, "
+        "too, because a session with no answer counts as one that never finished and drags "
+        "every average you are tracking. You can always decline to say, and you can switch the "
+        "whole question off in Settings &gt; Climax.</p>",
     ),
     (
         "Languages && Tones",
