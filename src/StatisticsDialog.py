@@ -16,7 +16,7 @@ from src.ScoreTracker import ScoreTracker
 
 class StatisticsDialog(QDialog):
     def __init__(self, stats_data: dict, new_records: dict | None = None, timeline=None,
-                 save_session=None, parent=None):
+                 save_session=None, new_achievements=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Session Statistics")
         self.setModal(True)
@@ -36,6 +36,9 @@ class StatisticsDialog(QDialog):
         )
 
         self.record_cards = self._build_record_cards(stats_data, new_records or {})
+        self.achievement_cards = [
+            self._build_achievement_card(item) for item in (new_achievements or [])
+        ]
 
         self.stats_table = QTableWidget()
         self.stats_table.setColumnCount(2)
@@ -51,6 +54,8 @@ class StatisticsDialog(QDialog):
         main_layout.addWidget(self.title_label)
         main_layout.addWidget(self.conclusion_label)
         for card in self.record_cards:
+            main_layout.addWidget(card)
+        for card in self.achievement_cards:
             main_layout.addWidget(card)
         main_layout.addWidget(self.stats_table)
 
@@ -113,6 +118,30 @@ class StatisticsDialog(QDialog):
         layout.addWidget(title)
         layout.addWidget(value_label)
         layout.addWidget(previous_label)
+        return card
+
+    def _build_achievement_card(self, achievement) -> QFrame:
+        """Same shape as a personal-record card, one shade quieter.
+
+        A record is you beating yourself; an achievement is a thing the app was holding out
+        on you. Both belong in the recap, but the record stays the louder of the two.
+        """
+        card = QFrame()
+        card.setStyleSheet(
+            f"QFrame {{ background-color: {theme.SURFACE_DARK}; border-radius: 8px; "
+            f"padding: 6px; border: 2px solid {theme.ACCENT}; }}"
+        )
+        layout = QVBoxLayout(card)
+
+        title = QLabel(f"✦ Achievement unlocked: {achievement.name}")
+        title.setStyleSheet(f"color: {theme.ACCENT}; font-weight: bold; font-size: 14px;")
+
+        description = QLabel(achievement.description or "Some things you only find by doing.")
+        description.setWordWrap(True)
+        description.setStyleSheet(f"color: {theme.TEXT}; font-size: 11px;")
+
+        layout.addWidget(title)
+        layout.addWidget(description)
         return card
 
     def _format_metric_value(self, metric: str, value) -> str:

@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src import applog, changelog, media_kinds, session_files, theme
+from src.achievements import AchievementTracker
 from src.BeatHandler import BeatHandler
 from src.BeatTrackWidget import BeatTrackWidget
 from src.CalloutHandler import CalloutHandler
@@ -51,6 +52,25 @@ log = applog.get_logger(__name__)
 class GoonerApp(QMainWindow):
     SETTINGS_GROUP = "GoonerApp"  # see BeatHandler.SETTINGS_GROUP
 
+    # How long a denied session waits for the user to say what they actually did before
+    # ending on its own. Long, because the answer is the point and the old five seconds
+    # took the buttons away before anyone could reach them; capped, so an unanswered
+    # session cannot sit there forever.
+    DENIED_ANSWER_TIMEOUT_MS = 30000
+
+    # The footer is a fixed height so the media area above never wobbles as the climax
+    # banner comes and goes. The outcome buttons are the one thing allowed to change it:
+    # squeezed into the normal height they left the note track 29px tall and themselves
+    # too small to hit. It grows once, for a question, and shrinks straight back.
+    FOOTER_HEIGHT = 110
+    # Fixed rather than left to the buttons' size hint: the row shares a fixed-height
+    # container with a stretching note track, which otherwise takes the slack and leaves
+    # the buttons a few pixels tall.
+    OUTCOME_ROW_HEIGHT = 38
+
+    EDGE_BUTTON_TEXT = "I reached my Edge"
+    FOOTER_HEIGHT_WITH_OUTCOME = FOOTER_HEIGHT + OUTCOME_ROW_HEIGHT
+
     DISCORD_INVITE_URL = "https://discord.gg/qqkcxvq37Z"
 
     session_started_event = pyqtSignal()
@@ -69,6 +89,7 @@ class GoonerApp(QMainWindow):
         "show_startup_splash": True,
         "show_record_chase": True,
         "show_session_timer": True,
+        "ask_for_outcome": True,
         "diagnostic_log": False,
         "diagnostic_log_level": applog.DEFAULT_LEVEL,
     }
@@ -247,6 +268,14 @@ class GoonerApp(QMainWindow):
         self.btn_stop.setShortcut("Ctrl+Space")
         self.btn_stop.setToolTip("Ctrl+Space")
 
+        self.btn_edge = QPushButton(self.EDGE_BUTTON_TEXT)
+        self.btn_edge.clicked.connect(self.edge_reached)
+        self.btn_edge.setEnabled(False)
+        # A single letter, because the whole point is hitting it without looking. Space is
+        # Panic, Ctrl+Space is Stop, M is Mute, the arrows navigate - E is free and obvious.
+        self.btn_edge.setShortcut("E")
+        self.btn_edge.setToolTip("E - a pause now, and a gentler beat behind it")
+
         self.btn_mute = QPushButton("Mute")
         self.btn_mute.setCheckable(True)
         self.btn_mute.clicked.connect(self.set_muted)
@@ -256,13 +285,15 @@ class GoonerApp(QMainWindow):
         # whichever button currently has keyboard focus before it ever reaches keyPressEvent,
         # so Panic would silently fail to fire while any of these had focus. NoFocus keeps them
         # mouse/shortcut-clickable but out of the keyboard-focus chain entirely.
-        for button in (self.btn_prev, self.btn_load, self.btn_next, self.btn_stop, self.btn_mute):
+        for button in (self.btn_prev, self.btn_load, self.btn_next, self.btn_stop,
+                       self.btn_edge, self.btn_mute):
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         controls_layout.addWidget(self.btn_prev)
         controls_layout.addWidget(self.btn_load)
         controls_layout.addWidget(self.btn_stop)
         controls_layout.addWidget(self.btn_next)
+        controls_layout.addWidget(self.btn_edge)
         controls_layout.addWidget(self.btn_mute)
 
         self.auto_play_timer = QTimer()
@@ -270,6 +301,12 @@ class GoonerApp(QMainWindow):
 
         # Held rather than a fire-and-forget QTimer.singleShot so start() can cancel it -
         # and so a test can check it without monkeypatching QTimer itself.
+        # Ticks once a second while the edge button is cooling down, so the button can
+        # count down rather than just sitting there dead.
+        self._edge_cooldown_timer = QTimer(self)
+        self._edge_cooldown_timer.timeout.connect(self._tick_edge_cooldown)
+        self._edge_cooldown_left = 0
+
         self._denied_stop_timer = QTimer(self)
         self._denied_stop_timer.setSingleShot(True)
         self._denied_stop_timer.timeout.connect(self.stop)
@@ -293,6 +330,9 @@ class GoonerApp(QMainWindow):
         )
         self.show_session_timer = bool(
             self.settings.value("GoonerApp/show_session_timer", self.DEFAULTS["show_session_timer"], type=bool)
+        )
+        self.ask_for_outcome = bool(
+            self.settings.value("GoonerApp/ask_for_outcome", self.DEFAULTS["ask_for_outcome"], type=bool)
         )
 
         media_layout.addWidget(self.controls_container)
@@ -323,12 +363,14 @@ class GoonerApp(QMainWindow):
         # Fixed total height so the media area above never wobbles when the climax label
         # appears/disappears - only the split *within* this container changes (beat_meter
         # expands to fill it via stretch when the label is hidden, shrinks when it's shown).
+        # The one exception is the outcome row - see FOOTER_HEIGHT_WITH_OUTCOME.
         self.footer_container = QWidget()
-        self.footer_container.setFixedHeight(110)
+        self.footer_container.setFixedHeight(self.FOOTER_HEIGHT)
         self.footer_layout = QVBoxLayout(self.footer_container)
         self.footer_layout.setContentsMargins(0, 0, 0, 0)
         self.footer_layout.setSpacing(0)
         self.footer_layout.addWidget(self.climax_status_label, stretch=0)
+        self.footer_layout.addWidget(self._build_outcome_row(), stretch=0)
         self.footer_layout.addWidget(self.beat_track, stretch=1)
         self.main_splitter.addWidget(self.footer_container)
 
@@ -353,11 +395,18 @@ class GoonerApp(QMainWindow):
         self.callout_handler = CalloutHandler(self.settings, data_store=self.data_store)
 
         self.score_tracker = ScoreTracker(settings=self.settings, data_store=self.data_store)
+        self.achievement_tracker = AchievementTracker(data_store=self.data_store)
         # Keeps the running session's timeline for the Session Explorer. In memory only -
         # it holds media paths, which never go near the data directory. See SessionRecorder.
         self.session_recorder = SessionRecorder()
         # Set while replaying a saved session - see start(). None for a live one.
         self._script = None
+        # Whether this session's outcome has already been reported, so Stop does not ask
+        # a second time for something the climax buttons already answered.
+        self._outcome_answered = False
+        self._announced_outcome = None
+        # What the session just ended earned, held between judging it and showing the recap.
+        self._new_achievements = []
         self._session_start_bests = {}
 
         self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
@@ -452,6 +501,12 @@ class GoonerApp(QMainWindow):
         self.climax_handler.register_outcome_event(self._on_climax_outcome)
         self.climax_handler.register_status_event(self._update_climax_status_label)
         self.climax_handler.register_fake_climax_event(self.score_tracker.fake_climax_triggered)
+        self.climax_handler.fake_climax_triggered_event.connect(
+            lambda: self._show_outcome_buttons("fake")
+        )
+        # An unanswered fake takes its buttons back at the reveal - leaving them up would
+        # hand the user a second, stale set when the real climax arrives.
+        self.climax_handler.fake_climax_revealed_event.connect(self._hide_outcome_buttons)
 
         self.register_start_event(self.score_tracker.session_started)
         self.register_start_event(self.session_recorder.session_started)
@@ -531,6 +586,10 @@ class GoonerApp(QMainWindow):
         long_term_stats_action = QAction("Long-term Statistics", self)
         long_term_stats_action.triggered.connect(self.show_long_term_statistics)
         stats_menu.addAction(long_term_stats_action)
+
+        achievements_action = QAction("Achievements", self)
+        achievements_action.triggered.connect(self.show_achievements)
+        stats_menu.addAction(achievements_action)
 
         socials_menu = menu_bar.addMenu("Socials")
 
@@ -820,8 +879,13 @@ class GoonerApp(QMainWindow):
         settings_dialog.deleteLater()
 
     def stop(self):
-        if self.is_running:
-            self._end_session(show_statistics=True)
+        if not self.is_running:
+            return
+        if self.ask_for_outcome and not self._outcome_answered:
+            reported = self._ask_how_it_ended()
+            if reported is not None:
+                self.score_tracker.outcome_reported(reported)
+        self._end_session(show_statistics=True)
 
     def closeEvent(self, event):
         """Records a session still in progress before the window goes away.
@@ -849,6 +913,8 @@ class GoonerApp(QMainWindow):
         self.btn_next.setEnabled(False)
         self.btn_prev.setEnabled(False)
         self.btn_stop.setEnabled(False)
+        self._edge_cooldown_timer.stop()
+        self.btn_edge.setEnabled(False)
         self._freeze_climax_blink()
         log.info(
             "Session ended after %s (statistics shown: %s)",
@@ -857,6 +923,9 @@ class GoonerApp(QMainWindow):
         )
         self.session_recorder.session_ended()
         self.session_ended_event.emit()
+        # After the signal, because ScoreTracker writes the session into the history from it
+        # and a rule that counts sessions has to be able to count this one.
+        self._new_achievements = self._judge_achievements()
         if show_statistics:
             self.show_statistics()
 
@@ -869,6 +938,9 @@ class GoonerApp(QMainWindow):
             # 5 seconds is comfortably enough to stop, close the stats and start again,
             # and it would then kill the fresh session instead.
             self._denied_stop_timer.stop()
+            self._outcome_answered = False
+            self._announced_outcome = None
+            self._hide_outcome_buttons()
             # Set before the signal: handlers reacting to "a session started" should see a
             # running session. _start_session_timer/_start_record_chase both now check it,
             # and would have hidden their overlays the moment they were meant to appear.
@@ -878,6 +950,8 @@ class GoonerApp(QMainWindow):
             self.btn_next.setEnabled(True)
             self.btn_prev.setEnabled(True)
             self.btn_stop.setEnabled(True)
+            # After is_running, which is what decides whether the button is live.
+            self._reset_edge_button()
             self.beat_handler.start_beat(script=script)
             self.btn_load.setText("Change Gooning Folder.")
         # No recalc_autoplay_timer() here: load_media() already schedules the next change
@@ -889,8 +963,157 @@ class GoonerApp(QMainWindow):
 
     def _on_climax_outcome(self, outcome):
         log.info("Climax outcome: %s", outcome)
+        # Remembered from the signal rather than read back off ClimaxHandler when the answer
+        # comes in - what was announced to *this* user is what the answer is measured against.
+        self._announced_outcome = outcome
+        # Nothing left to be relieved of, and the planner would refuse it anyway.
+        self.btn_edge.hide()
+        self._edge_cooldown_timer.stop()
+        self._show_outcome_buttons("climax")
         if outcome == "denied":
-            self._denied_stop_timer.start(DENIED_STOP_DELAY_MS)
+            # Waits for the answer when there is one to wait for, or the buttons would be
+            # taken off screen five seconds after being put there.
+            waiting = self.outcome_row.isVisibleTo(self)
+            self._denied_stop_timer.start(
+                self.DENIED_ANSWER_TIMEOUT_MS if waiting else DENIED_STOP_DELAY_MS
+            )
+
+    # --- what actually happened ---
+
+    def _build_outcome_row(self):
+        """The three answers, shown under the climax banner.
+
+        They appear at real *and* fake climaxes, identically. Putting them only on the real
+        one would make them the announcement - a fake only works while it is
+        indistinguishable - and asking at a fake is also the only way to find out whether
+        the user fell for it.
+        """
+        self.outcome_row = QWidget()
+        self.outcome_row.setFixedHeight(self.OUTCOME_ROW_HEIGHT)
+        row = QHBoxLayout(self.outcome_row)
+        row.setContentsMargins(6, 2, 6, 2)
+
+        # All three deliberately styled the same. Marking one "primary" would put a
+        # recommended answer under a question whose only value is an honest one - and under
+        # a denial the highlighted button would be the disobedient one.
+        self.btn_came = QPushButton("I Came")
+        self.btn_ruined = QPushButton("I Ruined It")
+        self.btn_stopped = QPushButton("I Stopped")
+
+        for button, reported in (
+            (self.btn_came, "came"),
+            (self.btn_ruined, "ruined"),
+            (self.btn_stopped, "stopped"),
+        ):
+            # NoFocus for the same reason as the transport buttons: a focused QPushButton
+            # swallows Space before keyPressEvent ever sees it, which would kill Panic.
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.clicked.connect(lambda _checked=False, answer=reported: self._on_outcome_reported(answer))
+            row.addWidget(button)
+
+        self.outcome_row.hide()
+        self._outcome_context = None
+        return self.outcome_row
+
+    def _show_outcome_buttons(self, context):
+        if not self.ask_for_outcome or not self.is_running:
+            return
+        self._outcome_context = context
+        self.footer_container.setFixedHeight(self.FOOTER_HEIGHT_WITH_OUTCOME)
+        self.outcome_row.show()
+
+    def _hide_outcome_buttons(self):
+        self._outcome_context = None
+        self.outcome_row.hide()
+        self.footer_container.setFixedHeight(self.FOOTER_HEIGHT)
+
+    def _on_outcome_reported(self, reported):
+        context = self._outcome_context
+        self._hide_outcome_buttons()
+        if context == "fake":
+            # Not the session's outcome - the real climax is still to come. What it does
+            # record is that the fake worked.
+            if reported in ("came", "ruined"):
+                self.score_tracker.fell_for_fake_climax()
+                self.callout_handler.force_output_sentence("fake_climax_fell_for")
+            return
+
+        self.score_tracker.outcome_reported(reported)
+        self._outcome_answered = True
+        # Whatever the answer, the session is over: the climax has landed and the user has
+        # just said what became of it. Leaving the beat running afterwards only means they
+        # have to reach for Stop to be told what they already know.
+        self._denied_stop_timer.stop()
+        self._end_session(show_statistics=True)
+
+    # --- reaching your edge ---
+
+    def edge_reached(self):
+        """A pause now, a gentler rhythm behind it, and the climax pushed back to match.
+
+        Three separate things have to move together, which is why this lives here rather
+        than in any one of them: BeatHandler grants the pause, ClimaxHandler is told to wait
+        the same amount (it is on an absolute clock, so without that the break would be paid
+        for out of the session rather than added to it), and only then does it count.
+        """
+        if not self.is_running or self._edge_cooldown_left > 0:
+            return
+        seconds = self.beat_handler.edge_relief()
+        if not seconds:
+            return  # refused - mid-pause, or the climax has already been announced
+
+        self.climax_handler.postpone(seconds)
+        self.score_tracker.edge_reached()
+        self.callout_handler.force_output_sentence("edge_reached")
+        log.info("Edge relief taken: %.0fs", seconds)
+        self._start_edge_cooldown()
+
+    def _start_edge_cooldown(self):
+        self._edge_cooldown_left = int(self.beat_handler.edge_cooldown_sec)
+        if self._edge_cooldown_left <= 0:
+            return
+        self._update_edge_button()
+        self._edge_cooldown_timer.start(1000)
+
+    def _tick_edge_cooldown(self):
+        self._edge_cooldown_left -= 1
+        if self._edge_cooldown_left <= 0:
+            self._edge_cooldown_timer.stop()
+        self._update_edge_button()
+
+    def _update_edge_button(self):
+        cooling = self._edge_cooldown_left > 0
+        self.btn_edge.setEnabled(self.is_running and not cooling)
+        self.btn_edge.setText(
+            f"Edge ({self._edge_cooldown_left}s)" if cooling else self.EDGE_BUTTON_TEXT
+        )
+
+    def _reset_edge_button(self):
+        """Back to a fresh session: visible if the feature is on, live, off cooldown."""
+        self._edge_cooldown_timer.stop()
+        self._edge_cooldown_left = 0
+        self.btn_edge.setVisible(self.beat_handler.edge_relief_active)
+        self._update_edge_button()
+
+    def _ask_how_it_ended(self):
+        """Asks a user who stopped by hand what they actually did. None if they'd rather not
+        say, which is recorded as exactly that rather than guessed at."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("How did that end?")
+        box.setText("Before the recap - what actually happened?")
+        box.setInformativeText(
+            "Without an answer this session counts as one that never finished, which drags "
+            "every average you are tracking."
+        )
+        answers = {
+            box.addButton("I Came", QMessageBox.ButtonRole.AcceptRole): "came",
+            box.addButton("I Ruined It", QMessageBox.ButtonRole.AcceptRole): "ruined",
+            box.addButton("I Stopped", QMessageBox.ButtonRole.AcceptRole): "stopped",
+        }
+        box.addButton("Rather not say", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        return answers.get(box.clickedButton())
 
     CLIMAX_STATUS_COLORS = {
         "cum": (theme.ACCENT, theme.ACCENT_HOVER),
@@ -993,10 +1216,26 @@ class GoonerApp(QMainWindow):
     def register_media_repeat_event(self, handler):
         self.media_repeated_event.connect(handler)
 
+    def _judge_achievements(self):
+        return self.achievement_tracker.evaluate(
+            self.score_tracker.deliver_infos(), self.score_tracker.get_history()
+        )
+
+    def show_achievements(self):
+        # Imported here rather than at module scope, like the other on-demand dialogs.
+        from src.AchievementsDialog import AchievementsDialog
+
+        dialog = AchievementsDialog(
+            self.achievement_tracker, self.score_tracker.get_history(), parent=self
+        )
+        dialog.exec()
+        dialog.deleteLater()
+
     def show_statistics(self):
         dialog = StatisticsDialog(
             self.score_tracker.deliver_infos(),
             new_records=self.score_tracker.last_session_new_records,
+            new_achievements=self._new_achievements,
             timeline=self.session_recorder.timeline(),
             save_session=self.save_current_session,
             parent=self,
@@ -1036,6 +1275,8 @@ class GoonerApp(QMainWindow):
         self._update_climax_status_label("neutral")
         log.info("Replaying a saved session (own library: %s)", ignore_paths)
         self.start(script=SessionScript(saved, ignore_paths=ignore_paths))
+        # After start(), which resets the tracker for the new session.
+        self.score_tracker.replay_started()
         return True
 
     def save_current_session(self) -> bool:

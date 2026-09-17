@@ -86,6 +86,11 @@ class BeatHandler(QObject):
         "min_pause_dur": 5,
         "max_pause_dur": 20,
         "pause_chance": 0.05,
+        # "I reached my edge": a pause on demand, and a gentler rhythm behind it.
+        "edge_relief_active": True,
+        "edge_pause_dur": 20,
+        # Without a cooldown, holding the key turns the session into a nap.
+        "edge_cooldown_sec": 60,
         "ramping_active": True,
         "min_ramp_duration": 600.0,
         "max_ramp_duration": 1800.0,
@@ -151,6 +156,8 @@ class BeatHandler(QObject):
         # Rhythms a replayed session brought with it. Kept apart from custom_beat_patterns
         # so borrowing someone else's session never quietly adopts their pattern library.
         self._borrowed_patterns = {}
+        # Set by edge_relief(), consumed by the next segment that is actually *drawn*.
+        self._relief_next_segment = False
 
         # Whatever the user has saved wins over the defaults above.
         if self.settings:
@@ -161,6 +168,13 @@ class BeatHandler(QObject):
             self.min_pause_dur = int(float(self.settings.value("BeatHandler/min_pause_dur", self.min_pause_dur)))
             self.max_pause_dur = int(float(self.settings.value("BeatHandler/max_pause_dur", self.max_pause_dur)))
             self.pause_chance = float(self.settings.value("BeatHandler/pause_chance", self.pause_chance))
+            self.edge_relief_active = bool(
+                self.settings.value("BeatHandler/edge_relief_active", self.edge_relief_active, type=bool)
+            )
+            self.edge_pause_dur = int(float(self.settings.value("BeatHandler/edge_pause_dur", self.edge_pause_dur)))
+            self.edge_cooldown_sec = int(
+                float(self.settings.value("BeatHandler/edge_cooldown_sec", self.edge_cooldown_sec))
+            )
             self.ramping_active = bool(
                 self.settings.value("BeatHandler/ramping_active", self.ramping_active, type=bool)
             )
@@ -267,6 +281,12 @@ class BeatHandler(QObject):
         """
         if self._current_segment is None or self._holding:
             return  # no session running, or nothing further will be planned
+        if self._queue_is_recorded():
+            # Never rebuild a replay's queue: refilling it *draws* the replacements and the
+            # script's cursor cannot rewind, so the rest of the recorded session would be
+            # gone. A replay is not supposed to follow changed settings anyway - it is
+            # supposed to follow the recording.
+            return
         self._plan.clear()
         self._plan_end_time = self._current_segment_end
         self._extend_plan()
@@ -299,6 +319,9 @@ class BeatHandler(QObject):
         pause_loop() always recalculated a fresh one on the way out.
         """
         index = self._next_index
+        # Consumed here whatever happens: a replay hands out its recorded segment instead,
+        # and a flag left standing would slow down some unrelated segment much later.
+        relief, self._relief_next_segment = self._relief_next_segment, False
         if self._script is not None:
             scripted = self._script.next_segment(index)
             if scripted is not None:
@@ -316,11 +339,62 @@ class BeatHandler(QObject):
             candidate = Segment(
                 "beat",
                 random.uniform(self.min_beat_dur, self.max_beat_dur),
-                random.uniform(window_min, window_max),
+                # Straight to the bottom of the window after an edge, rather than a draw
+                # across it. A gap on its own is not relief; what comes back has to be
+                # gentler than whatever drove the user to ask for it.
+                window_min if relief else random.uniform(window_min, window_max),
                 random.choice(self._usable_pattern_names()),
                 index,
             )
         return self._apply_finale_rule(candidate, start)
+
+    def edge_relief(self):
+        """A pause on demand, with a gentler rhythm behind it. Returns the seconds given, or
+        0.0 when there is nothing to relieve.
+
+        This is the one place a segment does not play out as planned - and it is the user's
+        own doing, which is exactly the difference. Refused while a pause is already running
+        (there would be nothing to interrupt, and it would hand out a free second pause) and
+        after the climax has been announced, where nothing further is planned at all.
+
+        Deliberately says nothing about the climax: BeatHandler does not know climaxes exist.
+        The caller is the one that pushes it back by the returned amount.
+        """
+        if self._current_segment is None or self._holding or self.is_paused():
+            return 0.0
+
+        seconds = float(self.edge_pause_dur)
+        if self._finale_at is not None:
+            # The pause displaces everything behind it, so "be fast here" travels with it -
+            # otherwise the marker would point at a stretch of the session that has just
+            # moved out from under it, and the run-in would be rebuilt around nothing. Still
+            # no knowledge of climaxes here: the caller shifts its own by the same amount.
+            self._finale_at += seconds
+        if self._queue_is_recorded():
+            # A replay's queue is the recording itself, already taken off the script - and
+            # the script cursor does not rewind, so clearing it would silently skip those
+            # segments and leave the planner drawing from there. The break goes in front of
+            # them instead, and everything after it plays exactly as recorded, just later.
+            self._plan.appendleft(Segment("pause", seconds, None, None, self._next_index))
+        else:
+            self._relief_next_segment = True
+            self._plan.clear()
+            self._plan.append(Segment("pause", seconds, None, None, self._next_index))
+        self._next_index += 1
+        # Cuts the running segment short; _begin_next_segment re-anchors the plan clock to
+        # the real start, so the rest of the session simply moves along with it.
+        self._begin_next_segment()
+        return seconds
+
+    def _queue_is_recorded(self) -> bool:
+        """Whether what is queued came off a replayed session rather than being drawn.
+
+        Told by index: start_beat() numbers a session's segments from 0 and hands the script
+        those numbers, so anything below the script's length was replayed.
+        """
+        if self._script is None or not self._plan:
+            return False
+        return self._plan[0].index < self._script.segment_count
 
     def _covers_finale(self, start, duration):
         """Whether a segment of `duration` starting at `start` is the run-in to the climax.
@@ -343,6 +417,12 @@ class BeatHandler(QObject):
         screen, rather than as it starts - see _begin_next_segment.
         """
         if self._finale_at is None:
+            return
+        if self._queue_is_recorded():
+            # A replay's run-in is recorded where it belongs. Rebuilding the queue here
+            # would *draw* the replacements, and the script's cursor cannot rewind - the
+            # rest of the recording would be lost for the sake of a correction it does not
+            # need.
             return
         start = self._current_segment_end
         kept = deque()
@@ -750,7 +830,10 @@ class BeatHandler(QObject):
         self.beat_meter_pause_timer.start(1000)
         self.beat_meter_update_event.emit(f"Pause: {self.cur_pause_dur} seconds left.", "pause")
 
-    def stop(self):
+    def stop(self, message=None):
+        """Ends the rhythm. `message` is what the meter reads afterwards - the default says
+        the app is idle, which is wrong when a session is still running and only the beat is
+        over (a denied climax, see ClimaxHandler)."""
         self.beat_meter_timer.stop()
         self.beat_meter_pause_timer.stop()
         self._plan.clear()
@@ -758,7 +841,7 @@ class BeatHandler(QObject):
         self._finale_at = None
         self._holding = False
         self.cur_freq = 0
-        self.beat_meter_update_event.emit("Strokemeter appears here.", "idle")
+        self.beat_meter_update_event.emit(message or "Strokemeter appears here.", "idle")
 
     def register_beat_pause_events(self, pause_start_event, pause_resume_event):
         self.beat_paused_event.connect(pause_start_event)

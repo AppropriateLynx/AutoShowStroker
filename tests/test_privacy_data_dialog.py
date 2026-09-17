@@ -343,3 +343,15 @@ def test_the_saved_sessions_entry_says_it_holds_media_paths(dialog):
     )
 
     assert "path" in description.lower()
+
+
+def test_achievements_are_counted_and_deletable(app, dialog):
+    app.achievement_tracker.unlocked["endurance_45"] = "2026-09-17 21:00"
+    app.achievement_tracker._save()
+    dialog.refresh_counts()
+    assert dialog.category_counts()["achievements"] == 1
+
+    dialog.clear_categories(["achievements"])
+
+    assert app.achievement_tracker.unlocked == {}
+    assert dialog.category_counts()["achievements"] == 0

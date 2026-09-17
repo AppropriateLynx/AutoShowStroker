@@ -24,6 +24,9 @@ class ClimaxHandler(QObject):
     status_changed_event = pyqtSignal(str)  # "cum" | "ruined" | "denied" | "neutral" - for UI display
     fake_climax_triggered_event = pyqtSignal()
 
+    # The moment the joke is admitted. Anything that reacted to the fake as if it were
+    # real - the outcome buttons above all - has to stand down again here.
+    fake_climax_revealed_event = pyqtSignal()
     # Single source of truth: __init__ applies these directly, and the SettingsDialog
     # "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
@@ -236,6 +239,30 @@ class ClimaxHandler(QObject):
         self._arm_climax_timer()
         self.beat_handler.set_finale_at(self.finale_at)
 
+    def postpone(self, seconds):
+        """Pushes the climax, and a replay's recorded fake-outs, back by `seconds`.
+
+        Called when the user takes an edge break. The climax sits on an absolute clock, so
+        without this a pause would not buy them time - it would quietly spend the rhythm
+        that was leading up to the climax, and in the worst case leave the run-in with
+        nothing to run in over. Thematically it is also the right answer: you edged, so you
+        wait longer for it.
+        """
+        if seconds <= 0 or self.climax_triggered or self.finale_at is None:
+            return
+        self.finale_at += seconds
+        # The pre-clamp moment moves with it, or the next settings save would re-clamp from
+        # the old value and snap the climax back to before the break.
+        if self._drawn_finale_at is not None:
+            self._drawn_finale_at += seconds
+        self._arm_climax_timer()
+        self.beat_handler.set_finale_at(self.finale_at)
+        # Live fake-outs need nothing - they are pinned to segment indices and move with the
+        # plan by themselves. A replay's are on absolute timers, like the climax.
+        for timer in self._scripted_fake_timers:
+            if timer.isActive():
+                timer.start(timer.remainingTime() + int(seconds * 1000))
+
     def _on_scripted_fake_due(self):
         if self.climax_triggered or self._fake_climax_pending:
             return
@@ -324,15 +351,22 @@ class ClimaxHandler(QObject):
 
     def _reveal_fake_climax(self):
         self._fake_climax_pending = False
+        self.fake_climax_revealed_event.emit()
         self.callout_handler.force_output_sentence("fake_climax_reveal")
         self.status_changed_event.emit("neutral")
 
     def _trigger_real_climax(self):
         self.climax_triggered = True
-        # The rhythm she said it over is the one that stays. Without this a new beat, a
-        # pause or a beat-change callout would land on top of the climax.
-        self.beat_handler.hold_final_segment()
         outcome = self.outcome or self._resolve_outcome()
+        if outcome == "denied":
+            # No rhythm to ride out a denial. Stopping it here is what makes disobedience
+            # mean anything: whatever happens next is the user's own doing rather than the
+            # app still driving them through it.
+            self.beat_handler.stop("Hands off.")
+        else:
+            # The rhythm she said it over is the one that stays. Without this a new beat, a
+            # pause or a beat-change callout would land on top of the climax.
+            self.beat_handler.hold_final_segment()
         category = {"real": "climax_real", "ruined": "climax_ruined", "denied": "climax_denied"}[outcome]
         status = {"real": "cum", "ruined": "ruined", "denied": "denied"}[outcome]
         self.callout_handler.force_output_sentence(category)

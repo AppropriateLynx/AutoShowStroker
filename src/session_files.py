@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 from src.applog import get_logger
+from src.BeatHandler import BeatHandler
 from src.utils import format_clock, get_current_version
 
 log = get_logger(__name__)
@@ -128,6 +129,139 @@ def has_paths(saved: dict) -> bool:
     return any("path" in entry for entry in saved.get("media", []))
 
 
+SEGMENT_KINDS = ("beat", "pause", "finale")
+CLIMAX_OUTCOMES = ("real", "ruined", "denied")
+
+
+def validate_session(saved: dict) -> list:
+    """Everything wrong with a session, in plain language. Empty means it will play.
+
+    This exists because a session is no longer only ever written by the app: the format is
+    documented (docs/SESSION_FORMAT.md) so an LLM can compose one, and a hand-written file
+    gets every detail wrong that a serialiser gets right for free. Without this the mistakes
+    surface *during* the session - a pattern name nothing can play, a climax that never
+    fires - which is the worst possible moment to find out.
+
+    Collects rather than raises on the first problem: somebody iterating on a generated file
+    wants the whole list, not one line at a time.
+    """
+    problems = []
+    segments = saved.get("segments")
+    if not isinstance(segments, list) or not segments:
+        return ["The session has no segments."]
+
+    duration = saved.get("duration_sec")
+    if not isinstance(duration, int | float) or duration <= 0:
+        problems.append("duration_sec has to be a positive number of seconds.")
+        duration = float("inf")
+
+    known = set(BeatHandler.BEAT_PATTERNS_MAP) | set(_validated_patterns(saved, problems))
+    for index, segment in enumerate(segments, start=1):
+        problems.extend(_segment_problems(segment, index, known))
+
+    problems.extend(_climax_problems(saved.get("climax"), duration))
+    problems.extend(_moment_problems(saved.get("fake_climaxes") or [], duration, "fake_climaxes"))
+    problems.extend(_media_problems(saved.get("media") or [], duration))
+    return problems
+
+
+def _validated_patterns(saved, problems) -> dict:
+    custom = saved.get("custom_patterns") or {}
+    if not isinstance(custom, dict):
+        problems.append("custom_patterns has to be an object of name -> list of steps.")
+        return {}
+    for name, steps in custom.items():
+        if not isinstance(steps, list) or not steps:
+            problems.append(f"The rhythm '{name}' has no steps.")
+        elif not all(isinstance(step, int) and step != 0 and abs(step) <= 4 for step in steps):
+            # Same rule the pattern editor enforces: 1-4 for a beat, negative for a silent
+            # step of the same length, and never 0.
+            problems.append(
+                f"The rhythm '{name}' has steps outside 1..4 (negative for silence, never 0)."
+            )
+    return custom
+
+
+def _segment_problems(segment, index, known_patterns) -> list:
+    where = f"Segment {index}"
+    if not isinstance(segment, dict):
+        return [f"{where} is not an object."]
+
+    problems = []
+    kind = segment.get("kind")
+    if kind not in SEGMENT_KINDS:
+        problems.append(f"{where} has kind '{kind}' - expected one of {', '.join(SEGMENT_KINDS)}.")
+
+    duration = segment.get("duration_sec")
+    if not isinstance(duration, int | float) or duration <= 0:
+        problems.append(f"{where} needs a positive duration_sec.")
+
+    pattern, freq = segment.get("pattern"), segment.get("freq")
+    if kind == "pause":
+        if pattern is not None or freq is not None:
+            problems.append(f"{where} is a pause, so it carries no pattern and no freq.")
+        return problems
+
+    if not isinstance(freq, int | float) or freq <= 0:
+        problems.append(f"{where} needs a freq in beats per second.")
+    if pattern is None:
+        problems.append(f"{where} needs a pattern name.")
+    elif pattern not in known_patterns:
+        problems.append(
+            f"{where} plays '{pattern}', which is neither built in nor defined in "
+            "custom_patterns."
+        )
+    return problems
+
+
+def _climax_problems(climax, duration) -> list:
+    if climax is None:
+        return []  # a session that was stopped before one - see describe()
+    if not isinstance(climax, dict):
+        return ["climax has to be an object with at_sec and outcome."]
+
+    problems = []
+    at = climax.get("at_sec")
+    if not isinstance(at, int | float) or at < 0:
+        problems.append("The climax needs an at_sec in seconds from the start.")
+    elif at > duration:
+        problems.append(
+            f"The climax is at {at:.0f}s but the session is only {duration:.0f}s long, so it "
+            "would never arrive."
+        )
+    if climax.get("outcome") not in CLIMAX_OUTCOMES:
+        problems.append(
+            f"The climax outcome '{climax.get('outcome')}' is not one of "
+            f"{', '.join(CLIMAX_OUTCOMES)}."
+        )
+    return problems
+
+
+def _moment_problems(moments, duration, field) -> list:
+    if not isinstance(moments, list):
+        return [f"{field} has to be a list of seconds."]
+    for moment in moments:
+        if not isinstance(moment, int | float) or moment < 0 or moment > duration:
+            return [f"{field} contains {moment}, which is outside the session."]
+    return []
+
+
+def _media_problems(media, duration) -> list:
+    if not isinstance(media, list):
+        return ["media has to be a list."]
+    previous = -1.0
+    for entry in media:
+        if not isinstance(entry, dict) or not isinstance(entry.get("at_sec"), int | float):
+            return ["Every media entry needs an at_sec in seconds from the start."]
+        at = entry["at_sec"]
+        if at < previous:
+            return ["The media moments have to run forwards - one of them goes backwards."]
+        if at > duration:
+            return [f"A medium is shown at {at:.0f}s, past the end of the session."]
+        previous = at
+    return []
+
+
 def read_session_file(path) -> dict:
     """Loads a saved session, or raises UnsupportedSessionFile.
 
@@ -146,6 +280,13 @@ def read_session_file(path) -> dict:
     if data["format"] > FORMAT_VERSION:
         raise UnsupportedSessionFile(
             "That session was saved by a newer version of GoonerApp."
+        )
+
+    problems = validate_session(data)
+    if problems:
+        log.warning("Refused a session file with %d problem(s)", len(problems))
+        raise UnsupportedSessionFile(
+            "That session cannot be played:\n\n" + "\n".join(f"- {p}" for p in problems)
         )
     return data
 
