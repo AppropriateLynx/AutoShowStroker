@@ -209,7 +209,7 @@ CATALOGUE = (
         "Endurance",
         lambda t: f"{_minutes(t)} minutes",
         lambda t: f"Last {_minutes(t)} minutes in a single session.",
-        "leaking_tip",
+        "candle",
         lambda t: _session_at_least("total_dur_sec", t),
         (45 * 60, 90 * 60, 120 * 60),
         id_for=lambda t: str(_minutes(t)),
@@ -278,7 +278,7 @@ CATALOGUE = (
             if t > 1 else
             "Let a fake climax cue pass without acting on it."
         ),
-        "tongue",
+        "mask",
         _unfooled_by,
         (1, 3, 5),
         # Secret for a different reason than the disobedience track: this one's condition
