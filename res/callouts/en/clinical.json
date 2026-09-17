@@ -134,5 +134,13 @@
     "Subject complied immediately. Logged.",
     "Confirmed. Continuing observation.",
     "That is a notably low threshold. Noted for the record."
+  ],
+  "edge_reached": [
+    "Noted. Reducing tempo. Hands off.",
+    "Arousal reported near threshold. Pausing.",
+    "Understood. Rest interval initiated.",
+    "Stop stimulation. We resume at a lower rate.",
+    "Recorded. Your threshold is closer than expected.",
+    "Pausing. Let the response subside."
   ]
 }

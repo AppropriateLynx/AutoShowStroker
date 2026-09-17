@@ -134,5 +134,13 @@
     "That's it. Breathe. You're okay.",
     "Perfect. I'm proud of you for letting go.",
     "Good boy. Rest a moment, I've got you."
+  ],
+  "edge_reached": [
+    "Good. Hands off, and breathe with me.",
+    "That's exactly when to tell me. Rest now.",
+    "Let it settle. There's no rush at all.",
+    "Well done for stopping. Take your time.",
+    "Shh, easy. We'll start again gently.",
+    "You're doing so well. Just breathe."
   ]
 }

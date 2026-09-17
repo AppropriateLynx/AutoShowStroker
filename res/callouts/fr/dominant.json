@@ -134,5 +134,13 @@
     "Pile au moment dit. Rien de moins.",
     "Obéissant. C'est noté.",
     "Voilà ce qui arrive quand on suit les ordres."
+  ],
+  "edge_reached": [
+    "Bas les mains. Maintenant.",
+    "Tu n'y vas pas sans permission. Stop.",
+    "Bien. Tu l'as dit avant de tout gâcher. Attends.",
+    "Arrête. Respire. Tu reprends quand je le dis.",
+    "Retiens-toi. C'est moi qui décide, pas ta queue.",
+    "Arrête. C'était assez près à mon goût."
   ]
 }

@@ -134,5 +134,13 @@
     "Sorry, I wasn't ready for you to finish already.",
     "You listened to me. Nobody ever listens to me.",
     "I'm blushing. You did that because I asked."
+  ],
+  "edge_reached": [
+    "Oh! Um - stop, then. Take a moment.",
+    "That close already? Okay, okay - hands off.",
+    "I don't want you to finish yet... please wait.",
+    "Sorry, I'll slow it down. Just breathe.",
+    "You told me. That's - that's really good of you.",
+    "Let's pause. I'm not ready for it to be over."
   ]
 }
