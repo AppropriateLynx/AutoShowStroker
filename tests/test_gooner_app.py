@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QDialog
 from src import applog, session_files
 from src.BeatTrackWidget import BeatTrackWidget
 from src.GoonerApp import GoonerApp
+from src.SessionScript import SessionScript
 
 
 class _FakeDialogBase:
@@ -1633,3 +1634,18 @@ def test_the_statistics_dialog_is_handed_the_way_to_save(app, monkeypatch):
     app.show_statistics()
 
     assert built["save_session"] == app.save_current_session
+
+
+def test_a_replay_reaches_the_climax_handler_with_the_recorded_times(app, tmp_path):
+    """The planner is told the script directly; the climax only hears about the session
+    through session_planned_event, so the script has to travel with it."""
+    saved = session_files.to_saved_session(_recorded_timeline())
+    app.playlist = [tmp_path / "a.png"]
+
+    app.start(script=SessionScript(saved))
+
+    assert app.climax_handler.finale_at == pytest.approx(
+        app.beat_handler.session_start_time + 90.0
+    )
+    assert app.climax_handler.outcome == "real"
+    assert app.climax_handler.scripted_fake_count == 1

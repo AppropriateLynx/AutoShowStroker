@@ -102,12 +102,16 @@ class BeatHandler(QObject):
     # same pattern CalloutHandler/ClimaxHandler already use for their GoonerApp-owned labels.
     beat_meter_update_event = pyqtSignal(str, str)
     # The session plan, announced to whoever wants to shape or read it.
-    # session_planned_event carries the session's start time, and is emitted before the
-    # first segment is planned so a listener can still place a finale into it (see
-    # set_finale_at). plan_extended_event carries the newly planned segments;
+    # session_planned_event carries the session's start time and the SessionScript this
+    # session is replaying (None when it is being drawn), and is emitted before the first
+    # segment is planned so a listener can still place a finale into it (see set_finale_at).
+    # The script travels with the signal because the planner is not the only one reading
+    # it: the climax hears about a session only through here, and had no other way to learn
+    # that the times were recorded rather than to be drawn.
+    # plan_extended_event carries the newly planned segments;
     # segment_started_event the Segment now on the air - the whole thing rather than its
     # index, so a consumer can record what actually played without reaching back in here.
-    session_planned_event = pyqtSignal(float)
+    session_planned_event = pyqtSignal(float, object)
     plan_extended_event = pyqtSignal(list)
     segment_started_event = pyqtSignal(object)
 
@@ -417,7 +421,7 @@ class BeatHandler(QObject):
         self._holding = False
         self._plan_end_time = self.session_start_time
         # Before the plan is built, so a listener still gets to place a finale into it.
-        self.session_planned_event.emit(self.session_start_time)
+        self.session_planned_event.emit(self.session_start_time, script)
         self._extend_plan()
         self._begin_next_segment()
 

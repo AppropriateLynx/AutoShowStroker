@@ -96,7 +96,7 @@ def test_session_planned_event_reports_when_the_session_started(handler, qtbot, 
     freeze(monkeypatch, 1000.0)
     with qtbot.waitSignal(handler.session_planned_event, timeout=1000) as blocker:
         handler.start_beat()
-    assert blocker.args == [1000.0]
+    assert blocker.args == [1000.0, None]
 
 
 def test_session_planned_event_fires_before_the_plan_is_built(handler):
@@ -565,3 +565,12 @@ def test_starting_a_normal_session_afterwards_drops_the_script(handler):
     handler.start_beat()
 
     assert handler.current_segment.duration_sec == 20.0
+
+
+def test_session_planned_event_carries_the_script_of_a_replay(handler, qtbot):
+    """The climax learns a session is a replay from this signal and nowhere else."""
+    pin(handler)
+    script = _script([{"kind": "beat", "pattern": "Standard Beat", "freq": 2.0, "duration_sec": 10.0}])
+    with qtbot.waitSignal(handler.session_planned_event, timeout=1000) as blocker:
+        handler.start_beat(script=script)
+    assert blocker.args[1] is script
