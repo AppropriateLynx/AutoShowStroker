@@ -1645,8 +1645,10 @@ def test_a_replay_reaches_the_climax_handler_with_the_recorded_times(app, tmp_pa
 
     app.start(script=SessionScript(saved))
 
-    assert app.climax_handler.finale_at == pytest.approx(
-        app.beat_handler.session_start_time + 90.0
+    # As an offset - pytest.approx is relative, so against a Unix timestamp its tolerance
+    # runs to well over an hour and any error at all would pass.
+    assert app.climax_handler.finale_at - app.beat_handler.session_start_time == pytest.approx(
+        90.0
     )
     assert app.climax_handler.outcome == "real"
     assert app.climax_handler.scripted_fake_count == 1

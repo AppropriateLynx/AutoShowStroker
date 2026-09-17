@@ -281,6 +281,12 @@ class BeatHandler(QObject):
         """
         if self._current_segment is None or self._holding:
             return  # no session running, or nothing further will be planned
+        if self._queue_is_recorded():
+            # Never rebuild a replay's queue: refilling it *draws* the replacements and the
+            # script's cursor cannot rewind, so the rest of the recorded session would be
+            # gone. A replay is not supposed to follow changed settings anyway - it is
+            # supposed to follow the recording.
+            return
         self._plan.clear()
         self._plan_end_time = self._current_segment_end
         self._extend_plan()
@@ -358,14 +364,37 @@ class BeatHandler(QObject):
             return 0.0
 
         seconds = float(self.edge_pause_dur)
-        self._relief_next_segment = True
-        self._plan.clear()
-        self._plan.append(Segment("pause", seconds, None, None, self._next_index))
+        if self._finale_at is not None:
+            # The pause displaces everything behind it, so "be fast here" travels with it -
+            # otherwise the marker would point at a stretch of the session that has just
+            # moved out from under it, and the run-in would be rebuilt around nothing. Still
+            # no knowledge of climaxes here: the caller shifts its own by the same amount.
+            self._finale_at += seconds
+        if self._queue_is_recorded():
+            # A replay's queue is the recording itself, already taken off the script - and
+            # the script cursor does not rewind, so clearing it would silently skip those
+            # segments and leave the planner drawing from there. The break goes in front of
+            # them instead, and everything after it plays exactly as recorded, just later.
+            self._plan.appendleft(Segment("pause", seconds, None, None, self._next_index))
+        else:
+            self._relief_next_segment = True
+            self._plan.clear()
+            self._plan.append(Segment("pause", seconds, None, None, self._next_index))
         self._next_index += 1
         # Cuts the running segment short; _begin_next_segment re-anchors the plan clock to
         # the real start, so the rest of the session simply moves along with it.
         self._begin_next_segment()
         return seconds
+
+    def _queue_is_recorded(self) -> bool:
+        """Whether what is queued came off a replayed session rather than being drawn.
+
+        Told by index: start_beat() numbers a session's segments from 0 and hands the script
+        those numbers, so anything below the script's length was replayed.
+        """
+        if self._script is None or not self._plan:
+            return False
+        return self._plan[0].index < self._script.segment_count
 
     def _covers_finale(self, start, duration):
         """Whether a segment of `duration` starting at `start` is the run-in to the climax.
@@ -388,6 +417,12 @@ class BeatHandler(QObject):
         screen, rather than as it starts - see _begin_next_segment.
         """
         if self._finale_at is None:
+            return
+        if self._queue_is_recorded():
+            # A replay's run-in is recorded where it belongs. Rebuilding the queue here
+            # would *draw* the replacements, and the script's cursor cannot rewind - the
+            # rest of the recording would be lost for the sake of a correction it does not
+            # need.
             return
         start = self._current_segment_end
         kept = deque()

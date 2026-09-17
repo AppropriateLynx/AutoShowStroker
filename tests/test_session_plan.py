@@ -669,3 +669,74 @@ def test_an_edge_still_leaves_a_fast_run_in_to_the_climax(handler):
     handler.edge_relief()
 
     assert any(segment.kind == "finale" for segment in handler.planned_segments)
+
+
+def test_an_edge_in_a_replay_keeps_the_recording_that_was_already_queued(handler):
+    """The plan buffer holds segments already taken off the script, and the script cursor
+    never rewinds - clearing the queue silently skipped five recorded segments and left the
+    planner drawing its own from there."""
+    pin(handler)
+    script = _script([
+        {"kind": "beat", "pattern": "Standard Beat", "freq": 2.0, "duration_sec": 5.0},
+        {"kind": "beat", "pattern": "Quick Swing", "freq": 3.0, "duration_sec": 6.0},
+        {"kind": "beat", "pattern": "Double Tap", "freq": 4.0, "duration_sec": 7.0},
+    ])
+    handler.start_beat(script=script)
+
+    handler.edge_relief()
+
+    # The break itself is on the air; the rest of the recording is untouched behind it.
+    assert handler.current_segment.kind == "pause"
+    assert [(s.pattern_name, s.freq) for s in handler.planned_segments][:2] == [
+        ("Quick Swing", 3.0),
+        ("Double Tap", 4.0),
+    ]
+
+
+def test_an_edge_past_the_end_of_a_recording_still_slows_the_beat_down(handler):
+    """Once the script is spent the planner is drawing again, so relief applies as usual."""
+    pin(handler)
+    handler.min_beat_freq, handler.max_beat_freq = 1.0, 5.0
+    script = _script([{"kind": "beat", "pattern": "Standard Beat", "freq": 2.0,
+                       "duration_sec": 5.0}])
+    handler.start_beat(script=script)
+
+    handler.edge_relief()
+
+    assert handler.planned_segments[0].freq == pytest.approx(1.0)
+
+
+def test_an_edge_moves_the_finale_marker_along_with_everything_else(handler):
+    """The pause displaces the whole plan, so "be fast here" has to travel with it - or the
+    marker now points into a segment that has moved out from under it."""
+    pin(handler, beat_dur=10.0)
+    handler.edge_pause_dur = 8
+    handler.start_beat()
+    handler.set_finale_at(handler.session_start_time + 40.0)
+
+    handler.edge_relief()
+
+    # Compared as an offset: pytest.approx is *relative*, and against a Unix timestamp
+    # its default tolerance is well over an hour - an 8 second error would sail through.
+    assert handler._finale_at - handler.session_start_time == pytest.approx(48.0)
+
+
+def test_an_edge_in_a_replay_keeps_the_recorded_run_in_too(handler):
+    """_revalidate_finale() rebuilds the queue by *drawing* when a segment no longer matches
+    the finale window - which a replay can never survive, because the script cursor does not
+    rewind. A recorded queue is already correct and is left alone."""
+    pin(handler)
+    script = _script([
+        {"kind": "beat", "pattern": "Standard Beat", "freq": 2.0, "duration_sec": 5.0},
+        {"kind": "beat", "pattern": "Quick Swing", "freq": 3.0, "duration_sec": 6.0},
+        {"kind": "finale", "pattern": "Double Tap", "freq": 5.0, "duration_sec": 9.0},
+    ])
+    handler.start_beat(script=script)
+    handler.set_finale_at(handler.session_start_time + 14.0)
+
+    handler.edge_relief()
+
+    assert [(s.kind, s.pattern_name) for s in handler.planned_segments][:2] == [
+        ("beat", "Quick Swing"),
+        ("finale", "Double Tap"),
+    ]
