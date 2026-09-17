@@ -40,6 +40,11 @@ class Achievement(NamedTuple):
     progress: Callable | None = None
     # Shown as ??? until it fires. For the ones that are more fun found than aimed at.
     secret: bool = False
+    # Three levels of the same thing are one achievement with three stages, not three
+    # achievements that look alike - `track` is the tile's name and `level` the step within
+    # it. None/0 for a standalone one.
+    track: str | None = None
+    level: int = 0
 
 
 def icon_path(achievement: Achievement) -> Path:
@@ -111,8 +116,8 @@ def _history_count_at_least(predicate, target):
     return check, progress
 
 
-def _tiers(prefix, name_for, description_for, icon, builder, targets, id_for=None):
-    """One achievement per threshold, all sharing a rule and a mark.
+def _tiers(prefix, track, name_for, description_for, icon, builder, targets, id_for=None):
+    """The levels of one track, in order. They share a name, a mark and a rule.
 
     id_for keeps the stored id readable where the raw target is not: a 45 minute tier is
     "endurance_45", not "endurance_2k" seconds. Ids end up in the user's data file, so
@@ -120,7 +125,7 @@ def _tiers(prefix, name_for, description_for, icon, builder, targets, id_for=Non
     """
     id_for = id_for or _suffix
     entries = []
-    for target in targets:
+    for level, target in enumerate(targets, start=1):
         check, progress = builder(target)
         entries.append(
             Achievement(
@@ -130,9 +135,30 @@ def _tiers(prefix, name_for, description_for, icon, builder, targets, id_for=Non
                 icon=icon,
                 check=check,
                 progress=progress,
+                track=track,
+                level=level,
             )
         )
     return entries
+
+
+def grouped(catalogue=None) -> list:
+    """The catalogue as tiles: a whole track is one entry, everything else is its own.
+
+    Order is preserved, and nothing is dropped - the tiles are just how the same list is
+    drawn.
+    """
+    tiles, current = [], []
+    for achievement in (CATALOGUE if catalogue is None else catalogue):
+        if achievement.track and current and current[-1].track == achievement.track:
+            current.append(achievement)
+            continue
+        if current:
+            tiles.append(tuple(current))
+        current = [achievement]
+    if current:
+        tiles.append(tuple(current))
+    return tiles
 
 
 def _rule(pair) -> dict:
@@ -158,7 +184,8 @@ def _minutes(seconds) -> int:
 CATALOGUE = (
     *_tiers(
         "endurance",
-        lambda t: f"{_minutes(t)} Minutes",
+        "Endurance",
+        lambda t: f"{_minutes(t)} minutes",
         lambda t: f"Last {_minutes(t)} minutes in a single session.",
         "leaking_tip",
         lambda t: _session_at_least("total_dur_sec", t),
@@ -167,7 +194,8 @@ CATALOGUE = (
     ),
     *_tiers(
         "beats",
-        lambda t: f"{t:,} Strokes".replace(",", " "),
+        "Strokes In One Session",
+        lambda t: f"{t:,}".replace(",", " "),
         lambda t: f"Take {t:,} beats in a single session.".replace(",", " "),
         "note_run",
         lambda t: _session_at_least("total_num_beat", t),
@@ -175,7 +203,8 @@ CATALOGUE = (
     ),
     *_tiers(
         "lifetime_beats",
-        lambda t: f"{_suffix(t).upper()} All Told",
+        "Strokes All Told",
+        lambda t: _suffix(t).upper(),
         lambda t: f"Take {t:,} beats across every session you have ever played.".replace(",", " "),
         "endless_loop",
         lambda t: _lifetime_at_least("total_num_beat", t),
@@ -183,7 +212,8 @@ CATALOGUE = (
     ),
     *_tiers(
         "returner",
-        lambda t: f"Back for More ({t})",
+        "Back For More",
+        lambda t: f"{t} sessions",
         lambda t: f"Come back and play {t} sessions.",
         "hooked",
         _sessions_at_least,
@@ -191,7 +221,8 @@ CATALOGUE = (
     ),
     *_tiers(
         "obedient",
-        lambda t: f"Good Boy ({t})" if t > 1 else "Good Boy",
+        "Good Boy",
+        lambda t: f"{t} times" if t > 1 else "once",
         lambda t: (
             f"Do as you are told {t} times when you are denied or told to ruin it. "
             "Being told to come and coming does not count."
@@ -205,7 +236,8 @@ CATALOGUE = (
     ),
     *_tiers(
         "disobedient",
-        lambda t: f"Couldn't Help It ({t})" if t > 1 else "Couldn't Help It",
+        "Couldn't Help It",
+        lambda t: f"{t} times" if t > 1 else "once",
         lambda t: f"Come anyway after being denied, {t} times." if t > 1 else
         "Come anyway after being denied.",
         "snapped_leash",

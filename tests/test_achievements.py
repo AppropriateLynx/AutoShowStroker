@@ -263,3 +263,49 @@ def test_an_achievement_whose_check_explodes_is_skipped(tracker):
 
     assert "endurance_45" in [item.id for item in unlocked]
     assert "boom" not in [item.id for item in unlocked]
+
+
+# --- tiers belong to one another ---
+
+
+def test_a_tiered_achievement_knows_its_track_and_level():
+    endurance = [item for item in achievements.CATALOGUE if item.track == "Endurance"]
+
+    assert [item.level for item in endurance] == [1, 2, 3]
+    assert [item.id for item in endurance] == ["endurance_45", "endurance_90", "endurance_120"]
+
+
+def test_a_standalone_achievement_has_no_track():
+    fakeouts = next(item for item in achievements.CATALOGUE if item.id == "fakeouts_3")
+
+    assert fakeouts.track is None
+    assert fakeouts.level == 0
+
+
+def test_grouping_puts_a_whole_track_in_one_tile():
+    """Three levels of the same thing are one achievement with three stages, not three
+    achievements that happen to look alike."""
+    groups = achievements.grouped()
+
+    endurance = next(g for g in groups if g[0].id == "endurance_45")
+    assert [item.level for item in endurance] == [1, 2, 3]
+
+
+def test_grouping_leaves_standalone_achievements_alone():
+    groups = achievements.grouped()
+
+    single = next(g for g in groups if g[0].id == "fakeouts_3")
+    assert len(single) == 1
+
+
+def test_grouping_loses_nothing_and_keeps_the_order():
+    flat = [item for group in achievements.grouped() for item in group]
+
+    assert flat == list(achievements.CATALOGUE)
+
+
+def test_a_tier_is_named_for_its_step_not_for_the_whole_track():
+    """The tile carries the track name, so the level only has to say which step it is."""
+    endurance = [item for item in achievements.CATALOGUE if item.track == "Endurance"]
+
+    assert [item.name for item in endurance] == ["45 minutes", "90 minutes", "120 minutes"]

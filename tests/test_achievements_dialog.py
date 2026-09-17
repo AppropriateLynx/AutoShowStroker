@@ -46,7 +46,8 @@ def test_everything_is_listed_whether_you_have_it_or_not(make_dialog):
     it."""
     dialog = make_dialog()
 
-    assert len(dialog.cards) == len(achievements.CATALOGUE)
+    assert len(dialog.cards) == len(achievements.grouped())
+    assert len(dialog.cards) < len(achievements.CATALOGUE)  # tracks are folded into one tile
 
 
 def test_an_earned_achievement_shows_when_you_earned_it(make_dialog, tracker):
@@ -56,7 +57,7 @@ def test_an_earned_achievement_shows_when_you_earned_it(make_dialog, tracker):
 
     card = dialog.card_for("endurance_45")
     assert card.unlocked is True
-    assert tracker.unlocked_at("endurance_45") in card.detail_text()
+    assert tracker.unlocked_at("endurance_45") in card.status_text()
 
 
 def test_a_locked_achievement_says_what_it_wants(make_dialog):
@@ -65,6 +66,50 @@ def test_a_locked_achievement_says_what_it_wants(make_dialog):
     card = dialog.card_for("endurance_45")
     assert card.unlocked is False
     assert "45 minutes" in card.detail_text()
+
+
+def test_a_tile_carries_the_track_name_not_the_level_name(make_dialog):
+    dialog = make_dialog()
+
+    assert dialog.card_for("endurance_90").title_text() == "Endurance"
+
+
+def test_a_tile_shows_one_pip_per_level(make_dialog, tracker):
+    tracker.unlocked["endurance_45"] = "2026-09-17 21:00"
+    dialog = make_dialog()
+
+    card = dialog.card_for("endurance_120")
+
+    assert card.levels_earned == 1
+    assert card.level_count == 3
+
+
+def test_a_tile_points_at_the_next_level_you_have_not_reached(make_dialog, tracker):
+    """Naming the one already earned would be telling the user what they know."""
+    tracker.unlocked["endurance_45"] = "2026-09-17 21:00"
+    dialog = make_dialog([entry(total_dur_sec=50 * 60)])
+
+    card = dialog.card_for("endurance_45")
+
+    assert "90 minutes" in card.detail_text()
+    assert card.progress_bar.maximum() == 90 * 60
+
+
+def test_a_finished_track_stops_asking_for_more(make_dialog, tracker):
+    for level in ("endurance_45", "endurance_90", "endurance_120"):
+        tracker.unlocked[level] = "2026-09-17 21:00"
+    dialog = make_dialog()
+
+    card = dialog.card_for("endurance_45")
+
+    assert card.levels_earned == card.level_count
+    assert card.progress_bar is None
+
+
+def test_a_standalone_achievement_has_no_level_pips(make_dialog):
+    dialog = make_dialog()
+
+    assert dialog.card_for("fakeouts_3").level_count == 1
 
 
 def test_a_locked_achievement_shows_how_far_along_you_are(make_dialog):
@@ -116,12 +161,12 @@ def test_a_secret_achievement_gives_itself_up_once_earned(make_dialog, tracker):
 # --- the marks ---
 
 
-def test_an_earned_mark_is_lit_and_a_locked_one_is_not(make_dialog, tracker):
+def test_a_mark_lights_up_as_soon_as_any_level_is_earned(make_dialog, tracker):
     tracker.unlocked["endurance_45"] = "2026-09-17 21:00"
     dialog = make_dialog()
 
     assert dialog.card_for("endurance_45").glow is not None
-    assert dialog.card_for("endurance_90").glow is None
+    assert dialog.card_for("fakeouts_3").glow is None
 
 
 def test_a_mark_whose_file_is_missing_does_not_stop_the_dialog(make_dialog, tracker, qtbot):
