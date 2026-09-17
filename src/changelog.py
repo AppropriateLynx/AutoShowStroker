@@ -288,7 +288,7 @@ CHANGELOG = {
         "</ul>"
         "Go on then. See if you can still find the seams."
     ),
-    "0.13.1": (
+    "0.13.2": (
         "The session that wrecked you does not have to be a one-off any more. Keep it. "
         "Take it again. Hand it to someone else and watch them try."
         "<ul>"
@@ -311,6 +311,10 @@ CHANGELOG = {
         "whether to include your file paths, and says plainly what they give away. Saved "
         "sessions are listed and deletable in Help &gt; Privacy &amp; Data like everything "
         "else</li>"
+        "<li><b>And when you are about to lose it, say so.</b> Press <i>E</i> and she "
+        "gives you a breather - the beat stops, and comes back at the gentlest speed she "
+        "is currently willing to allow. The climax waits out your break instead of being "
+        "paid for with it, though. You edged, so you wait longer for it</li>"
         "<li><b>And she finally asks what you actually did.</b> Every climax cue now offers "
         "<i>I Came</i>, <i>I Ruined It</i>, <i>I Stopped</i> - because she only ever knew "
         "what she <i>told</i> you to do. Obeying a denial and ignoring one used to look "

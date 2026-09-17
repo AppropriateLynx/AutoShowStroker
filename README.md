@@ -20,6 +20,7 @@ One thing there is worth naming: a session you explicitly **save** records the p
 * **Custom Beat Patterns:** Build your own rhythm patterns in the built-in Pattern Editor and mix them in alongside the presets.
 * **Random Pause Phases:** The Strokemeter unexpectedly transitions into a controlled pause featuring a countdown display in the green-colored footer.
 * **Climax System:** Configurable climax announcements with real, ruined, and denied orgasm outcomes, plus optional fake climax cues to keep you guessing — chances for every outcome are independently tunable.
+* **Edge Relief On Demand:** About to lose it? Hit `E`. The Strokemeter pauses and comes back at the bottom of its current speed range, and the climax waits out the break instead of being paid for with it — you edged, so you wait longer. Cooldown included, because otherwise holding the key down would turn the session into a nap.
 * **Tell It What You Actually Did:** Every climax cue offers **I Came / I Ruined It / I Stopped** — because the app only knows what it *told* you to do, and being denied and obeying is not the same session as being denied and doing it anyway. The buttons show up at fake cues too, identically, so they never become the tell that gives a fake-out away. A denial stops the Strokemeter on the spot; whatever happens next is on you.
 * **Multilingual Callouts (Teases):** Random text instructions tailored to the current event (e.g., during tempo changes, pauses, or media transitions). Available in German, English and French (expandable via JSON files).
 * **Selectable Tone:** Tone is a second axis next to language. Pick **Flirty**, **Shy**, **Dominant**, **Degrading**, **Degrading (Hard)** or **Girlfriend Experience** — or tick several and the app mixes them evenly. Both degrading tones are strictly opt-in and never switch themselves on.
@@ -38,13 +39,14 @@ One thing there is worth naming: a session you explicitly **save** records the p
     * **Next Media:** `Right Arrow` key or click "Skip >>".
     * **Previous Media:** `Left Arrow` key or click "<< Previous".
     * **Stop Session:** `Ctrl + Space` or click "Stop".
+    * **I reached my Edge:** `E` or click the button — a pause right now and a gentler beat behind it, with the climax pushed back by the length of the break rather than paid for with it. Hidden once the climax has been announced.
     * **Mute:** `M` or click "Mute" — silences beat sound and video audio together.
     * **Panic:** `Space` — instantly minimizes the window and mutes audio. Doesn't stop the session or auto-unmute when you come back.
     * **Fullscreen:** `F` or `F11` to toggle, `Escape` to leave.
     * **Guide:** `F1` or **Help > Guide** — also has the full shortcut list.
 4. **Settings:** Press `Ctrl + S` or use the menu in the top left corner to open the tabbed settings dialog:
     * **Playback:** slideshow timing for images/GIFs, minimum video duration, and beat/video volume.
-    * **Beat & Rhythm:** beat frequency and duration ranges, pause duration and chance, which rhythm patterns are active (plus a Pattern Editor for creating your own), and optional difficulty ramping.
+    * **Beat & Rhythm:** beat frequency and duration ranges, pause duration and chance, the edge-relief pause length and cooldown, which rhythm patterns are active (plus a Pattern Editor for creating your own), and optional difficulty ramping.
     * The session is planned a few segments ahead rather than improvised beat by beat, which is what lets the rhythm speed up into the climax instead of stumbling onto it.
     * **Climax:** the earliest and latest point in the session the climax may land, whether it has to wait for difficulty ramping to finish first, and independent toggles/chances for ruined, denied, and fake climax outcomes.
     * **Callouts:** enable/disable, callout language, the tone mix, and how often callouts trigger.
