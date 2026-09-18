@@ -39,16 +39,10 @@ _NOTELESS_KINDS = ("idle",)
 # whole background on every beat because that was the only signal it could give.
 KIND_COLORS = {
     "idle": (theme.SURFACE_DARK, theme.TEXT),
-    "up": (theme.SURFACE_DARK, theme.TEXT),
-    "down": (theme.SURFACE_DARK, theme.TEXT),
     "new_beat": (theme.SURFACE_DARK, theme.ACCENT),
     "pause": (theme.PAUSE, theme.TEXT),
 }
 _FALLBACK_COLORS = (theme.SURFACE_DARK, theme.TEXT)
-
-# Kinds whose text is just the alternating blink caption - meaningless once notes
-# visibly land on the hit zone, so they never overwrite the real caption.
-_BLINK_KINDS = ("up", "down")
 
 
 class BeatTrackWidget(QWidget):
@@ -97,8 +91,7 @@ class BeatTrackWidget(QWidget):
 
     def set_status(self, text, kind):
         self._kind = kind
-        if kind not in _BLINK_KINDS:
-            self._caption = text
+        self._caption = text
         self.update()
 
     def flash(self):

@@ -10,7 +10,9 @@ deliberate, and it is the same rule the climax follows: the BeatHandler is only 
 
 A target is sent once per audible note. The note's identity is simply how many notes have
 played - `beat_event` counts them - so a re-prediction after a settings change or a resume
-cannot make the device stroke twice for the same beat.
+cannot make the device stroke twice for the same beat. That count is also the direction:
+odd notes pull, even notes push. Which way a device travels is nobody's business but this
+plugin's, and the rhythm is never asked.
 """
 import time
 
@@ -38,15 +40,11 @@ class BeatSync(QObject):
         self.paused = False
         self._note_id = 0
         self._sent_note_id = None
-        # The direction the next audible note will be shown as. Mirrors BeatHandler's
-        # is_red, which starts on DOWN and is deliberately not reset between sessions.
-        self._next_up = False
 
     def attach(self):
         handler = self.beat_handler
         handler.note_scheduled_event.connect(self.on_note_scheduled)
         handler.beat_event.connect(self._on_beat)
-        handler.beat_meter_update_event.connect(self._on_meter)
         handler.session_planned_event.connect(self._on_session_planned)
         handler.register_beat_pause_events(self._on_pause, self._on_pause_ended)
 
@@ -68,7 +66,7 @@ class BeatSync(QObject):
         if deadline is None:
             return
         self._sent_note_id = self._note_id
-        self.controller.on_target(self._next_up, deadline)
+        self.controller.on_target(bool(self._note_id % 2), deadline)
 
     def _next_audible_deadline(self):
         """When the next audible note lands, on the monotonic clock, or None.
@@ -85,12 +83,6 @@ class BeatSync(QObject):
 
     def _on_beat(self):
         self._note_id += 1
-
-    def _on_meter(self, _text, kind):
-        # Every audible note carries a direction, so the device never has to guess at one:
-        # whatever the meter just showed, the next note is the other way.
-        if kind in ("up", "down"):
-            self._next_up = kind == "down"
 
     def _on_session_planned(self, _start_time, _script):
         self.paused = False

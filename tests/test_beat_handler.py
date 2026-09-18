@@ -102,19 +102,6 @@ def test_pause_loop_resumes_and_resets_frequency(handler, qtbot):
     assert handler.cur_freq != 0  # the next planned segment goes on the air right away
 
 
-def test_toggle_blink_alternates_state(handler, qtbot):
-    handler.is_red = False
-    with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
-        handler.toggle_blink()
-    assert handler.is_red is True
-    assert blocker.args == ["DOWN", "down"]
-
-    with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
-        handler.toggle_blink()
-    assert handler.is_red is False
-    assert blocker.args == ["UP", "up"]
-
-
 def test_stop_emits_idle_beat_meter_reset(handler, qtbot):
     with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
         handler.stop()

@@ -570,13 +570,12 @@ def test_update_beat_track_sets_caption_and_kind(app):
 
 
 def test_beat_handler_meter_updates_reach_the_gooner_app_owned_widget(app):
-    app._update_beat_track("New Beat! [1]", "new_beat")
+    """BeatHandler owns no widget - it says what the meter should read and GoonerApp
+    owns the thing that reads it."""
+    app.beat_handler.beat_meter_update_event.emit("Pause: 4 seconds left.", "pause")
 
-    app.beat_handler.toggle_blink()
-
-    # The blink kinds drive the track's state but must not clobber the real caption.
-    assert app.beat_track._kind in ("up", "down")
-    assert app.beat_track._caption == "New Beat! [1]"
+    assert app.beat_track._kind == "pause"
+    assert app.beat_track._caption == "Pause: 4 seconds left."
 
 
 def test_beat_event_flashes_the_beat_track(app):

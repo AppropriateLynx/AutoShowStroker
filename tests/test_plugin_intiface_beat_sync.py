@@ -3,6 +3,7 @@ upcoming_beats(); everything device-shaped lives here."""
 import time
 
 import pytest
+from PyQt6.QtCore import QObject, pyqtSignal
 
 from src.BeatHandler import BeatHandler
 from src.plugins.intiface.beat_sync import BeatSync
@@ -61,34 +62,49 @@ def test_one_target_per_note_however_often_the_rhythm_reschedules(beat, sync):
     assert len(sync.controller.targets) == 2
 
 
-def test_targets_alternate_and_match_the_direction_the_meter_shows(beat, sync):
-    shown = []
-    beat.beat_meter_update_event.connect(lambda _text, kind: shown.append(kind))
-    beat.start_beat()
-    for _ in range(9):
-        predicted = sync.controller.targets[-1][0]
-        shown.clear()
-        beat.beat()
-        if "up" in shown or "down" in shown:
-            assert predicted == ("up" in shown)
-    directions = [up for up, _deadline in sync.controller.targets]
+class RhythmDouble(QObject):
+    """Everything BeatSync is allowed to need from a rhythm - and nothing in it says
+    which way a device should move."""
+
+    note_scheduled_event = pyqtSignal()
+    beat_event = pyqtSignal()
+    beat_paused_event = pyqtSignal()
+    beat_resumed_event = pyqtSignal()
+    session_planned_event = pyqtSignal(float, object)
+
+    def upcoming_beats(self, _horizon):
+        return [(0.5, True, 1)]
+
+    def register_beat_pause_events(self, pause, resume):
+        self.beat_paused_event.connect(pause)
+        self.beat_resumed_event.connect(resume)
+
+
+def test_the_direction_is_the_plugins_own_and_needs_nothing_from_the_rhythm():
+    """It used to be read off the Strokemeter, which announced UP/DOWN for every note -
+    residue from the label that flashed on each beat, with no visible effect left by the
+    time the note track replaced it. Which way a stroker travels is not something a
+    rhythm engine should have to have an opinion about."""
+    rhythm = RhythmDouble()
+    controller = FakeController()
+    sync = BeatSync(rhythm, controller)
+    sync.attach()
+    sync.arm()
+    for _ in range(8):
+        rhythm.beat_event.emit()
+        rhythm.note_scheduled_event.emit()
+    directions = [up for up, _deadline in controller.targets]
+    assert len(directions) >= 8
     assert all(a != b for a, b in zip(directions, directions[1:], strict=False))
 
 
-def test_every_note_carries_a_direction_and_the_device_is_on_it(beat, sync):
-    """The meter used to hold "New Beat!" for five notes and show no direction on any of
-    them, which left anything stroking along to guess its way across the gap. It does not
-    any more - the note track announces a new rhythm by sweeping it in long before it
-    arrives, so there is nothing left for the freeze to say."""
-    shown = []
-    beat.beat_meter_update_event.connect(lambda _text, kind: shown.append(kind))
+def test_targets_alternate_across_a_whole_session(beat, sync):
     beat.start_beat()
     for _ in range(12):
-        predicted = sync.controller.targets[-1][0]
-        shown.clear()
         beat.beat()
-        assert "up" in shown or "down" in shown, "a note with no direction on it"
-        assert predicted == ("up" in shown)
+    directions = [up for up, _deadline in sync.controller.targets]
+    assert len(directions) >= 12
+    assert all(a != b for a, b in zip(directions, directions[1:], strict=False))
 
 
 def test_a_rhythm_pause_cancels_whatever_the_device_is_doing(beat, sync):

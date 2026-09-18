@@ -88,8 +88,6 @@ def test_notes_hidden_while_idle(widget):
 def test_notes_visible_during_a_running_beat(widget):
     widget.set_status("New Beat! [1]", "new_beat")
     assert widget._notes_visible() is True
-    widget.set_status("UP", "up")
-    assert widget._notes_visible() is True
 
 
 # --- status caption ---
@@ -105,15 +103,13 @@ def test_set_status_stores_caption_and_kind(widget):
     assert widget._kind == "new_beat"
 
 
-def test_blink_kinds_update_kind_but_never_overwrite_the_caption(widget):
-    # "UP"/"DOWN" is redundant once notes visibly land on the hit zone - the meaningful
-    # caption (pattern / pause countdown) has to survive the blink updates.
-    widget.set_status("New Beat! [1, 2]", "new_beat")
+def test_an_unknown_kind_still_paints(widget):
+    """Colours are looked up per kind, and a kind with no entry must fall back rather
+    than take the footer down with it."""
+    widget.set_status("Something new", "a kind nobody has defined")
 
-    widget.set_status("UP", "up")
-    assert widget._caption == "New Beat! [1, 2]"
-    widget.set_status("DOWN", "down")
-    assert widget._caption == "New Beat! [1, 2]"
+    assert widget._caption == "Something new"
+    widget.grab()
 
 
 def test_pause_status_replaces_the_caption(widget):

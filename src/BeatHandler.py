@@ -101,7 +101,7 @@ class BeatHandler(QObject):
     beat_resumed_event = pyqtSignal()
     beat_change_event = pyqtSignal(float, str)
     beat_event = pyqtSignal()
-    # (text, kind) - kind is one of "idle"/"up"/"down"/"new_beat"/"pause". BeatHandler owns no
+    # (text, kind) - kind is one of "idle"/"new_beat"/"pause". BeatHandler owns no
     # widget (see GoonerApp._update_beat_meter) - it only describes what the meter should show,
     # same pattern CalloutHandler/ClimaxHandler already use for their GoonerApp-owned labels.
     beat_meter_update_event = pyqtSignal(str, str)
@@ -132,7 +132,6 @@ class BeatHandler(QObject):
         self.beat_meter_pause_timer = QTimer()
         self.beat_meter_pause_timer.timeout.connect(self.pause_loop)
         self.cur_pause_dur = None
-        self.is_red = False
 
         self.settings = settings
 
@@ -778,13 +777,6 @@ class BeatHandler(QObject):
         if self.sound_effect:
             self.sound_effect.setMuted(muted)
 
-    def toggle_blink(self):
-        if self.is_red:
-            self.beat_meter_update_event.emit("UP", "up")
-        else:
-            self.beat_meter_update_event.emit("DOWN", "down")
-        self.is_red = not self.is_red
-
     def beat(self):
         self.beat_pattern_mutex.lock()
         try:
@@ -794,13 +786,6 @@ class BeatHandler(QObject):
 
         if play_beat:
             self.play_beat_sound()
-            # Every audible note gets a direction. The meter used to withhold one for the
-            # first five notes of a segment while it showed the new pattern instead - a
-            # flag the note track has since made redundant, since it sweeps the new
-            # rhythm in well before it arrives. Withholding it was not free: an odd-length
-            # gap in the direction sequence puts anything moving along with the beat out
-            # of step with the meter by exactly one, for as long as the segment lasts.
-            self.toggle_blink()
             self.beat_event.emit()
         self.reset_beat_timer()
 
