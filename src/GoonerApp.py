@@ -365,7 +365,6 @@ class GoonerApp(QMainWindow):
         self._climax_status_colors = ("transparent", "transparent")
 
         self.beat_track = BeatTrackWidget(self.beat_handler)
-        self.beat_track.set_status("Strokemeter appears here.", "idle")
         self.beat_handler.register_beat_meter_update_event(self._update_beat_track)
 
         # Fixed total height so the media area above never wobbles when the climax label
@@ -1206,8 +1205,8 @@ class GoonerApp(QMainWindow):
         if self._climax_status_text:
             self.climax_status_label.setStyleSheet(self._climax_label_style(self._climax_status_colors[0]))
 
-    def _update_beat_track(self, text, kind):
-        self.beat_track.set_status(text, kind)
+    def _update_beat_track(self, kind):
+        self.beat_track.set_status(kind)
 
     def _start_record_chase(self):
         self._session_start_bests = self.score_tracker.get_all_time_bests()

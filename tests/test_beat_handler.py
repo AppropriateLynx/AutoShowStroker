@@ -102,33 +102,38 @@ def test_pause_loop_resumes_and_resets_frequency(handler, qtbot):
     assert handler.cur_freq != 0  # the next planned segment goes on the air right away
 
 
-def test_stop_emits_idle_beat_meter_reset(handler, qtbot):
+def test_stop_reports_the_meter_idle(handler, qtbot):
     with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
         handler.stop()
-    assert blocker.args == ["Strokemeter appears here.", "idle"]
+    assert blocker.args == ["idle"]
 
 
-def test_beat_segment_emits_new_beat_meter_update(handler, qtbot):
+def test_a_new_segment_reports_a_new_beat(handler, qtbot):
     with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
         handler.start_beat()
-    text, kind = blocker.args
-    assert text == f"New Beat! {handler.current_beat_pattern}"
-    assert kind == "new_beat"
+    assert blocker.args == ["new_beat"]
 
 
-def test_start_pause_emits_pause_meter_update(handler, qtbot):
-    handler.min_pause_dur = 5
-    handler.max_pause_dur = 5
+def test_a_pause_reports_itself_and_how_far_it_has_run(handler, qtbot):
+    """The meter used to be handed a sentence to print. It gets a state now, and the
+    track draws the countdown as a bar - so what a pause has to expose is its progress,
+    which cur_pause_dur alone cannot answer because it does not know the total."""
+    handler.min_pause_dur = handler.max_pause_dur = 4
     with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
         handler.start_pause()
-    assert blocker.args == ["Pause: 5 seconds left.", "pause"]
+    assert blocker.args == ["pause"]
+    assert handler.pause_progress() == pytest.approx(1.0, abs=0.05)
+
+    handler.pause_loop()
+    assert 0.6 < handler.pause_progress() < 0.9
+
+    handler.cur_pause_dur = 1
+    handler.pause_loop()
+    assert handler.pause_progress() == 0.0  # over, and nothing left to draw
 
 
-def test_pause_loop_emits_pause_meter_update_on_tick(handler, qtbot):
-    handler.cur_pause_dur = 3
-    with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
-        handler.pause_loop()
-    assert blocker.args == ["Pause: 2 seconds left.", "pause"]
+def test_nothing_is_paused_before_a_pause_starts(handler):
+    assert handler.pause_progress() == 0.0
 
 
 # --- difficulty ramping ---

@@ -559,23 +559,20 @@ def test_climax_blink_interval_is_fast(app):
 
 def test_beat_track_starts_idle(app):
     assert app.beat_track._kind == "idle"
-    assert app.beat_track._caption == "Strokemeter appears here."
 
 
-def test_update_beat_track_sets_caption_and_kind(app):
-    for kind, text in [("new_beat", "New Beat! [1]"), ("pause", "Pause: 5s")]:
-        app._update_beat_track(text, kind)
-        assert app.beat_track._caption == text
+def test_update_beat_track_sets_the_kind(app):
+    for kind in ("new_beat", "pause", "idle"):
+        app._update_beat_track(kind)
         assert app.beat_track._kind == kind
 
 
 def test_beat_handler_meter_updates_reach_the_gooner_app_owned_widget(app):
     """BeatHandler owns no widget - it says what the meter should read and GoonerApp
     owns the thing that reads it."""
-    app.beat_handler.beat_meter_update_event.emit("Pause: 4 seconds left.", "pause")
+    app.beat_handler.beat_meter_update_event.emit("pause")
 
     assert app.beat_track._kind == "pause"
-    assert app.beat_track._caption == "Pause: 4 seconds left."
 
 
 def test_beat_event_flashes_the_beat_track(app):

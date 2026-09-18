@@ -101,10 +101,16 @@ class BeatHandler(QObject):
     beat_resumed_event = pyqtSignal()
     beat_change_event = pyqtSignal(float, str)
     beat_event = pyqtSignal()
-    # (text, kind) - kind is one of "idle"/"new_beat"/"pause". BeatHandler owns no
-    # widget (see GoonerApp._update_beat_meter) - it only describes what the meter should show,
-    # same pattern CalloutHandler/ClimaxHandler already use for their GoonerApp-owned labels.
-    beat_meter_update_event = pyqtSignal(str, str)
+    # What the meter is doing: "idle", "new_beat" or "pause". BeatHandler owns no widget
+    # (see GoonerApp._update_beat_track) - it only describes its own state, the same
+    # pattern CalloutHandler/ClimaxHandler already use for their GoonerApp-owned labels.
+    #
+    # It used to carry a sentence as well - "New Beat! [1, -1, 2]", a pause countdown, a
+    # placeholder - because the meter was once a label with nowhere else to put them. The
+    # note track says all of it better: the rhythm by the spacing of the notes, a change
+    # by the sweep, a pause by its own colour and the bar counting it down. A signal that
+    # hands a widget its words is also the wrong shape, and this one no longer does.
+    beat_meter_update_event = pyqtSignal(str)
     # The session plan, announced to whoever wants to shape or read it.
     # session_planned_event carries the session's start time and the SessionScript this
     # session is replaying (None when it is being drawn), and is emitted before the first
@@ -132,6 +138,7 @@ class BeatHandler(QObject):
         self.beat_meter_pause_timer = QTimer()
         self.beat_meter_pause_timer.timeout.connect(self.pause_loop)
         self.cur_pause_dur = None
+        self._pause_total = 0.0
 
         self.settings = settings
 
@@ -605,6 +612,18 @@ class BeatHandler(QObject):
         finally:
             self.beat_pattern_mutex.unlock()
 
+    def pause_progress(self) -> float:
+        """How much of the running pause is still to go, 1.0 down to 0.0.
+
+        0.0 when nothing is paused. The track draws this rather than a sentence, and it is
+        deliberately a fraction of the whole pause rather than of the track's lead time -
+        the track only looks 2.5 seconds ahead, so measured against that a ten-second
+        pause would sit motionless for seven of them and then move.
+        """
+        if not self.is_paused() or self._pause_total <= 0:
+            return 0.0
+        return max(0.0, min(1.0, self._pause_remaining() / self._pause_total))
+
     def _pause_remaining(self):
         """Seconds until the beat comes back, or 0 when no pause is running.
 
@@ -758,7 +777,7 @@ class BeatHandler(QObject):
         # this one stays up for the whole segment - it is a readout of what is running
         # rather than an announcement, and the announcing is done by the sweep and by the
         # notes visibly flying in ahead of it.
-        self.beat_meter_update_event.emit(f"New Beat! {self.current_beat_pattern}", "new_beat")
+        self.beat_meter_update_event.emit("new_beat")
         self.beat_change_event.emit(self.cur_freq, self.current_beat_pattern_name)
         self._schedule_next_note()
 
@@ -807,8 +826,11 @@ class BeatHandler(QObject):
         else:
             low, high = sorted((self.min_pause_dur, self.max_pause_dur))
             self.cur_pause_dur = random.randint(low, high)
+        # Kept so the track can draw how much of the pause is left; cur_pause_dur itself
+        # counts down, so it cannot answer "out of how long".
+        self._pause_total = float(self.cur_pause_dur)
         self.beat_meter_pause_timer.start(1000)
-        self.beat_meter_update_event.emit(f"Pause: {self.cur_pause_dur} seconds left.", "pause")
+        self.beat_meter_update_event.emit("pause")
         self.beat_paused_event.emit()
         return
 
@@ -821,12 +843,10 @@ class BeatHandler(QObject):
             self._begin_next_segment()
             return
         self.beat_meter_pause_timer.start(1000)
-        self.beat_meter_update_event.emit(f"Pause: {self.cur_pause_dur} seconds left.", "pause")
+        self.beat_meter_update_event.emit("pause")
 
-    def stop(self, message=None):
-        """Ends the rhythm. `message` is what the meter reads afterwards - the default says
-        the app is idle, which is wrong when a session is still running and only the beat is
-        over (a denied climax, see ClimaxHandler)."""
+    def stop(self):
+        """Ends the rhythm."""
         self.beat_meter_timer.stop()
         self.beat_meter_pause_timer.stop()
         self._plan.clear()
@@ -834,7 +854,8 @@ class BeatHandler(QObject):
         self._finale_at = None
         self._holding = False
         self.cur_freq = 0
-        self.beat_meter_update_event.emit(message or "Strokemeter appears here.", "idle")
+        self._pause_total = 0.0
+        self.beat_meter_update_event.emit("idle")
 
     def register_beat_pause_events(self, pause_start_event, pause_resume_event):
         self.beat_paused_event.connect(pause_start_event)
