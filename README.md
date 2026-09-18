@@ -84,13 +84,20 @@ device's advertised minimum command gap is respected, so a rhythm faster than it
 rate will skip targets.
 
 **Stopping:** rhythm pauses stop the device and resume with the next segment. `Space`
-(Panic), Emergency Stop, turning device output off, ending the session and quitting all
+(Panic), Stop Device, turning device output off, ending the session and quitting all
 cancel pending movement and send a stop. Panic leaves the media session running, as it
-always has, but device sync stays stopped until **Resume Device Sync** or a new session —
-the same after a dropped connection, and an old movement is never replayed onto a new one.
-A device that turns up *during* a session does start syncing on its own: that is the
-connection arriving, not a resume. On exit the window goes away immediately and the stop is
-delivered behind it.
+always has, but device sync stays stopped and **does not restart on its own** — a hidden
+window comes back by accident often enough that a device starting to move at that moment
+is the worst thing this app could do. **Resume Device**, next to Mute in the controls row,
+is the way back; so is starting a new session. Same after a dropped connection, and an old
+movement is never replayed onto a new one. A device that turns up *during* a session does
+start syncing on its own: that is the connection arriving, not a resume. On exit the window
+goes away immediately and the stop is delivered behind it.
+
+While device output is on, the controls row carries a **Device** button showing whether
+sync is running, stopping it in one click and offering the way back when something has
+latched it off. It is also the window's only sign that a network connection is open at
+all, which is reason enough for it to be there.
 
 Only devices exposing Buttplug v3 `LinearCmd` are driven, using their first linear
 actuator; anything else is left alone. Device mechanics and connection latency limit how

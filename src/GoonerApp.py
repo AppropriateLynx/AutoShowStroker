@@ -300,6 +300,8 @@ class GoonerApp(QMainWindow):
         controls_layout.addWidget(self.btn_next)
         controls_layout.addWidget(self.btn_edge)
         controls_layout.addWidget(self.btn_mute)
+        # Optional components add themselves here later - see add_control_widget.
+        self.controls_layout = controls_layout
 
         self.auto_play_timer = QTimer()
         self.auto_play_timer.timeout.connect(self.next_img_timer)
@@ -465,6 +467,15 @@ class GoonerApp(QMainWindow):
         self.panic_event.emit()
         self.set_muted(True)
         self.showMinimized()
+
+    def add_control_widget(self, widget):
+        """A slot in the controls row for an optional component (see src/plugins).
+
+        NoFocus is applied here rather than left to the caller for the same reason the
+        built-in buttons get it: a focused QPushButton swallows Space, and Space is Panic.
+        """
+        widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.controls_layout.addWidget(widget)
 
     def set_muted(self, muted: bool):
         self.is_muted = muted

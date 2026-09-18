@@ -34,6 +34,7 @@ class IntifacePlugin(QObject):
         self.controller = IntifaceController(main_app.settings, parent=self)
         self.sync = BeatSync(main_app.beat_handler, self.controller, parent=self)
         self.session_active = False
+        self._status_button = None
         self.controller.state_changed.connect(self.state_changed)
         self.controller.shutdown_finished.connect(self.shutdown_finished)
         self.controller.device_found.connect(self._on_device_found)
@@ -43,6 +44,7 @@ class IntifacePlugin(QObject):
         """Subscribes to the app. Every hook here is a signal the app already had, or a
         generic one - nothing in GoonerApp or BeatHandler names this plugin."""
         self.sync.attach()
+        self.main_app.add_control_widget(self.status_button(self.main_app))
         self.main_app.register_start_event(self._session_started)
         self.main_app.register_end_event(self._session_ended)
         self.main_app.panic_event.connect(self.emergency_stop)
@@ -96,6 +98,13 @@ class IntifacePlugin(QObject):
     def settings_tab(self, parent=None):
         from src.plugins.intiface.settings_widget import IntifaceSettingsWidget
         return IntifaceSettingsWidget(self, parent)
+
+    def status_button(self, parent=None):
+        """The device's control in the main window, built once and kept."""
+        from src.plugins.intiface.status_button import DeviceStatusButton
+        if self._status_button is None:
+            self._status_button = DeviceStatusButton(self, parent)
+        return self._status_button
 
     def shutdown(self):
         """Returns True when the app has to wait for shutdown_finished before closing."""

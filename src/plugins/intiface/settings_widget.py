@@ -33,8 +33,11 @@ ADDRESS_HINT = (
 )
 SYNC_NOTE = (
     "Panic, Emergency Stop, losing the device and losing the connection all leave device "
-    "sync stopped. Use Resume Device Sync or start a new session to continue. Rhythm "
-    "pauses resume on their own."
+    "sync stopped, and it stays stopped until you say otherwise - the window often comes "
+    "back by accident, and a device that starts moving on its own at that moment is the "
+    "worst thing this app could do. The <b>Resume Device</b> button next to Mute in the "
+    "main window is the way back; so is starting a new session, or the button below. "
+    "Rhythm pauses resume on their own."
 )
 
 

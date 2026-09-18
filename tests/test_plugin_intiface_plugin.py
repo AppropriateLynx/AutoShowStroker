@@ -79,3 +79,56 @@ def test_device_output_is_off_at_every_launch(qsettings):
     assert not fresh.enabled
     assert not fresh.has_worker
     assert fresh.server_url == "ws://a-machine-the-user-picked:1"
+
+
+# --- the device button in the controls row -------------------------------------------
+
+
+@pytest.fixture
+def button(app, plugin):
+    return app.intiface.status_button()
+
+
+def test_the_device_button_stays_out_of_the_way_until_output_is_on(app, plugin, button):
+    plugin.controller.enabled = False
+    plugin.state_changed.emit()
+    assert not button.isVisibleTo(app)
+    plugin.controller.enabled = True
+    plugin.state_changed.emit()
+    assert button.isVisibleTo(app)
+
+
+def test_after_panic_the_button_offers_the_way_back(app, plugin, button):
+    """Panic latches device sync off and keeps it off - the window is often restored by
+    accident, and a device starting to move on its own at that moment is the worst thing
+    this app could do. So the way back is a deliberate click, and it has to be somewhere
+    you can actually see it while a session is running."""
+    app.session_started_event.emit()
+    app.panic()
+    assert not plugin.armed
+    assert button.isEnabled()
+    assert "Resume" in button.text()
+    button.click()
+    assert plugin.armed
+
+
+def test_the_button_is_the_stop_while_sync_is_running(app, plugin, button):
+    app.session_started_event.emit()
+    assert plugin.armed
+    assert "Stop" in button.text()
+    button.click()
+    assert not plugin.armed
+
+
+def test_the_button_says_why_when_there_is_nothing_to_resume(app, plugin, button):
+    plugin.controller.device_name = ""
+    plugin.state_changed.emit()
+    assert not button.isEnabled()
+    assert "No device" in button.text()
+
+
+def test_the_device_button_never_takes_keyboard_focus(app, plugin, button):
+    """Space is Panic, and a focused QPushButton swallows Space before keyPressEvent ever
+    sees it. A device button that ate the panic key would be a special kind of bad."""
+    from PyQt6.QtCore import Qt
+    assert button.focusPolicy() == Qt.FocusPolicy.NoFocus
