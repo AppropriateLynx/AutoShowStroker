@@ -1,5 +1,6 @@
 """Protocol tests use a local fake server, never Intiface or physical hardware."""
 import json
+import logging
 import time
 
 import pytest
@@ -7,7 +8,8 @@ from PyQt6.QtCore import QThread
 from PyQt6.QtNetwork import QHostAddress
 from PyQt6.QtWebSockets import QWebSocketServer
 
-from src.IntifaceController import IntifaceController
+from src.plugins.intiface import controller as controller_module
+from src.plugins.intiface.controller import IntifaceController
 
 
 def linear_device(index=7, name="Test Linear"):
@@ -122,8 +124,7 @@ def test_linear_capability_accepts_simulated_device_metadata(controller, server,
 
 def test_predictive_target_uses_remaining_deadline_and_configured_range(controller, server, qtbot):
     connect(controller, server, qtbot)
-    controller.session_started()
-    controller.on_movement_planned(1, True, time.monotonic() + 0.5)
+    controller.on_target(True, time.monotonic() + 0.5)
     qtbot.waitUntil(lambda: bool(commands(server, "LinearCmd")))
     move = commands(server, "LinearCmd")[-1]
     assert move["DeviceIndex"] == 7
@@ -131,89 +132,67 @@ def test_predictive_target_uses_remaining_deadline_and_configured_range(controll
     assert vector["Index"] == 0
     assert vector["Position"] == 0.85
     assert 1 <= vector["Duration"] <= 500
-    controller.on_movement_planned(2, False, time.monotonic() + 0.5)
+    controller.on_target(False, time.monotonic() + 0.5)
     qtbot.waitUntil(lambda: len(commands(server, "LinearCmd")) == 2)
     assert commands(server, "LinearCmd")[-1]["Vectors"][0]["Position"] == 0.15
 
 
-def test_expired_and_duplicate_predictions_are_not_sent(controller, server, qtbot):
+def test_a_target_whose_note_has_already_landed_is_never_sent(controller, server, qtbot):
+    """Its whole meaning is "be there by then". Once then has passed, sending it would
+    only make the device travel to an endpoint the beat has moved on from."""
     connect(controller, server, qtbot)
-    controller.session_started()
-    controller.on_movement_planned(1, True, time.monotonic() - 1)
-    deadline = time.monotonic() + 0.5
-    controller.on_movement_planned(2, False, deadline)
-    controller.on_movement_planned(2, False, deadline)
+    controller.on_target(True, time.monotonic() - 1)
+    qtbot.wait(80)
+    assert not commands(server, "LinearCmd")
+    controller.on_target(False, time.monotonic() + 0.5)
     qtbot.waitUntil(lambda: len(commands(server, "LinearCmd")) == 1)
-    qtbot.wait(80)
-    assert len(commands(server, "LinearCmd")) == 1
 
 
-def test_emergency_stop_stays_latched_until_explicit_resume(controller, server, qtbot):
+def test_cancelling_motion_stops_the_device_and_voids_what_was_queued(controller, server, qtbot):
+    """The epoch gate exists for the gap between the two threads: a target handed over a
+    moment before the stop must not still arrive a moment after it."""
     connect(controller, server, qtbot)
-    controller.session_started()
-    controller.emergency_stop()
-    qtbot.waitUntil(lambda: bool(commands(server, "StopDeviceCmd")))
-    controller.on_movement_planned(1, True, time.monotonic() + 1)
+    controller.on_target(True, time.monotonic() + 1)
+    controller.cancel_motion()
+    qtbot.waitUntil(lambda: bool(commands(server, "StopAllDevices")))
     qtbot.wait(80)
     assert not commands(server, "LinearCmd")
-    assert not controller.armed
-    controller.resume_sync()
-    controller.on_movement_planned(2, False, time.monotonic() + 1)
-    qtbot.waitUntil(lambda: bool(commands(server, "LinearCmd")))
 
 
-def test_pause_stops_but_next_segment_can_resume(controller, server, qtbot):
+def test_a_test_move_uses_the_configured_endpoints(controller, server, qtbot):
     connect(controller, server, qtbot)
-    controller.session_started()
-    controller.pause()
-    qtbot.waitUntil(lambda: bool(commands(server, "StopDeviceCmd")))
-    controller.on_movement_planned(1, True, time.monotonic() + 1)
-    qtbot.wait(50)
-    assert not commands(server, "LinearCmd")
-    controller.pause_ended()
-    controller.on_movement_planned(2, True, time.monotonic() + 1)
-    qtbot.waitUntil(lambda: bool(commands(server, "LinearCmd")))
-
-
-def test_test_move_is_bounded_and_does_not_resume_session_sync(controller, server, qtbot):
-    connect(controller, server, qtbot)
-    controller.session_started()
     controller.test_up()
     qtbot.waitUntil(lambda: bool(commands(server, "LinearCmd")))
     assert commands(server, "LinearCmd")[-1]["Vectors"][0]["Position"] == 0.85
-    assert not controller.armed
     controller.test_down()
     qtbot.waitUntil(lambda: len(commands(server, "LinearCmd")) == 2)
     assert commands(server, "LinearCmd")[-1]["Vectors"][0]["Position"] == 0.15
 
 
-def test_device_removal_discards_motion_and_requires_resume(controller, server, qtbot):
+def test_a_movement_queued_for_a_lost_device_never_reaches_its_replacement(controller, server, qtbot):
     connect(controller, server, qtbot)
-    controller.session_started()
     server.clients[-1].sendTextMessage(json.dumps([{"DeviceRemoved": {"Id": 0, "DeviceIndex": 7}}]))
     qtbot.waitUntil(lambda: not controller.device_name)
-    controller.on_movement_planned(1, True, time.monotonic() + 1)
+    controller.on_target(True, time.monotonic() + 1)
     server.clients[-1].sendTextMessage(json.dumps([{"DeviceAdded": {"Id": 0, **linear_device(9)}}]))
     qtbot.waitUntil(lambda: bool(controller.device_name))
-    assert not controller.armed
+    qtbot.wait(80)
     assert not commands(server, "LinearCmd")
 
 
-def test_reconnect_does_not_replay_or_resume_motion(controller, server, qtbot):
+def test_a_reconnect_never_replays_what_the_old_connection_was_holding(controller, server, qtbot):
     connect(controller, server, qtbot)
-    controller.session_started()
     server.clients[-1].abort()
     qtbot.waitUntil(lambda: not controller.device_name)
-    controller.on_movement_planned(1, True, time.monotonic() + 10)
+    controller.on_target(True, time.monotonic() + 10)
     qtbot.waitUntil(lambda: len(server.clients) == 2 and bool(controller.device_name), timeout=5000)
-    assert not controller.armed
     assert not commands(server, "LinearCmd")
 
 
 def test_disable_stops_and_does_not_reconnect(controller, server, qtbot):
     connect(controller, server, qtbot)
     controller.configure(False, controller.server_url, 0.15, 0.85)
-    qtbot.waitUntil(lambda: bool(commands(server, "StopDeviceCmd")))
+    qtbot.waitUntil(lambda: bool(commands(server, "StopAllDevices")))
     qtbot.waitUntil(lambda: not controller.device_name)
     assert not controller.enabled
 
@@ -222,18 +201,17 @@ def test_shutdown_sends_stop_before_worker_finishes(controller, server, qtbot):
     connect(controller, server, qtbot)
     controller.shutdown()
     qtbot.waitUntil(lambda: not controller.has_worker)
-    assert commands(server, "StopDeviceCmd")
+    assert commands(server, "StopAllDevices")
 
 
 def test_stop_cancels_movement_waiting_for_device_timing_gap(controller, server, qtbot):
     server.devices[0]["DeviceMessageTimingGap"] = 300
     connect(controller, server, qtbot)
-    controller.session_started()
-    controller.on_movement_planned(1, True, time.monotonic() + 1)
+    controller.on_target(True, time.monotonic() + 1)
     qtbot.waitUntil(lambda: len(commands(server, "LinearCmd")) == 1)
-    controller.on_movement_planned(2, False, time.monotonic() + 1)
-    controller.emergency_stop()
-    qtbot.waitUntil(lambda: bool(commands(server, "StopDeviceCmd")))
+    controller.on_target(False, time.monotonic() + 1)
+    controller.cancel_motion()
+    qtbot.waitUntil(lambda: bool(commands(server, "StopAllDevices")))
     qtbot.wait(350)
     assert len(commands(server, "LinearCmd")) == 1
 
@@ -241,52 +219,48 @@ def test_stop_cancels_movement_waiting_for_device_timing_gap(controller, server,
 def test_device_timing_gap_coalesces_to_latest_unexpired_target(controller, server, qtbot):
     server.devices[0]["DeviceMessageTimingGap"] = 200
     connect(controller, server, qtbot)
-    controller.session_started()
-    controller.on_movement_planned(1, True, time.monotonic() + 1)
+    controller.on_target(True, time.monotonic() + 1)
     qtbot.waitUntil(lambda: len(commands(server, "LinearCmd")) == 1)
-    controller.on_movement_planned(2, False, time.monotonic() + 0.03)
-    controller.on_movement_planned(3, True, time.monotonic() + 1)
+    controller.on_target(False, time.monotonic() + 0.03)
+    controller.on_target(True, time.monotonic() + 1)
     qtbot.waitUntil(lambda: len(commands(server, "LinearCmd")) == 2)
     assert commands(server, "LinearCmd")[-1]["Vectors"][0]["Position"] == 0.85
 
 
-def test_unanswered_commands_disconnect_and_disarm(controller, server, qtbot, monkeypatch):
-    monkeypatch.setattr("src.IntifaceController.REQUEST_TIMEOUT_MS", 300)
+def test_unanswered_commands_disconnect_and_stop(controller, server, qtbot, monkeypatch):
+    monkeypatch.setattr("src.plugins.intiface.controller.REQUEST_TIMEOUT_MS", 300)
     connect(controller, server, qtbot)
-    controller.session_started()
     server.respond = False
-    controller.on_movement_planned(1, True, time.monotonic() + 1)
+    controller.on_target(True, time.monotonic() + 1)
     qtbot.waitUntil(lambda: not controller.device_name, timeout=2000)
-    assert not controller.armed
     assert "stopped responding" in controller.status
 
 
 def test_malformed_server_message_stops_without_a_slot_exception(controller, server, qtbot):
     connect(controller, server, qtbot)
-    controller.session_started()
     server.clients[-1].sendTextMessage('{broken')
     qtbot.waitUntil(lambda: not controller.device_name)
-    assert not controller.armed
-    assert commands(server, "StopDeviceCmd")
+    assert commands(server, "StopAllDevices")
 
 
 def test_unsupported_devices_never_receive_motion(controller, server, qtbot):
     server.devices = [{"DeviceIndex": 0, "DeviceName": "Not linear", "DeviceMessages": {"ScalarCmd": [{}]}}]
     controller.configure(True, f"ws://127.0.0.1:{server.serverPort()}", 0.1, 0.9)
     qtbot.waitUntil(lambda: "no linear device" in controller.status)
-    controller.session_started()
     controller.test_up()
     qtbot.wait(50)
     assert not commands(server, "LinearCmd")
 
 
-def test_window_close_waits_for_device_shutdown_without_blocking(app, server, qtbot):
-    connect(app.intiface_controller, server, qtbot)
+def test_the_window_goes_at_once_and_the_device_is_stopped_behind_it(app, server, qtbot):
+    """In an app with a panic key, off-the-screen is the part that has to be instant.
+    Waiting for a socket to close before the window disappears is the wrong way round."""
+    connect(app.intiface.controller, server, qtbot)
     app.show()
     app.close()
-    qtbot.waitUntil(lambda: not app.intiface_controller.has_worker, timeout=3000)
-    qtbot.waitUntil(lambda: not app.isVisible())
-    assert commands(server, "StopDeviceCmd")
+    assert not app.isVisible()
+    qtbot.waitUntil(lambda: not app.intiface.controller.has_worker, timeout=3000)
+    assert commands(server, "StopAllDevices")
 
 
 def test_invalid_device_gap_is_rejected_without_a_slot_exception(controller, server, qtbot):
@@ -294,3 +268,87 @@ def test_invalid_device_gap_is_rejected_without_a_slot_exception(controller, ser
     controller.configure(True, f"ws://127.0.0.1:{server.serverPort()}", 0.1, 0.9)
     qtbot.waitUntil(lambda: "Invalid Intiface response" in controller.status, timeout=1500)
     assert not controller.device_name
+
+
+# --- safety boundary -----------------------------------------------------------------
+# Everything below is about what happens when the far end is broken or hostile. A device
+# that keeps moving because the app fell over is the one failure mode worth this much
+# test code.
+
+
+def test_a_command_is_never_sent_with_the_motion_lock_held(controller, server, qtbot, monkeypatch):
+    """Qt can emit errorOccurred synchronously from inside sendTextMessage on a half-open
+    socket, and that lands back in _fail -> stop -> _clear_connection -> invalidate(),
+    which takes this same lock on this same thread. Holding it across the write deadlocks
+    the worker with the lock held - and the next emergency stop from the GUI thread then
+    blocks on it too, freezing the window with a device still running."""
+    original = controller_module._IntifaceWorker._send
+    lock_was_free = []
+
+    def checking_send(self, kind, **fields):
+        if kind == "LinearCmd":
+            acquired = self._gate.lock.acquire(blocking=False)
+            lock_was_free.append(acquired)
+            if acquired:
+                self._gate.lock.release()
+        return original(self, kind, **fields)
+
+    monkeypatch.setattr(controller_module._IntifaceWorker, "_send", checking_send)
+    connect(controller, server, qtbot)
+    controller.on_target(True, time.monotonic() + 1)
+    qtbot.waitUntil(lambda: bool(lock_was_free))
+    assert all(lock_was_free)
+
+
+def test_a_message_that_blows_the_parser_stack_stops_rather_than_killing_the_process(
+    controller, server, qtbot,
+):
+    """RecursionError is not one of the parsing errors, so it escaped the slot - and an
+    exception escaping a Qt slot takes the process with it. A process that is gone sends
+    no stop, which makes the one failure nobody anticipated the one that leaves a device
+    running."""
+    connect(controller, server, qtbot)
+    server.clients[-1].sendTextMessage("[" * 5000 + "]" * 5000)
+    qtbot.waitUntil(lambda: not controller.device_name)
+    assert commands(server, "StopAllDevices")
+    assert "Invalid Intiface response" in controller.status
+
+
+def test_a_stop_still_goes_out_after_the_device_has_been_removed(controller, server, qtbot):
+    """StopDeviceCmd needs a device index and there no longer is one. Hardware working
+    through a Duration it was already handed is exactly when a stop matters most."""
+    connect(controller, server, qtbot)
+    server.clients[-1].sendTextMessage(json.dumps([{"DeviceRemoved": {"Id": 0, "DeviceIndex": 7}}]))
+    qtbot.waitUntil(lambda: not controller.device_name)
+    controller.shutdown()
+    qtbot.waitUntil(lambda: not controller.has_worker, timeout=3000)
+    assert commands(server, "StopAllDevices")
+
+
+def test_a_hostile_heartbeat_interval_cannot_make_the_app_spin(controller, server, qtbot):
+    """A server asking to be pinged every millisecond gets a hundred milliseconds. Each
+    ping books an entry in the pending table, so obeying that literally would be a
+    thousand messages a second and a table that never empties."""
+    server.max_ping_time = 1
+    connect(controller, server, qtbot)
+    qtbot.wait(400)
+    assert 1 <= len(commands(server, "Ping")) <= 8
+
+
+def test_the_server_address_never_reaches_the_log(controller, server, qtbot):
+    """It is the user\'s address and it may name a machine on their network, which puts
+    it under the same rule as a media folder path."""
+    records = []
+    handler = logging.Handler()
+    handler.emit = records.append
+    logging.getLogger("gooner").addHandler(handler)
+    try:
+        connect(controller, server, qtbot)
+        server.clients[-1].sendTextMessage("{broken")
+        qtbot.waitUntil(lambda: not controller.device_name)
+    finally:
+        logging.getLogger("gooner").removeHandler(handler)
+    written = "\n".join(handler.format(record) for record in records)
+    assert str(server.serverPort()) not in written
+    assert "127.0.0.1" not in written
+    assert "Test Linear" not in written

@@ -721,3 +721,22 @@ def test_a_pause_never_counts_down_from_zero(handler):
     handler.start_pause()
 
     assert handler.cur_pause_dur == 1
+
+
+def test_note_scheduled_event_fires_for_every_note_the_rhythm_commits_to(qsettings, qtbot):
+    """The one hook device output hangs off. It says nothing about what the note is -
+    upcoming_beats() answers that - only that the last prediction is now stale."""
+    handler = BeatHandler(settings=qsettings)
+    handler.ramping_active = False
+    handler.min_beat_freq = handler.max_beat_freq = 4.0
+    handler.min_beat_dur = handler.max_beat_dur = 30.0
+    handler.pause_chance = 0
+    handler.selected_beat_patterns = ["Standard Beat"]
+    scheduled = []
+    handler.note_scheduled_event.connect(lambda: scheduled.append(True))
+    handler.start_beat()
+    assert len(scheduled) == 1
+    handler.beat()
+    handler.beat()
+    assert len(scheduled) == 3
+    handler.stop()

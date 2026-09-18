@@ -17,7 +17,6 @@ from PyQt6.QtWidgets import (
 
 from src import applog, theme
 from src.CustomPhraseFilesDialog import CustomPhraseFilesDialog
-from src.IntifaceSettingsWidget import IntifaceSettingsWidget
 from src.PatternEditorDialog import PatternEditorDialog
 
 log = applog.get_logger(__name__)
@@ -205,9 +204,13 @@ class SettingsDialog(QDialog):
         )
         self._current_layout.addStretch()
 
-        device_layout = self._new_tab("Device")
-        self.intiface_tab = IntifaceSettingsWidget(self.main_app, self)
-        device_layout.addWidget(self.intiface_tab)
+        # Only when the optional plugin is installed - the tab is its UI, not the
+        # dialog's, so the dialog asks it for one rather than building it itself.
+        self.intiface_tab = None
+        if self.main_app.intiface:
+            plugin = self.main_app.intiface
+            self.intiface_tab = plugin.settings_tab(self)
+            self._new_tab(plugin.TAB_TITLE).addWidget(self.intiface_tab)
 
         self.layout.addWidget(self.tabs)
 
@@ -312,9 +315,10 @@ class SettingsDialog(QDialog):
 
     def _validation_error(self):
         """First reason these settings can't be saved, or None if they're fine."""
-        device_error = self.intiface_tab.validation_error()
-        if device_error:
-            return device_error
+        if self.intiface_tab:
+            device_error = self.intiface_tab.validation_error()
+            if device_error:
+                return device_error
         if not any(checkbox.isChecked() for checkbox in self.beat_checkboxes.values()):
             return "At least one rhythm has to stay active under 'Active Rhythms'."
         for min_name, max_name, label in self.MIN_MAX_PAIRS:
@@ -414,7 +418,8 @@ class SettingsDialog(QDialog):
         if self.main_app.is_running:
             self.climax_handler.settings_changed()
             self.beat_handler.replan_from_next_segment()
-        self.intiface_tab.apply_settings()
+        if self.intiface_tab:
+            self.intiface_tab.apply_settings()
         log.info("Settings saved (%d active rhythms)", len(new_selected_patterns))
         self.accept()
 

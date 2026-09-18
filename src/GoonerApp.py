@@ -28,8 +28,8 @@ from src.BeatTrackWidget import BeatTrackWidget
 from src.CalloutHandler import CalloutHandler
 from src.ClimaxHandler import ClimaxHandler
 from src.HelpDialog import HelpDialog
-from src.IntifaceController import IntifaceController
 from src.MediaFolderPickerDialog import MediaFolderPickerDialog
+from src.plugins import load_optional_plugin
 from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
 from src.SessionRecorder import SessionRecorder
@@ -79,6 +79,10 @@ class GoonerApp(QMainWindow):
     media_repeated_event = pyqtSignal()
     media_skipped_event = pyqtSignal()
     media_shown_event = pyqtSignal(str)
+    # The panic key was pressed. Anything that has to become harmless right now - not at
+    # the end of the session, now - hangs off here rather than being called by name from
+    # panic() itself.
+    panic_event = pyqtSignal()
 
     # Single source of truth: __init__ reads these as its fallbacks, and the
     # SettingsDialog "Reset to defaults" buttons read the same dict.
@@ -414,8 +418,11 @@ class GoonerApp(QMainWindow):
 
         self.update_checker = UpdateChecker(get_current_version())
 
-        self.intiface_controller = IntifaceController(self.settings, parent=self)
-        self.intiface_controller.shutdown_finished.connect(self.close)
+        # Optional and genuinely removable: delete src/plugins/intiface/ and this is None,
+        # the Device tab is never built, and nothing else in the app notices.
+        self.intiface = load_optional_plugin("intiface", self)
+        if self.intiface:
+            self.intiface.shutdown_finished.connect(self.close)
 
         self._setup_signal_handler()
 
@@ -455,7 +462,7 @@ class GoonerApp(QMainWindow):
         """Instant hide-and-silence: minimizes the window and mutes audio in one keypress.
         Deliberately does not stop/pause the session (see Ctrl+Space) or auto-unmute on
         restore - the user decides when sound comes back, same as toggling Mute normally."""
-        self.intiface_controller.emergency_stop()
+        self.panic_event.emit()
         self.set_muted(True)
         self.showMinimized()
 
@@ -478,12 +485,8 @@ class GoonerApp(QMainWindow):
         self.callout_label.setText("")
 
     def _setup_signal_handler(self):
-        self.register_start_event(self.intiface_controller.session_started)
-        self.register_end_event(self.intiface_controller.session_ended)
-        self.beat_handler.linear_movement_planned.connect(self.intiface_controller.on_movement_planned)
-        self.beat_handler.register_beat_pause_events(
-            self.intiface_controller.pause, self.intiface_controller.pause_ended,
-        )
+        if self.intiface:
+            self.intiface.attach()
         self.beat_handler.register_beat_pause_events(self.score_tracker.beat_paused, self.score_tracker.beat_resumed)
         self.beat_handler.register_beat_pause_events(self.callout_handler.pause_started,
                                                      self.callout_handler.pause_ended)
@@ -890,7 +893,6 @@ class GoonerApp(QMainWindow):
         settings_dialog.deleteLater()
 
     def stop(self):
-        self.intiface_controller.emergency_stop()
         if not self.is_running:
             return
         if self.ask_for_outcome and not self._outcome_answered:
@@ -908,16 +910,18 @@ class GoonerApp(QMainWindow):
         """
         if self.is_running:
             self._end_session(show_statistics=False)
-        self.intiface_controller.shutdown()
-        if self.intiface_controller.has_worker:
-            # Keep the event loop responsive while the worker delivers Stop and closes.
-            # shutdown_finished calls close() again once its thread has exited.
+        if self.intiface and self.intiface.shutdown():
+            # The window goes away first and the teardown happens behind it. In an app
+            # with a panic key, "gone from the screen" is the part that has to be
+            # instant - waiting half a second for a socket to close before the window
+            # disappears is exactly the wrong way round. The event loop stays alive to
+            # deliver the device's stop, and shutdown_finished calls close() again.
+            self.hide()
             event.ignore()
             return
         super().closeEvent(event)
 
     def _end_session(self, show_statistics: bool):
-        self.intiface_controller.emergency_stop()
         self.auto_play_timer.stop()
         # Playback was left running: the video kept playing (with sound) behind the
         # modal statistics dialog, and its EndOfMedia then restarted the whole
@@ -979,12 +983,6 @@ class GoonerApp(QMainWindow):
         # the first clip of a session was cut after a random 0.5-4s - and in a replay it
         # burned a second recorded gap.
         self.load_current_index()
-
-    def resume_intiface_sync(self):
-        self.intiface_controller.resume_sync()
-        movement = self.beat_handler.next_linear_movement()
-        if movement is not None:
-            self.intiface_controller.on_movement_planned(*movement)
 
     def _on_climax_outcome(self, outcome):
         log.info("Climax outcome: %s", outcome)
