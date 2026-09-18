@@ -41,11 +41,6 @@ class BeatSync(QObject):
         # The direction the next audible note will be shown as. Mirrors BeatHandler's
         # is_red, which starts on DOWN and is deliberately not reset between sessions.
         self._next_up = False
-        self._direction_shown = False
-        # A pattern-change highlight in progress: how many notes of it are left, and the
-        # direction the meter froze at and will resume on.
-        self._highlight_left = 0
-        self._frozen_up = False
 
     def attach(self):
         handler = self.beat_handler
@@ -90,30 +85,12 @@ class BeatSync(QObject):
 
     def _on_beat(self):
         self._note_id += 1
-        if self._highlight_left > 0:
-            self._highlight_left -= 1
-            self._aim_at_the_end_of_the_highlight()
-        elif not self._direction_shown:
-            self._next_up = not self._next_up
-        self._direction_shown = False
 
     def _on_meter(self, _text, kind):
-        if kind == "new_beat":
-            # The meter is about to show the new pattern instead of UP/DOWN for a few
-            # notes, with its direction frozen where it stands. Stopping the device for
-            # that long would be absurd, so it keeps stroking - counted backwards from
-            # the direction the meter will resume on, so the two are already in step
-            # when it does rather than a stroke apart for the rest of the segment.
-            self._highlight_left = self.beat_handler.NEW_BEAT_HIGHLIGHT_NOTES
-            self._frozen_up = self._next_up
-            self._aim_at_the_end_of_the_highlight()
-        elif kind in ("up", "down"):
-            self._highlight_left = 0
+        # Every audible note carries a direction, so the device never has to guess at one:
+        # whatever the meter just showed, the next note is the other way.
+        if kind in ("up", "down"):
             self._next_up = kind == "down"
-            self._direction_shown = True
-
-    def _aim_at_the_end_of_the_highlight(self):
-        self._next_up = self._frozen_up != bool(self._highlight_left % 2)
 
     def _on_session_planned(self, _start_time, _script):
         self.paused = False

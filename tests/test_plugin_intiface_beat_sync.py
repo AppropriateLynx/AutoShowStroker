@@ -75,24 +75,20 @@ def test_targets_alternate_and_match_the_direction_the_meter_shows(beat, sync):
     assert all(a != b for a, b in zip(directions, directions[1:], strict=False))
 
 
-def test_the_device_is_in_step_again_the_moment_a_highlight_ends(beat, sync):
-    """The meter shows "New Beat!" instead of a direction for the first few notes of
-    every segment, a session's opening segment included. The device keeps stroking
-    through that and has to be on the right endpoint when UP/DOWN comes back - being one
-    stroke out for the rest of the segment is exactly what this counts its way around."""
+def test_every_note_carries_a_direction_and_the_device_is_on_it(beat, sync):
+    """The meter used to hold "New Beat!" for five notes and show no direction on any of
+    them, which left anything stroking along to guess its way across the gap. It does not
+    any more - the note track announces a new rhythm by sweeping it in long before it
+    arrives, so there is nothing left for the freeze to say."""
     shown = []
     beat.beat_meter_update_event.connect(lambda _text, kind: shown.append(kind))
     beat.start_beat()
-    for _ in range(beat.NEW_BEAT_HIGHLIGHT_NOTES):
+    for _ in range(12):
+        predicted = sync.controller.targets[-1][0]
+        shown.clear()
         beat.beat()
-    assert "up" not in shown and "down" not in shown
-    directions = [up for up, _deadline in sync.controller.targets]
-    assert all(a != b for a, b in zip(directions, directions[1:], strict=False))
-
-    predicted = sync.controller.targets[-1][0]
-    shown.clear()
-    beat.beat()
-    assert predicted == ("up" in shown)
+        assert "up" in shown or "down" in shown, "a note with no direction on it"
+        assert predicted == ("up" in shown)
 
 
 def test_a_rhythm_pause_cancels_whatever_the_device_is_doing(beat, sync):

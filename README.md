@@ -73,9 +73,10 @@ against physical hardware yet; tell us how it went on the Discord.
 **Timing:** a target is sent *before* the beat it belongs to, with the time remaining until
 that beat as the movement duration — the device interpolates towards UP or DOWN itself, and
 the app never streams intermediate positions. Silent pattern steps extend the travel time
-without adding an endpoint change. During the meter's pattern-change highlight, when it
-shows the new rhythm instead of UP/DOWN, the device keeps stroking and is counted back into
-step for the note the direction returns on.
+without adding an endpoint change. Every audible note carries a direction, so the device
+is never guessing which way to go: the Strokemeter used to withhold UP/DOWN for the first
+few notes of a segment while it named the new rhythm instead, which the note track has
+since made redundant — it sweeps the new rhythm in well before it arrives.
 
 The app's frequency is **audible beats per second**, not full stroke cycles. With Standard
 Beat at 2 Hz each direction takes about 500 ms and a complete up/down cycle about one

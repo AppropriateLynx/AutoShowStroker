@@ -42,10 +42,6 @@ class BeatHandler(QObject):
     # Hard cap on upcoming_beats() output - at the top of the frequency range with the
     # shortest steps a long horizon would otherwise build a pointlessly huge list.
     MAX_LOOKAHEAD_NOTES = 64
-    # How many notes the meter spends showing "New Beat!" instead of UP/DOWN. Its
-    # direction is frozen for exactly that long and then carries on where it left off.
-    NEW_BEAT_HIGHLIGHT_NOTES = 5
-
     # How many segments are held ready beyond the running one. Deep enough that the
     # finale is always placed while it is still unstarted (and so still editable), and
     # that upcoming_beats() can see past the current segment; shallow enough that a
@@ -133,8 +129,6 @@ class BeatHandler(QObject):
     def __init__(self, beat_file=None, settings=None, data_store=None):
         super().__init__()
         self.data_store = data_store
-        self.beat_changed_counter = self.NEW_BEAT_HIGHLIGHT_NOTES
-        self.just_changed_beat = False
         self.beat_meter_pause_timer = QTimer()
         self.beat_meter_pause_timer.timeout.connect(self.pause_loop)
         self.cur_pause_dur = None
@@ -761,9 +755,11 @@ class BeatHandler(QObject):
             self.beat_pattern_mutex.unlock()
 
         # Mark a new beat or speed with a different color for one beat:
+        # Names the rhythm now playing. The track ignores the UP/DOWN blink captions, so
+        # this one stays up for the whole segment - it is a readout of what is running
+        # rather than an announcement, and the announcing is done by the sweep and by the
+        # notes visibly flying in ahead of it.
         self.beat_meter_update_event.emit(f"New Beat! {self.current_beat_pattern}", "new_beat")
-        self.just_changed_beat = True
-        self.beat_changed_counter = self.NEW_BEAT_HIGHLIGHT_NOTES
         self.beat_change_event.emit(self.cur_freq, self.current_beat_pattern_name)
         self._schedule_next_note()
 
@@ -798,12 +794,13 @@ class BeatHandler(QObject):
 
         if play_beat:
             self.play_beat_sound()
-            if not self.just_changed_beat:
-                self.toggle_blink()
-            else:
-                self.beat_changed_counter -=1
-                if self.beat_changed_counter == 0:
-                    self.just_changed_beat = False
+            # Every audible note gets a direction. The meter used to withhold one for the
+            # first five notes of a segment while it showed the new pattern instead - a
+            # flag the note track has since made redundant, since it sweeps the new
+            # rhythm in well before it arrives. Withholding it was not free: an odd-length
+            # gap in the direction sequence puts anything moving along with the beat out
+            # of step with the meter by exactly one, for as long as the segment lasts.
+            self.toggle_blink()
             self.beat_event.emit()
         self.reset_beat_timer()
 
