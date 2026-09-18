@@ -352,3 +352,41 @@ def test_the_server_address_never_reaches_the_log(controller, server, qtbot):
     assert str(server.serverPort()) not in written
     assert "127.0.0.1" not in written
     assert "Test Linear" not in written
+
+
+def dead_port():
+    """A port on loopback that is definitely closed: bind one, note it, let it go."""
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def test_a_failure_teardown_cannot_restart_itself(qtbot):
+    """QWebSocket.close() on a socket whose connect attempt has just failed emits
+    errorOccurred again, synchronously, straight back into the handler that called it.
+    Without a latch the teardown re-enters itself for as long as the stack lasts and the
+    app dies of a RecursionError - inside a Qt slot, so it takes the process with it."""
+    worker = controller_module._IntifaceWorker(controller_module._MotionGate())
+    worker.initialize()
+    worker._enabled = True
+    closes = []
+
+    def reentrant_close():
+        closes.append(True)
+        worker._fail("the error that closing caused")
+
+    worker._socket.close = reentrant_close
+    worker._fail("the first error")
+    assert len(closes) == 1
+    worker._retry.stop()
+
+
+def test_connecting_where_nothing_listens_reports_it_and_keeps_the_app_alive(controller, qtbot):
+    """The first thing most people will do is enable this before starting the server."""
+    controller.configure(True, f"ws://127.0.0.1:{dead_port()}", 0.25, 0.75)
+    qtbot.waitUntil(lambda: "retrying" in controller.status, timeout=5000)
+    qtbot.wait(300)
+    assert not controller.device_name
+    assert controller.has_worker

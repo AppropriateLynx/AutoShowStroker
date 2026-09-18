@@ -77,6 +77,7 @@ class _IntifaceWorker(QObject):
         self._last_move_at = 0.0
         self._shutdown_stop_id = None
         self._failure_status = ""
+        self._failing = False
 
     @pyqtSlot()
     def initialize(self):
@@ -158,10 +159,26 @@ class _IntifaceWorker(QObject):
             self._retry.start(RECONNECT_MS)
 
     def _fail(self, message):
-        self._failure_status = message
-        self.stop()
-        self._socket.close()
-        self._clear_connection()
+        """Tears the connection down and arranges the retry.
+
+        The latch is not defensive programming, it is the whole of what stands between
+        this and a crash. Closing a socket whose connect attempt has just failed makes Qt
+        emit errorOccurred again, synchronously, from inside close() - straight back into
+        here. Without the latch the teardown restarts itself for as long as the stack
+        lasts, and a RecursionError raised inside a Qt slot takes the process down. That
+        is what happens the very first time somebody enables device output before starting
+        their server, which is to say: most first times.
+        """
+        if self._failing:
+            return
+        self._failing = True
+        try:
+            self._failure_status = message
+            self.stop()
+            self._socket.close()
+            self._clear_connection()
+        finally:
+            self._failing = False
         if self._closing:
             self._finish_shutdown()
         elif self._enabled:
