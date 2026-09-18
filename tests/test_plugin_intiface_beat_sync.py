@@ -154,3 +154,41 @@ def test_arming_mid_note_re_sends_the_note_already_running(beat, sync):
     sync.controller.targets.clear()
     sync.arm()
     assert len(sync.controller.targets) == 1
+
+
+def _script(segments):
+    from src.SessionScript import SessionScript
+
+    return SessionScript({
+        "duration_sec": sum(s["duration_sec"] for s in segments), "segments": segments,
+        "custom_patterns": {}, "climax": None, "fake_climaxes": [], "media": [],
+    })
+
+
+def test_a_replayed_session_drives_the_device_off_its_recorded_rhythm(beat, sync):
+    """A replay reads its segments instead of drawing them, so nothing about the rhythm
+    is rolled. The device has to follow it exactly the same way - and at the recorded
+    frequency, not whatever the settings happen to say today."""
+    beat.min_beat_freq = beat.max_beat_freq = 9.0
+    script = _script([
+        {"kind": "beat", "pattern": "Standard Beat", "freq": 1.0, "duration_sec": 30.0},
+    ])
+    now = time.monotonic()
+    beat.start_beat(script=script)
+    assert len(sync.controller.targets) == 1
+    assert 0.9 <= sync.controller.targets[0][1] - now <= 1.1
+
+
+def test_a_replayed_pause_stops_the_device_and_the_rhythm_behind_it_starts_it(beat, sync):
+    beat.start_beat(script=_script([
+        {"kind": "pause", "pattern": None, "freq": None, "duration_sec": 2.0},
+        {"kind": "beat", "pattern": "Standard Beat", "freq": 2.0, "duration_sec": 30.0},
+    ]))
+    assert sync.paused
+    assert sync.controller.cancelled
+    assert sync.controller.targets == []
+    beat.beat_meter_pause_timer.stop()
+    beat.cur_pause_dur = 0
+    beat.pause_loop()
+    assert not sync.paused
+    assert len(sync.controller.targets) == 1

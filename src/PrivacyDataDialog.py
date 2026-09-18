@@ -89,6 +89,9 @@ class PrivacyDataDialog(QDialog):
         layout.addWidget(self.btn_open_folder)
 
         layout.addLayout(self._build_diagnostic_log_section())
+        self.device_output_label = self._build_device_output_note()
+        if self.device_output_label:
+            layout.addWidget(self.device_output_label)
 
         delete_header = QLabel("Delete my data")
         delete_header.setStyleSheet(
@@ -120,6 +123,27 @@ class PrivacyDataDialog(QDialog):
         layout.addLayout(button_row)
 
         self.refresh_counts()
+
+    def _build_device_output_note(self):
+        """The one thing in the app that opens a connection while it runs.
+
+        It is disclosed here as well as in Settings for the same reason the diagnostic log
+        lives here: this dialog is where the app says what it keeps and what it sends, and
+        a promise that nothing leaves the machine has to name its own exception. The switch
+        itself stays in Settings, next to the address and the test buttons it needs.
+        """
+        if not self.main_app.intiface:
+            return None
+        label = QLabel(
+            "Device output (Settings > Device) is the one part of GoonerApp that opens a "
+            "network connection. It is off every time the app starts and has to be turned "
+            "on deliberately, it only ever goes to the address you type in yourself, and "
+            "it sends movement and stop commands and nothing else - no media, no paths, no "
+            "history. Deleting All settings below also disconnects it."
+        )
+        label.setWordWrap(True)
+        label.setStyleSheet(f"color: {theme.TEXT};")
+        return label
 
     # --- the diagnostic log ---
 
@@ -271,6 +295,11 @@ class PrivacyDataDialog(QDialog):
             elif key == "diagnostic_log":
                 applog.delete_log_files(self.main_app.data_store.base_dir)
             elif key == "settings":
+                if self.main_app.intiface:
+                    # Before the wipe, because disconnecting writes the cleared-out
+                    # address back. A live network connection outliving "delete all my
+                    # settings" is not what deleting them is supposed to mean.
+                    self.main_app.intiface.forget_settings()
                 self.main_app.settings.clear()
                 self.main_app.settings.sync()
 
