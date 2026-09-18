@@ -2198,3 +2198,29 @@ def test_reporting_at_a_fake_out_leaves_the_session_running(app, tmp_path, monke
     app.btn_came.click()
 
     assert ended == []
+
+
+def test_a_close_that_waits_for_the_device_still_ends_the_process(app, monkeypatch):
+    """Qt ends the program by itself only when the last *visible* window is closed. The
+    window is hidden the instant the X is pressed so the device teardown can happen behind
+    it - which makes the close that follows silent, and left the process running with
+    nothing on screen until somebody killed it."""
+    quits = []
+    monkeypatch.setattr(app.intiface, "shutdown", lambda: True)
+    monkeypatch.setattr(app, "_quit_application", lambda: quits.append(True))
+    app.show()
+    app.close()
+    assert not app.isVisible()
+    assert not quits, "the device has not finished stopping yet"
+    app.intiface.shutdown_finished.emit()
+    assert quits
+
+
+def test_a_close_with_nothing_to_wait_for_needs_no_help(app, monkeypatch):
+    quits = []
+    monkeypatch.setattr(app.intiface, "shutdown", lambda: False)
+    monkeypatch.setattr(app, "_quit_application", lambda: quits.append(True))
+    app.show()
+    app.close()
+    assert not app.isVisible()
+    assert not quits, "the window closed while visible, so Qt ends the program itself"

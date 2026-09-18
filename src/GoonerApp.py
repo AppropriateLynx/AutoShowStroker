@@ -7,6 +7,7 @@ from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QMovie
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QGraphicsDropShadowEffect,
     QGridLayout,
@@ -424,7 +425,7 @@ class GoonerApp(QMainWindow):
         # the Device tab is never built, and nothing else in the app notices.
         self.intiface = load_optional_plugin("intiface", self)
         if self.intiface:
-            self.intiface.shutdown_finished.connect(self.close)
+            self.intiface.shutdown_finished.connect(self._finish_deferred_close)
 
         self._setup_signal_handler()
 
@@ -931,6 +932,22 @@ class GoonerApp(QMainWindow):
             event.ignore()
             return
         super().closeEvent(event)
+
+    def _finish_deferred_close(self):
+        """The window was hidden and the close deferred; the wait is over.
+
+        The quit has to be spelled out. Qt ends the program by itself only when the last
+        *visible* window is closed, and this one has been hidden since the X was pressed,
+        so closing it now is silent - which left the process running with nothing on
+        screen and nothing to click, until somebody found it in a task manager.
+        """
+        self.close()
+        self._quit_application()
+
+    @staticmethod
+    def _quit_application():
+        """A seam, so a test can watch for the quit without ending its own event loop."""
+        QApplication.quit()
 
     def _end_session(self, show_statistics: bool):
         self.auto_play_timer.stop()
