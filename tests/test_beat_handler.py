@@ -369,6 +369,19 @@ def _arm(handler, pattern, freq=1.0, position=0, remaining_ms=100):
     handler.beat_meter_timer.start(remaining_ms)
 
 
+# QTimer.remainingTime() answers in whole milliseconds and the clock keeps moving
+# between arming the timer and reading it back, so a note the test set up for 0.100s
+# arrives as 0.099 about as often as not. pytest.approx defaults to a *relative*
+# tolerance of 1e-6, i.e. 0.1 plus or minus a ten-millionth of a second, which no real
+# timer can satisfy - these assertions are about where notes land relative to each other,
+# a second or a quarter-second apart, so a millisecond of slack decides nothing.
+BEAT_TIMING_SLACK = 0.01
+
+
+def offsets(handler, horizon=2.0):
+    return [offset for offset, _audible, _weight in handler.upcoming_beats(horizon)]
+
+
 def _arm_before_a_boundary(handler, next_segment, ends_in=0.4, pattern=None, freq=1.0, remaining_ms=100):
     """As _arm, plus a running segment that ends in `ends_in` seconds and a plan holding
     `next_segment` behind it."""
@@ -466,10 +479,8 @@ def test_upcoming_beats_spaces_the_next_segment_by_its_own_frequency(handler):
     already belongs to the next segment."""
     _arm_before_a_boundary(handler, Segment("beat", 10.0, 4.0, "Standard Beat", 1), ends_in=0.4)
 
-    times = [round(t, 3) for t, _a, _w in handler.upcoming_beats(2.0)]
-
     # 0.1 and 1.1 at 1 Hz (1.1 is the note that trips the boundary), then 0.25s apart.
-    assert times == [0.1, 1.1, 1.35, 1.6, 1.85]
+    assert offsets(handler) == pytest.approx([0.1, 1.1, 1.35, 1.6, 1.85], abs=BEAT_TIMING_SLACK)
 
 
 def test_upcoming_beats_keeps_the_boundary_note_on_the_old_pattern(handler):
@@ -483,13 +494,13 @@ def test_upcoming_beats_keeps_the_boundary_note_on_the_old_pattern(handler):
 
     upcoming = handler.upcoming_beats(2.0)
 
-    assert [(round(t, 3), a) for t, a, _w in upcoming] == [(0.1, True), (0.6, False), (1.6, True)]
+    assert [t for t, _a, _w in upcoming] == pytest.approx([0.1, 0.6, 1.6], abs=BEAT_TIMING_SLACK)
+    assert [a for _t, a, _w in upcoming] == [True, False, True]
 
 
 def test_upcoming_beats_stops_at_a_planned_pause(handler):
     _arm_before_a_boundary(handler, Segment("pause", 5.0, None, None, 1), ends_in=0.4)
-    times = [t for t, _a, _w in handler.upcoming_beats(2.0)]
-    assert times == pytest.approx([0.1, 1.1])
+    assert offsets(handler) == pytest.approx([0.1, 1.1], abs=BEAT_TIMING_SLACK)
 
 
 def test_upcoming_beats_stops_where_the_plan_runs_out(handler):
@@ -497,12 +508,12 @@ def test_upcoming_beats_stops_where_the_plan_runs_out(handler):
     handler._current_segment = Segment("beat", 10.0, 1.0, "Test", 0)
     handler._current_segment_end = time.time() + 0.4
     handler._plan.clear()
-    assert [t for t, _a, _w in handler.upcoming_beats(2.0)] == pytest.approx([0.1, 1.1])
+    assert offsets(handler) == pytest.approx([0.1, 1.1], abs=BEAT_TIMING_SLACK)
 
 
 def test_upcoming_beats_skips_a_segment_whose_pattern_was_deleted(handler):
     _arm_before_a_boundary(handler, Segment("beat", 10.0, 4.0, "Ghost Pattern", 1), ends_in=0.4)
-    assert [t for t, _a, _w in handler.upcoming_beats(2.0)] == pytest.approx([0.1, 1.1])
+    assert offsets(handler) == pytest.approx([0.1, 1.1], abs=BEAT_TIMING_SLACK)
 
 
 # --- P0 crash paths: an unusable selection, inverted bounds, a corrupt pattern file ---
