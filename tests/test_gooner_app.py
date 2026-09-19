@@ -1116,6 +1116,53 @@ def test_importing_gooner_app_does_not_pull_in_pyqtgraph():
 # --- P3: session lifecycle and dialog lifetimes ---
 
 
+def test_stop_silences_everything_before_asking_how_it_ended(app, monkeypatch, tmp_path):
+    """Stop means stop. The outcome question used to open while the rhythm was still
+    playing and a video still running behind it - so pressing Stop and then reading the
+    question left the session going for as long as the user took to answer."""
+    app.player.media_player = MagicMock()
+    img = tmp_path / "a.png"
+    img.write_bytes(b"")
+    app.player.set_playlist([img])
+    app.ask_for_outcome = True
+    app.start()
+    assert app.beat_handler.beat_meter_timer.isActive()
+
+    seen = {}
+
+    def answer():
+        seen["beat_running"] = app.beat_handler.beat_meter_timer.isActive()
+        seen["autoplay_running"] = app.player.auto_play_timer.isActive()
+        seen["video_stopped"] = app.player.media_player.stop.called
+        seen["session_running"] = app.is_running
+        return "stopped"
+
+    monkeypatch.setattr(app, "_ask_how_it_ended", answer)
+
+    app.stop()
+
+    assert seen["beat_running"] is False, "the rhythm was still playing while the box was up"
+    assert seen["autoplay_running"] is False, "the slideshow was still advancing"
+    assert seen["video_stopped"] is True, "the video was still playing behind the box"
+    assert seen["session_running"] is False
+
+
+def test_the_reported_outcome_still_reaches_the_history(app, monkeypatch, tmp_path):
+    """Stopping first must not cost the answer: ScoreTracker writes the history entry from
+    session_ended_event, so the report has to be recorded before that fires."""
+    img = tmp_path / "a.png"
+    img.write_bytes(b"")
+    app.player.set_playlist([img])
+    app.ask_for_outcome = True
+    monkeypatch.setattr(app, "_ask_how_it_ended", lambda: "came")
+    app.start()
+
+    app.stop()
+
+    assert app.score_tracker.reported_outcome == "came"
+    assert app.score_tracker.get_history()[-1]["reported_outcome"] == "came"
+
+
 def test_stop_stops_video_playback(app, monkeypatch, tmp_path):
     """The player used to keep running behind the statistics dialog, and its EndOfMedia
     then restarted the whole slideshow with no session behind it."""
