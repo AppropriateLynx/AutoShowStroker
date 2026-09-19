@@ -42,6 +42,26 @@ Note the bare `python` on the maintainer's PATH is 3.10, so anything that must m
 
 `ruff check .` (config in `ruff.toml`: `E`, `F`, `W`, `I`, `B`, `UP`). Install dev deps with `pip install -r requirements-dev.txt`.
 
+## Dependency auditing
+
+`pip-audit --strict --requirement requirements-dev.txt` (it is in `requirements-dev.txt`, so
+`pip install -r requirements-dev.txt` gets you the tool). `.github/workflows/audit.yml` runs
+exactly that weekly, on a pull request that touches either requirements file, and on demand.
+
+Deliberately **not** part of the CI job: the pins do not change on their own but the advisory
+database does, so a finding is almost never about the commit being tested, and gating every PR
+on it would let an advisory published overnight turn unrelated work red.
+
+Audit the requirements file, not the environment - `pip-audit` with no arguments also reports
+the venv's own `pip`/`setuptools`, which are neither declared here nor bundled into the `.exe`.
+
+Python pins are **not** on Dependabot (`.github/dependabot.yml` covers the workflow actions
+only). A version bump here is not "merge the green PR": the shipped executable bundles these
+versions, so it means rebuilding with PyInstaller and opening the result to confirm Qt, QtSvg,
+QtWebSockets and the bundled resources all survived the freeze - see the `verify_frozen` check
+that caught a build shipping without its plugin. A queue of robot PRs that each need a manual
+build is noise that trains you to ignore the one that matters.
+
 ## Logging
 
 **Never use `print()` in `src/`.** The shipped app is built `--windowed`, where `sys.stdout` is `None` and every `print()` is silently discarded — a user's bug report then has no artifact at all to look at. Use `src/applog.py` instead:
