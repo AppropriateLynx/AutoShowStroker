@@ -155,14 +155,30 @@ class IntifaceSettingsWidget(QWidget):
         self.controller.configure(checked, url, low, high)
 
     def apply_settings(self):
-        """Called by SettingsDialog when the user saves."""
+        """Called by SettingsDialog when the user saves.
+
+        Consent is per address, not per session. It names the machine it is for and says
+        that one which is not this one carries the session across the network - so moving
+        an already-running connection to a different address is the same act as opening
+        it, and gets asked the same way. Without this, agreeing to a server on your own
+        desk and then editing the field was enough to be reconnected somewhere else on a
+        Save, silently.
+        """
         values = self.values()
         current = (
             self.controller.enabled, self.controller.server_url,
             self.controller.min_position, self.controller.max_position,
         )
-        if values != current:
-            self.controller.configure(*values)
+        if values == current:
+            return
+        enabled, url, _low, _high = values
+        if enabled and url != self.controller.server_url:
+            if not confirm_device_output(self, url, self.controller.settings):
+                # Put back what is actually connected, so the field is not left claiming
+                # an address the app never went to.
+                self.server.setText(self.controller.server_url)
+                return
+        self.controller.configure(*values)
 
     def refresh(self):
         controller = self.controller

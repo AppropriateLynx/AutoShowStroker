@@ -139,3 +139,59 @@ def test_the_settings_dialog_builds_without_the_plugin_installed(app, qtbot):
     titles = [dialog.tabs.tabText(index) for index in range(dialog.tabs.count())]
     assert not any("Device" in title for title in titles)
     dialog.accept_settings()
+
+
+def _already_connected_to(app, address):
+    app.intiface.controller.enabled = True
+    app.intiface.controller.server_url = address
+
+
+def test_saving_a_different_address_asks_before_connecting_to_it(app, dialog, allow_consent, monkeypatch):
+    """Consent names the address it is for, and says plainly that one which is not this
+    machine crosses your network. Agreeing to a server on your desk and then being moved
+    to another one by a Save would make that promise worth nothing."""
+    _already_connected_to(app, "ws://the-address-i-agreed-to:1")
+    configure = MagicMock()
+    monkeypatch.setattr(app.intiface.controller, "configure", configure)
+    tab = dialog.intiface_tab
+    tab.enabled.setChecked(True)
+    tab.server.setText("ws://somewhere-else-entirely:1")
+
+    dialog.accept_settings()
+
+    assert allow_consent == ["ws://somewhere-else-entirely:1"]
+    configure.assert_called_once_with(True, "ws://somewhere-else-entirely:1", 0.25, 0.75)
+
+
+def test_declining_the_new_address_leaves_the_connection_where_it_was(app, dialog, monkeypatch):
+    monkeypatch.setattr(
+        "src.plugins.intiface.settings_widget.confirm_device_output",
+        lambda parent, url, settings: False,
+    )
+    _already_connected_to(app, "ws://the-address-i-agreed-to:1")
+    configure = MagicMock()
+    monkeypatch.setattr(app.intiface.controller, "configure", configure)
+    tab = dialog.intiface_tab
+    tab.enabled.setChecked(True)
+    tab.server.setText("ws://somewhere-else-entirely:1")
+
+    dialog.accept_settings()
+
+    configure.assert_not_called()
+    # What is on screen has to match what is actually connected.
+    assert tab.server.text() == "ws://the-address-i-agreed-to:1"
+
+
+def test_saving_only_the_stroke_range_does_not_ask_again(app, dialog, allow_consent, monkeypatch):
+    _already_connected_to(app, "ws://the-address-i-agreed-to:1")
+    configure = MagicMock()
+    monkeypatch.setattr(app.intiface.controller, "configure", configure)
+    tab = dialog.intiface_tab
+    tab.enabled.setChecked(True)
+    tab.server.setText("ws://the-address-i-agreed-to:1")
+    tab.minimum.setValue(30)
+
+    dialog.accept_settings()
+
+    assert allow_consent == []
+    configure.assert_called_once_with(True, "ws://the-address-i-agreed-to:1", 0.30, 0.75)
