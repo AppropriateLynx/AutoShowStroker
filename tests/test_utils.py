@@ -123,3 +123,24 @@ def test_load_scaled_pixmap_handles_an_invalid_target_size(qapp, tmp_path):
     pixmap = utils.load_scaled_pixmap(str(path), QSize(0, 0))
 
     assert not pixmap.isNull()
+
+
+def test_a_foreign_scheme_url_is_not_opened(monkeypatch):
+    """The one route out of the app to a web page, and the reason it is a route rather than
+    a bare call: a release_url comes straight from the GitHub API response, and anything but
+    http(s) would hand an arbitrary protocol handler to the shell on a single click."""
+    opened = []
+    monkeypatch.setattr("src.utils.QDesktopServices.openUrl", opened.append)
+
+    utils.open_external_url("file:///C:/Windows/System32/calc.exe")
+
+    assert opened == []
+
+
+def test_an_https_url_is_opened(monkeypatch):
+    opened = []
+    monkeypatch.setattr("src.utils.QDesktopServices.openUrl", opened.append)
+
+    utils.open_external_url("https://github.com/owner/repo/releases")
+
+    assert [u.toString() for u in opened] == ["https://github.com/owner/repo/releases"]

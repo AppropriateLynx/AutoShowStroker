@@ -1,27 +1,23 @@
 import random
-import time
 from pathlib import Path
 
-from PyQt6.QtCore import QSettings, Qt, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QMovie
-from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PyQt6.QtCore import QSettings, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QAction, QColor, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
     QGraphicsDropShadowEffect,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QSplitter,
-    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from src import applog, changelog, media_kinds, session_files, theme
+from src import applog, changelog, session_files, theme, update_dialogs
 from src.achievements import AchievementTracker
 from src.BeatHandler import BeatHandler
 from src.BeatTrackWidget import BeatTrackWidget
@@ -29,24 +25,27 @@ from src.CalloutHandler import CalloutHandler
 from src.ClimaxHandler import ClimaxHandler
 from src.HelpDialog import HelpDialog
 from src.MediaFolderPickerDialog import MediaFolderPickerDialog
+from src.PlaylistPlayer import PlaylistPlayer
 from src.plugins import load_optional_plugin
 from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
+from src.SessionHudWidget import SessionHudWidget
 from src.SessionRecorder import SessionRecorder
 from src.SessionScript import SessionScript
 from src.SettingsDialog import SettingsDialog
 from src.StatisticsDialog import StatisticsDialog
 from src.UpdateChecker import UpdateChecker
 from src.user_data import UserDataStore
-from src.utils import format_clock, get_current_version, get_project_root, load_scaled_pixmap
-from src.VideoDisplay import VideoDisplay
+from src.utils import (
+    format_clock,
+    get_current_version,
+    get_project_root,
+    open_external_url,
+)
 from src.WhatsNewDialog import WhatsNewDialog
 
 # How long the "denied" banner stays up before the session is ended for the user.
 DENIED_STOP_DELAY_MS = 5000
-# Delay before skipping past media that will never finish playing - long enough that an
-# entirely unplayable playlist cycles visibly instead of spinning.
-MEDIA_ERROR_ADVANCE_MS = 1000
 
 log = applog.get_logger(__name__)
 
@@ -88,13 +87,7 @@ class GoonerApp(QMainWindow):
     # Single source of truth: __init__ reads these as its fallbacks, and the
     # SettingsDialog "Reset to defaults" buttons read the same dict.
     DEFAULTS = {
-        "min_dur": 0.5,
-        "max_dur": 4.0,
-        "video_min_dur": 1.5,
-        "vid_loudness": 1.0,
         "show_startup_splash": True,
-        "show_record_chase": True,
-        "show_session_timer": True,
         "ask_for_outcome": True,
         "diagnostic_log": False,
         "diagnostic_log_level": applog.DEFAULT_LEVEL,
@@ -102,7 +95,24 @@ class GoonerApp(QMainWindow):
 
     def __init__(self, settings: QSettings | None = None, data_store=None):
         super().__init__()
+        self._bootstrap(settings, data_store)
+        self._load_settings()
+        self._init_state()
+        self._create_handlers()
+        self._create_timers()
+        self._build_window()
+        self._setup_signal_handler()
 
+    # --- construction -------------------------------------------------------------------
+    # This used to be one 330-line __init__ in which widget building, settings reading and
+    # handler construction were interleaved, so none of the three could be read without
+    # skipping over the other two. These methods are that same sequence cut along the
+    # concerns instead of along the order things happened to get written in. Nothing here
+    # changed behaviour; the call order above is load-bearing in exactly one place, noted
+    # at the method that needs it.
+
+    def _bootstrap(self, settings, data_store):
+        """Storage and logging. First, so everything after it can already log."""
         self.settings = settings if settings is not None else QSettings("GoonerCock", "GoonerApp")
         self.data_store = data_store if data_store is not None else UserDataStore()
         # Configured before anything else runs, so the very first warnings (a failed
@@ -118,20 +128,82 @@ class GoonerApp(QMainWindow):
         self.data_store.migrate_legacy_location()
         self.data_store.prune_legacy_registry_keys(self.settings)
 
+    def _load_settings(self):
+        """Every stored preference in one place, rather than scattered between widgets.
+
+        The exceptions are the overlay switches and the media timings, owned outright by
+        SessionHudWidget and PlaylistPlayer - both built in _build_overlay, both reading their
+        own keys there. Keeping a second copy here would mean two values to hold in step, and
+        a write to the wrong one being silently ignored.
+
+        Fallbacks come from DEFAULTS, not from repeated literals - three of these used to
+        carry their own copies of 4.0/0.5/1.5 while the lines beside them already read the
+        dict.
+        """
+        self.show_startup_splash = bool(
+            self.settings.value("GoonerApp/show_startup_splash", self.DEFAULTS["show_startup_splash"], type=bool)
+        )
+        self.ask_for_outcome = bool(
+            self.settings.value("GoonerApp/ask_for_outcome", self.DEFAULTS["ask_for_outcome"], type=bool)
+        )
+
+    def _init_state(self):
+        """Plain attributes with no Qt object behind them."""
+        self.is_running = False
+        self._was_maximized_before_fullscreen = False
+        self.is_muted = False
+        self._edge_cooldown_left = 0
+        self._climax_blink_on = False
+        self._climax_status_text = ""
+        self._climax_status_colors = ("transparent", "transparent")
+        # Whether this session's outcome has already been reported, so Stop does not ask a
+        # second time for something the climax buttons already answered.
+        self._outcome_answered = False
+        self._announced_outcome = None
+        # What the session just ended earned, held between judging it and showing the recap.
+        self._new_achievements = []
+
+    def _create_handlers(self):
+        """The objects that hold a session.
+
+        Ordering note: this runs before _build_window() because BeatTrackWidget takes the
+        rhythm it draws as a constructor argument, and the Intiface plugin reads
+        main_app.beat_handler as it is built.
+        """
+        self.beat_handler = BeatHandler(settings=self.settings, data_store=self.data_store)
+        self.callout_handler = CalloutHandler(self.settings, data_store=self.data_store)
+        self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
+        self.score_tracker = ScoreTracker(settings=self.settings, data_store=self.data_store)
+        self.achievement_tracker = AchievementTracker(data_store=self.data_store)
+        # Keeps the running session's timeline for the Session Explorer. In memory only -
+        # it holds media paths, which never go near the data directory. See SessionRecorder.
+        self.session_recorder = SessionRecorder()
+        self.update_checker = UpdateChecker(get_current_version())
+        # Optional and genuinely removable: delete src/plugins/intiface/ and this is None,
+        # the Device tab is never built, and nothing else in the app notices.
+        self.intiface = load_optional_plugin("intiface", self)
+        if self.intiface:
+            self.intiface.shutdown_finished.connect(self._finish_deferred_close)
+
+    def _create_timers(self):
+        # Held rather than a fire-and-forget QTimer.singleShot so start() can cancel it -
+        # and so a test can check it without monkeypatching QTimer itself.
+        # Ticks once a second while the edge button is cooling down, so the button can
+        # count down rather than just sitting there dead.
+        self._edge_cooldown_timer = QTimer(self)
+        self._edge_cooldown_timer.timeout.connect(self._tick_edge_cooldown)
+
+        self._denied_stop_timer = QTimer(self)
+        self._denied_stop_timer.setSingleShot(True)
+        self._denied_stop_timer.timeout.connect(self.stop)
+
+        self.climax_blink_timer = QTimer()
+        self.climax_blink_timer.timeout.connect(self._toggle_climax_blink)
+
+    def _build_window(self):
+        """The window itself: media area on top, footer below, menu bar across it."""
         self.setWindowTitle("Auto Hero Generation")
-
-        self.current_movie = None
-
-        project_root = get_project_root()
-
-        icon_path = project_root / 'res' / 'icons' / 'favicon.ico'
-
-        str_icon_path = str(icon_path.resolve())
-
-        if icon_path.exists():
-            self.setWindowIcon(QIcon(str_icon_path))
-        else:
-            log.warning("Window icon not found at %s", str_icon_path)
+        self._apply_window_icon()
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -140,14 +212,40 @@ class GoonerApp(QMainWindow):
         layout.setSpacing(0)
 
         self.main_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.main_splitter.addWidget(self._build_media_area())
+        self.main_splitter.addWidget(self._build_footer())
+        # No setSizes() here: footer_container is setFixedHeight(110), so the splitter
+        # cannot size it at all and any numbers here would be inert.
+        layout.addWidget(self.main_splitter)
 
+        self.create_menu_bar()
+
+    def _apply_window_icon(self):
+        icon_path = get_project_root() / 'res' / 'icons' / 'favicon.ico'
+        str_icon_path = str(icon_path.resolve())
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str_icon_path))
+        else:
+            log.warning("Window icon not found at %s", str_icon_path)
+
+    def _build_media_area(self):
+        """What is playing, and the buttons that decide what plays next."""
         media_container = QWidget()
         media_layout = QVBoxLayout(media_container)
         media_layout.setContentsMargins(0, 0, 0, 0)
         media_layout.setSpacing(0)
+        media_layout.addWidget(self._build_overlay(), stretch=4)
+        media_layout.addWidget(self._build_controls_row())
+        return media_container
 
-        self.media_stack = QStackedWidget()
+    def _build_overlay(self):
+        """The picture, with the session captions laid over it - see SessionHudWidget."""
+        # Both read their own settings and carry their own DEFAULTS, the way BeatHandler
+        # and CalloutHandler already do. A second copy on the window would be a value to
+        # hold in step, and a write to the wrong one being silently ignored.
+        self.player = PlaylistPlayer(self.settings)
 
+<<<<<<< HEAD
         self.image_label = QLabel("No Gooning files selected yet.")
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -241,7 +339,12 @@ class GoonerApp(QMainWindow):
 
         self.playlist: list[Path] = []
         self.current_index = 0
+=======
+        self.hud = SessionHudWidget(self.player, self.score_tracker, self.settings)
+        return self.hud
+>>>>>>> upstream
 
+    def _build_controls_row(self):
         self.controls_container = QWidget()
         controls_layout = QHBoxLayout(self.controls_container)
 
@@ -303,51 +406,16 @@ class GoonerApp(QMainWindow):
         controls_layout.addWidget(self.btn_mute)
         # Optional components add themselves here later - see add_control_widget.
         self.controls_layout = controls_layout
+        return self.controls_container
 
-        self.auto_play_timer = QTimer()
-        self.auto_play_timer.timeout.connect(self.next_img_timer)
+    def _build_footer(self):
+        """The climax banner, the outcome question, and the note track under both.
 
-        # Held rather than a fire-and-forget QTimer.singleShot so start() can cancel it -
-        # and so a test can check it without monkeypatching QTimer itself.
-        # Ticks once a second while the edge button is cooling down, so the button can
-        # count down rather than just sitting there dead.
-        self._edge_cooldown_timer = QTimer(self)
-        self._edge_cooldown_timer.timeout.connect(self._tick_edge_cooldown)
-        self._edge_cooldown_left = 0
-
-        self._denied_stop_timer = QTimer(self)
-        self._denied_stop_timer.setSingleShot(True)
-        self._denied_stop_timer.timeout.connect(self.stop)
-
-        self.session_timer_tick = QTimer()
-        self.session_timer_tick.timeout.connect(self._update_session_timer)
-
-        # Fallbacks come from DEFAULTS, not from repeated literals - these three used to
-        # carry their own copies of 4.0/0.5/1.5 while the lines right below already read
-        # the dict.
-        self.max_dur = float(self.settings.value("GoonerApp/max_dur", self.DEFAULTS["max_dur"]))
-        self.min_dur = float(self.settings.value("GoonerApp/min_dur", self.DEFAULTS["min_dur"]))
-        self.video_min_dur = float(
-            self.settings.value("GoonerApp/video_min_dur", self.DEFAULTS["video_min_dur"])
-        )
-        self.show_startup_splash = bool(
-            self.settings.value("GoonerApp/show_startup_splash", self.DEFAULTS["show_startup_splash"], type=bool)
-        )
-        self.show_record_chase = bool(
-            self.settings.value("GoonerApp/show_record_chase", self.DEFAULTS["show_record_chase"], type=bool)
-        )
-        self.show_session_timer = bool(
-            self.settings.value("GoonerApp/show_session_timer", self.DEFAULTS["show_session_timer"], type=bool)
-        )
-        self.ask_for_outcome = bool(
-            self.settings.value("GoonerApp/ask_for_outcome", self.DEFAULTS["ask_for_outcome"], type=bool)
-        )
-
-        media_layout.addWidget(self.controls_container)
-        self.main_splitter.addWidget(media_container)
-
-        self.beat_handler = BeatHandler(settings=self.settings, data_store=self.data_store)
-
+        Fixed total height so the media area above never wobbles when the banner appears or
+        disappears - only the split *within* this container changes (the note track expands
+        to fill it via stretch when the banner is hidden, shrinks when it is shown). The one
+        exception is the outcome row - see FOOTER_HEIGHT_WITH_OUTCOME.
+        """
         self.climax_status_label = QLabel("")
         self.climax_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.climax_status_label.setStyleSheet(self._climax_label_style("transparent"))
@@ -358,19 +426,9 @@ class GoonerApp(QMainWindow):
         climax_glow.setOffset(0, 0)
         self.climax_status_label.setGraphicsEffect(climax_glow)
 
-        self.climax_blink_timer = QTimer()
-        self.climax_blink_timer.timeout.connect(self._toggle_climax_blink)
-        self._climax_blink_on = False
-        self._climax_status_text = ""
-        self._climax_status_colors = ("transparent", "transparent")
-
         self.beat_track = BeatTrackWidget(self.beat_handler)
         self.beat_handler.register_beat_meter_update_event(self._update_beat_track)
 
-        # Fixed total height so the media area above never wobbles when the climax label
-        # appears/disappears - only the split *within* this container changes (beat_meter
-        # expands to fill it via stretch when the label is hidden, shrinks when it's shown).
-        # The one exception is the outcome row - see FOOTER_HEIGHT_WITH_OUTCOME.
         self.footer_container = QWidget()
         self.footer_container.setFixedHeight(self.FOOTER_HEIGHT)
         self.footer_layout = QVBoxLayout(self.footer_container)
@@ -379,54 +437,7 @@ class GoonerApp(QMainWindow):
         self.footer_layout.addWidget(self.climax_status_label, stretch=0)
         self.footer_layout.addWidget(self._build_outcome_row(), stretch=0)
         self.footer_layout.addWidget(self.beat_track, stretch=1)
-        self.main_splitter.addWidget(self.footer_container)
-
-        self.video_start_time = 0
-
-
-        # No setSizes() here: footer_container is setFixedHeight(110) above, so the
-        # splitter cannot size it at all and any numbers here would be inert.
-
-        layout.addWidget(self.main_splitter)
-
-        self.create_menu_bar()
-
-        self.vid_loudness = self.DEFAULTS["vid_loudness"]
-        if self.settings:
-            self.vid_loudness = float(self.settings.value("GoonerApp/vid_loudness", self.vid_loudness))
-
-        self.is_running = False
-        self._was_maximized_before_fullscreen = False
-        self.is_muted = False
-
-        self.callout_handler = CalloutHandler(self.settings, data_store=self.data_store)
-
-        self.score_tracker = ScoreTracker(settings=self.settings, data_store=self.data_store)
-        self.achievement_tracker = AchievementTracker(data_store=self.data_store)
-        # Keeps the running session's timeline for the Session Explorer. In memory only -
-        # it holds media paths, which never go near the data directory. See SessionRecorder.
-        self.session_recorder = SessionRecorder()
-        # Set while replaying a saved session - see start(). None for a live one.
-        self._script = None
-        # Whether this session's outcome has already been reported, so Stop does not ask
-        # a second time for something the climax buttons already answered.
-        self._outcome_answered = False
-        self._announced_outcome = None
-        # What the session just ended earned, held between judging it and showing the recap.
-        self._new_achievements = []
-        self._session_start_bests = {}
-
-        self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
-
-        self.update_checker = UpdateChecker(get_current_version())
-
-        # Optional and genuinely removable: delete src/plugins/intiface/ and this is None,
-        # the Device tab is never built, and nothing else in the app notices.
-        self.intiface = load_optional_plugin("intiface", self)
-        if self.intiface:
-            self.intiface.shutdown_finished.connect(self._finish_deferred_close)
-
-        self._setup_signal_handler()
+        return self.footer_container
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_F or event.key() == Qt.Key.Key_F11:
@@ -479,21 +490,13 @@ class GoonerApp(QMainWindow):
 
     def set_muted(self, muted: bool):
         self.is_muted = muted
-        self.audio_output.setMuted(muted)
+        self.player.set_muted(muted)
         self.beat_handler.set_muted(muted)
         self.btn_mute.setChecked(muted)
         self.btn_mute.setText("Unmute" if muted else "Mute")
 
     def toggle_mute(self):
         self.set_muted(not self.is_muted)
-
-    def display_new_tease(self, tease: str):
-        self.callout_label.setText(tease)
-        self.callout_label.show()
-
-    def hide_last_tease(self):
-        self.callout_label.hide()
-        self.callout_label.setText("")
 
     def _setup_signal_handler(self):
         if self.intiface:
@@ -503,7 +506,7 @@ class GoonerApp(QMainWindow):
                                                      self.callout_handler.pause_ended)
 
         self.beat_handler.register_beat_event(self.score_tracker.beat)
-        self.beat_handler.register_beat_event(self._update_record_chase)
+        self.beat_handler.register_beat_event(self.hud.refresh_record_chase)
         self.beat_handler.register_beat_event(self.beat_track.flash)
 
         self.beat_handler.register_beat_change_event(self.score_tracker.beat_changed)
@@ -519,6 +522,7 @@ class GoonerApp(QMainWindow):
 
         # What actually played, in order, for the Session Explorer.
         self.beat_handler.segment_started_event.connect(self.session_recorder.segment_started)
+        self.player.media_shown.connect(self.media_shown_event)
         self.media_shown_event.connect(self.session_recorder.media_shown)
         self.climax_handler.register_outcome_event(self.session_recorder.climax_recorded)
         self.climax_handler.register_fake_climax_event(self.session_recorder.fake_climax_recorded)
@@ -537,13 +541,11 @@ class GoonerApp(QMainWindow):
         self.register_start_event(self.session_recorder.session_started)
         self.register_start_event(self.callout_handler.session_started)
         self.register_start_event(self.climax_handler.session_started)
-        self.register_start_event(self._start_record_chase)
-        self.register_start_event(self._start_session_timer)
+        self.register_start_event(self.hud.session_started)
         self.register_start_event(self.beat_track.start)
 
         self.register_end_event(self.score_tracker.session_ended)
-        self.register_end_event(self._end_record_chase)
-        self.register_end_event(self._end_session_timer)
+        self.register_end_event(self.hud.session_ended)
         self.register_end_event(self.beat_track.stop)
 
         self.register_media_skip_event(self.score_tracker.media_skipped)
@@ -552,17 +554,19 @@ class GoonerApp(QMainWindow):
         self.register_media_repeat_event(self.score_tracker.media_repeated)
         self.register_media_repeat_event(self.callout_handler.media_repeated)
 
-        self.callout_handler.register_new_tease_event(self.display_new_tease, self.hide_last_tease)
+        self.callout_handler.register_new_tease_event(self.hud.show_tease, self.hud.hide_tease)
 
-        # Wrapped in lambdas (rather than connecting the bound methods directly) so tests can
-        # monkeypatch app._show_*_dialog after construction - PyQt binds a direct connection to
-        # the method object at connect() time, which a later monkeypatch.setattr(app, ...)
-        # can't retroactively intercept, since the signal already holds the original reference.
+        # Wrapped in lambdas rather than connecting update_dialogs.show_* directly: PyQt binds
+        # a direct connection to the function object at connect() time, so a later
+        # monkeypatch of the module attribute could not retroactively intercept it. The
+        # lambda looks the name up when the signal fires, which is what makes these testable.
         self.update_checker.update_available.connect(
-            lambda tag, url: self._show_update_available_dialog(tag, url)
+            lambda tag, url: update_dialogs.show_available(self, tag, url)
         )
-        self.update_checker.up_to_date.connect(lambda: self._show_up_to_date_dialog())
-        self.update_checker.check_failed.connect(lambda message: self._show_update_check_failed_dialog(message))
+        self.update_checker.up_to_date.connect(lambda: update_dialogs.show_up_to_date(self))
+        self.update_checker.check_failed.connect(
+            lambda message: update_dialogs.show_failed(self, message)
+        )
 
     def create_menu_bar(self):
         menu_bar = self.menuBar()
@@ -666,140 +670,21 @@ class GoonerApp(QMainWindow):
         dialog.deleteLater()
 
     def open_discord_invite(self):
-        QDesktopServices.openUrl(QUrl(self.DISCORD_INVITE_URL))
+        open_external_url(self.DISCORD_INVITE_URL)
 
     def check_for_updates(self):
-        if self._confirm_update_check():
+        """The Help menu entry. The question, the request and the answer live apart: see
+        update_dialogs for what the user is asked and told, UpdateChecker for what is sent."""
+        if update_dialogs.confirm_check(self):
             self.update_checker.check_now()
 
-    @staticmethod
-    def _update_check_consent_text() -> str:
-        """Spells out everything that actually goes over the wire.
-
-        This used to say "nothing else is sent" flat out, which wasn't quite true: the
-        request carries a User-Agent identifying the app, so GitHub's access logs tie an IP
-        to "runs GoonerApp". Small, but a privacy promise is worth nothing unless it's exact.
-        """
-        return (
-            "This will send one request to GitHub.com to check the latest release version.\n\n"
-            'It carries your IP address (unavoidable for any web request) and a User-Agent of '
-            '"GoonerApp-UpdateChecker", which identifies the app to GitHub. Nothing else is '
-            "sent - no folders, no filenames, no statistics, nothing identifying you or your "
-            "machine - and this never runs on its own.\n\n"
-            "Continue?"
-        )
-
-    def _confirm_update_check(self) -> bool:
-        # Built via explicit QMessageBox(...) + exec() rather than the static .question()
-        # convenience method - the static convenience methods are separate C++ entry points
-        # that bypass Python-level QMessageBox.exec entirely, so tests/_no_modal_dialogs
-        # can't neuter them and a real modal loop would open during tests.
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Question)
-        box.setWindowTitle("Check for Updates?")
-        box.setText(self._update_check_consent_text())
-        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        box.setDefaultButton(QMessageBox.StandardButton.No)
-        box.exec()
-        return box.clickedButton() is box.button(QMessageBox.StandardButton.Yes)
-
-    def _show_update_available_dialog(self, latest_tag, release_url):
-        box = QMessageBox(self)
-        box.setWindowTitle("Update Available")
-        box.setText(f"A new version is available: {latest_tag} (you're on v{get_current_version()}).")
-        open_button = box.addButton("Open Releases Page", QMessageBox.ButtonRole.ActionRole)
-        box.addButton("Close", QMessageBox.ButtonRole.RejectRole)
-        box.exec()
-        if box.clickedButton() is open_button:
-            self._open_external_url(release_url)
-
-    @staticmethod
-    def _open_external_url(url_string):
-        """Opens a URL only if it is http(s).
-
-        release_url is whatever the GitHub API response said. If that response is ever
-        attacker-influenced, a file:// or custom-scheme URL would be handed to the default
-        Windows handler on a single click.
-        """
-        url = QUrl(url_string)
-        if url.scheme() not in ("http", "https"):
-            log.warning("Refusing to open a non-web URL: %r", url_string)
-            return
-        QDesktopServices.openUrl(url)
-
-    def _show_up_to_date_dialog(self):
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Information)
-        box.setWindowTitle("Up to Date")
-        box.setText(f"You're on the latest version (v{get_current_version()}).")
-        box.exec()
-
-    def _show_update_check_failed_dialog(self, message):
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Warning)
-        box.setWindowTitle("Update Check Failed")
-        box.setText(f"Couldn't check for updates:\n{message}")
-        box.exec()
-
     def btn_next_action(self):
-        self.show_next()
+        self.player.show_next()
         self.media_skipped_event.emit()
 
     def btn_prev_action(self):
-        self.show_prev()
+        self.player.show_prev()
         self.media_repeated_event.emit()
-
-    def video_status_changed(self, status):
-        if not self.is_running:
-            # stop() leaves the player alone no more, but a status can still land just
-            # after it - advancing here would restart the slideshow with no session.
-            return
-
-        if status == QMediaPlayer.MediaStatus.InvalidMedia:
-            self._recover_from_stuck_video("the backend can't decode it")
-            return
-
-        if status == QMediaPlayer.MediaStatus.EndOfMedia:
-            elapsed_time = time.time() - self.video_start_time
-            if elapsed_time < self.video_min_dur:
-                self.media_player.play()
-                return
-
-            self.show_next()
-
-    def _on_media_error(self, error, error_string=""):
-        if not self.is_running:
-            return
-        self._recover_from_stuck_video(error_string or str(error))
-
-    def _recover_from_stuck_video(self, reason):
-        """Gets the session off a video that will never finish.
-
-        load_media() stops the autoplay timer for videos and waits on EndOfMedia, which
-        never arrives for a file the backend cannot open (an exotic codec, a deleted file,
-        an unplugged drive) - the session sat on a black frame until the user pressed an
-        arrow key. Advancing on a timer rather than calling show_next() directly bounds the
-        damage to one file a second if the whole playlist turns out to be unplayable.
-        """
-        log.warning("Skipping unplayable media: %s", reason)
-        self.auto_play_timer.start(MEDIA_ERROR_ADVANCE_MS)
-
-    def next_img_timer(self):
-        self.show_next()
-
-    def recalc_autoplay_timer(self):
-        """How long the medium now on screen stays up.
-
-        A replay takes the recorded gap - the pacing is as much a part of the saved session
-        as the beats are, and it is most of what "the same session" means when the pictures
-        are someone else's. Once the script runs out the settings take over again.
-        """
-        if self._script is not None:
-            scripted = self._script.next_media_gap()
-            if scripted is not None:
-                self.auto_play_timer.start(int(scripted * 1000))
-                return
-        self.auto_play_timer.start(int(random.uniform(self.min_dur, self.max_dur) * 1000))
 
     def open_folder(self):
         # deleteLater() on every dialog below: none of them are kept in an attribute, so
@@ -816,87 +701,11 @@ class GoonerApp(QMainWindow):
             log.info("Playlist loaded: %d files", len(files))
             if files:
                 random.shuffle(files)
-                self.playlist = files
-                self.current_index = 0
+                self.player.set_playlist(files)
                 self.start()
             else:
-                self.image_label.setText("No supported files found.")
+                self.player.show_message("No supported files found.")
                 self.stop()
-
-    def show_next(self):
-        if not self.playlist:
-            return
-        self.current_index = (self.current_index + 1) % len(self.playlist)
-        self.load_current_index()
-
-    def show_prev(self):
-        if not self.playlist:
-            return
-        self.current_index = (self.current_index - 1) % len(self.playlist)
-        self.load_current_index()
-
-    def load_current_index(self):
-        scripted = self._script.next_media_path() if self._script is not None else None
-        if scripted is not None:
-            self._show_media_path(scripted)
-            return
-        if not self.playlist:
-            return
-        file_path = str(self.playlist[self.current_index])
-        self._show_media_path(file_path)
-
-    def _show_media_path(self, file_path):
-        # Never logged, only recorded in memory - a media path is exactly what the privacy
-        # rules keep out of the log and the data directory.
-        self.media_shown_event.emit(file_path)
-        self.load_media(file_path)
-
-    def load_media(self, file_path):
-        kind = media_kinds.media_kind(file_path)
-
-        self.media_player.stop()
-        if self.current_movie:
-            self.current_movie.stop()
-            self.image_label.setMovie(None)
-            self.current_movie = None
-
-        if kind == "video":
-            # Live, a clip runs to EndOfMedia and is not on the autoplay timer at all. In a
-            # replay the recorded gap wins instead: the saved session says where this clip
-            # was actually cut, and that is the thing being replayed.
-            if self._script is None:
-                self.auto_play_timer.stop()
-            else:
-                self.recalc_autoplay_timer()
-
-            self.media_stack.setCurrentWidget(self.video_widget)
-            self.media_player.setSource(QUrl.fromLocalFile(file_path))
-            self.media_player.play()
-            self.video_start_time = time.time()
-            self.audio_output.setVolume(self.vid_loudness)
-
-        elif kind == "gif":
-            self.media_stack.setCurrentWidget(self.image_label)
-
-            movie = QMovie(file_path)
-            movie.jumpToFrame(0)
-
-            available_size = self.image_label.size()
-            if available_size.isValid():
-                original_size = movie.currentImage().size()
-                scaled_size = original_size.scaled(available_size, Qt.AspectRatioMode.KeepAspectRatio)
-                movie.setScaledSize(scaled_size)
-
-            self.image_label.setMovie(movie)
-            movie.start()
-
-            self.current_movie = movie
-            self.recalc_autoplay_timer()
-
-        elif kind == "image":
-            self.media_stack.setCurrentWidget(self.image_label)
-            self.image_label.setPixmap(load_scaled_pixmap(file_path, self.image_label.size()))
-            self.recalc_autoplay_timer()
 
     def open_settings(self):
         settings_dialog = SettingsDialog(parent=self)
@@ -949,13 +758,11 @@ class GoonerApp(QMainWindow):
         QApplication.quit()
 
     def _end_session(self, show_statistics: bool):
-        self.auto_play_timer.stop()
-        # Playback was left running: the video kept playing (with sound) behind the
-        # modal statistics dialog, and its EndOfMedia then restarted the whole
-        # slideshow with no session, no beat and the controls greyed out.
-        self.media_player.stop()
-        if self.current_movie:
-            self.current_movie.stop()
+        # Called first, not hung off session_ended_event at the bottom of this method:
+        # playback was once left running here, and the video kept going (with sound) behind
+        # the modal statistics dialog, its EndOfMedia then restarting the whole slideshow
+        # with no session, no beat and the controls greyed out.
+        self.player.session_ended()
         self._denied_stop_timer.stop()
         self.beat_handler.stop()
         self.btn_load.setText("Set Gooning Folder and Start.")
@@ -983,7 +790,7 @@ class GoonerApp(QMainWindow):
         """Starts a session. With a `script` (see SessionScript) the beats, the climax and
         the media pacing are replayed from a saved session instead of drawn."""
         if not self.is_running:
-            self._script = script
+            self.player.script = script
             # A denied outcome from the previous session may still have a stop pending -
             # 5 seconds is comfortably enough to stop, close the stats and start again,
             # and it would then kill the fresh session instead.
@@ -995,6 +802,9 @@ class GoonerApp(QMainWindow):
             # running session. _start_session_timer/_start_record_chase both now check it,
             # and would have hidden their overlays the moment they were meant to appear.
             self.is_running = True
+            # Called rather than hung off session_started_event: start() goes on to load the
+            # first medium a few lines below, and the player has to be live by then.
+            self.player.session_started()
             log.info("Session started")
             self.session_started_event.emit()
             self.btn_next.setEnabled(True)
@@ -1009,7 +819,7 @@ class GoonerApp(QMainWindow):
         # EndOfMedia instead. Rescheduling here restarted the timer it had just stopped, so
         # the first clip of a session was cut after a random 0.5-4s - and in a replay it
         # burned a second recorded gap.
-        self.load_current_index()
+        self.player.load_current()
 
     def _on_climax_outcome(self, outcome):
         log.info("Climax outcome: %s", outcome)
@@ -1208,52 +1018,6 @@ class GoonerApp(QMainWindow):
     def _update_beat_track(self, kind):
         self.beat_track.set_status(kind)
 
-    def _start_record_chase(self):
-        self._session_start_bests = self.score_tracker.get_all_time_bests()
-        self._update_record_chase()
-
-    def _end_record_chase(self):
-        self.record_chase_label.hide()
-
-    def _update_record_chase(self):
-        # SettingsDialog calls this on every save, including outside a session, where
-        # live_metrics() still reports the *previous* session's numbers.
-        if not self.is_running or not self.show_record_chase:
-            self.record_chase_label.hide()
-            return
-        status = self.score_tracker.record_chase_status(self._session_start_bests)
-        if status is None:
-            self.record_chase_label.hide()
-            return
-        metric, current, best = status
-        label = ScoreTracker.PR_METRIC_LABELS[metric]
-        current_text = ScoreTracker.format_metric_value(metric, current)
-        if current >= best:
-            text = f"\U0001f3c6 New {label} Record! {current_text}"
-        else:
-            best_text = ScoreTracker.format_metric_value(metric, best)
-            text = f"\U0001f3c6 Closing in on your {label} record: {current_text} / {best_text}"
-        self.record_chase_label.setText(text)
-        self.record_chase_label.show()
-
-    def _start_session_timer(self):
-        self.session_timer_tick.start(1000)
-        self._update_session_timer()
-
-    def _end_session_timer(self):
-        self.session_timer_tick.stop()
-        self.session_timer_label.hide()
-
-    def _update_session_timer(self):
-        # Same reasoning as _update_record_chase: without this, saving settings after a
-        # session put a frozen clock back on screen, counting from the old start time.
-        if not self.is_running or not self.show_session_timer:
-            self.session_timer_label.hide()
-            return
-        elapsed = self.score_tracker.live_metrics().get("total_dur_sec", 0)
-        self.session_timer_label.setText(f"⏱ {format_clock(elapsed)}")
-        self.session_timer_label.show()
-
     def register_start_event(self, handler):
         self.session_started_event.connect(handler)
 
@@ -1303,17 +1067,16 @@ class GoonerApp(QMainWindow):
         empty frames.
         """
         if ignore_paths:
-            if not self.playlist:
+            if not self.player.playlist:
                 log.warning("Cannot replay against your own library: nothing is loaded.")
                 return False
             # From the top of the loaded playlist. The index is left over from whatever
             # played last, and after a replay of a long session it points well past the end
             # of a shorter own library.
-            self.current_index = 0
+            self.player.current_index = 0
         else:
-            self.playlist = [Path(path) for path in session_files.recorded_paths(saved)]
-            self.current_index = 0
-            if not self.playlist:
+            self.player.set_playlist(Path(path) for path in session_files.recorded_paths(saved))
+            if not self.player.playlist:
                 log.warning("That saved session carries no media paths to replay.")
                 return False
 

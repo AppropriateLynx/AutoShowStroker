@@ -68,14 +68,14 @@ def test_leaving_fullscreen_shows_controls_again(app):
 def test_set_muted_mutes_video_and_beat_audio(app):
     app.set_muted(True)
     assert app.is_muted is True
-    assert app.audio_output.isMuted() is True
+    assert app.player.audio_output.isMuted() is True
     assert app.beat_handler.is_muted is True
     assert app.btn_mute.isChecked() is True
     assert app.btn_mute.text() == "Unmute"
 
     app.set_muted(False)
     assert app.is_muted is False
-    assert app.audio_output.isMuted() is False
+    assert app.player.audio_output.isMuted() is False
     assert app.beat_handler.is_muted is False
     assert app.btn_mute.isChecked() is False
     assert app.btn_mute.text() == "Mute"
@@ -160,7 +160,7 @@ def test_open_folder_cancelled_leaves_playlist_untouched(app, monkeypatch):
         "src.GoonerApp.MediaFolderPickerDialog", _fake_picker_dialog(QDialog.DialogCode.Rejected)
     )
     app.open_folder()
-    assert app.playlist == []
+    assert app.player.playlist == []
     assert app.is_running is False
 
 
@@ -169,7 +169,7 @@ def test_open_folder_no_supported_files_shows_message_and_stays_stopped(app, mon
         "src.GoonerApp.MediaFolderPickerDialog", _fake_picker_dialog(QDialog.DialogCode.Accepted, [])
     )
     app.open_folder()
-    assert app.image_label.text() == "No supported files found."
+    assert app.player.image_label.text() == "No supported files found."
     assert app.is_running is False
 
 
@@ -181,15 +181,15 @@ def test_open_folder_with_files_starts_session(app, monkeypatch, tmp_path):
 
     app.open_folder()
 
-    assert {p.name for p in app.playlist} == {"a.png", "b.png"}
-    assert app.current_index == 0
+    assert {p.name for p in app.player.playlist} == {"a.png", "b.png"}
+    assert app.player.current_index == 0
     assert app.is_running is True
 
 
 def test_open_folder_with_files_hides_climax_banner(app, monkeypatch, tmp_path):
     old = tmp_path / "old.png"
     old.write_bytes(b"")
-    app.playlist = [old]
+    app.player.playlist = [old]
     app.start()
     app._update_climax_status_label("ruined")
     assert app.climax_blink_timer.isActive()
@@ -208,7 +208,7 @@ def test_open_folder_with_files_hides_climax_banner(app, monkeypatch, tmp_path):
 def test_open_folder_no_supported_files_hides_climax_banner(app, monkeypatch, tmp_path):
     old = tmp_path / "old.png"
     old.write_bytes(b"")
-    app.playlist = [old]
+    app.player.playlist = [old]
     app.start()
     app._update_climax_status_label("denied")
 
@@ -228,36 +228,36 @@ def test_show_next_wraps_around_playlist(app, tmp_path):
     files = [tmp_path / f"{i}.png" for i in range(3)]
     for f in files:
         f.write_bytes(b"")
-    app.playlist = files
-    app.current_index = 2
+    app.player.playlist = files
+    app.player.current_index = 2
 
-    app.show_next()
+    app.player.show_next()
 
-    assert app.current_index == 0
+    assert app.player.current_index == 0
 
 
 def test_show_prev_wraps_around_playlist(app, tmp_path):
     files = [tmp_path / f"{i}.png" for i in range(3)]
     for f in files:
         f.write_bytes(b"")
-    app.playlist = files
-    app.current_index = 0
+    app.player.playlist = files
+    app.player.current_index = 0
 
-    app.show_prev()
+    app.player.show_prev()
 
-    assert app.current_index == 2
+    assert app.player.current_index == 2
 
 
 def test_show_next_noop_on_empty_playlist(app):
-    app.playlist = []
-    app.current_index = 0
-    app.show_next()
-    assert app.current_index == 0
+    app.player.playlist = []
+    app.player.current_index = 0
+    app.player.show_next()
+    assert app.player.current_index == 0
 
 
 def test_load_current_index_noop_on_empty_playlist(app):
-    app.playlist = []
-    app.load_current_index()
+    app.player.playlist = []
+    app.player.load_current()
 
 
 # --- load_media dispatch ---
@@ -267,32 +267,32 @@ def test_load_media_image_extension_shows_image_label(app, tmp_path):
     img = tmp_path / "pic.png"
     img.write_bytes(b"")
 
-    app.load_media(str(img))
+    app.player.load_media(str(img))
 
-    assert app.media_stack.currentWidget() is app.image_label
+    assert app.player.currentWidget() is app.player.image_label
 
 
 def test_load_media_gif_extension_shows_image_label_and_sets_movie(app, tmp_path):
     gif = tmp_path / "clip.gif"
     gif.write_bytes(b"")
 
-    app.load_media(str(gif))
+    app.player.load_media(str(gif))
 
-    assert app.media_stack.currentWidget() is app.image_label
-    assert app.current_movie is not None
+    assert app.player.currentWidget() is app.player.image_label
+    assert app.player.current_movie is not None
 
 
 def test_load_media_video_extension_switches_to_video_widget(app, monkeypatch, tmp_path):
     fake_player = MagicMock()
-    monkeypatch.setattr(app, "media_player", fake_player)
-    monkeypatch.setattr(app, "audio_output", MagicMock())
+    monkeypatch.setattr(app.player, "media_player", fake_player)
+    monkeypatch.setattr(app.player, "audio_output", MagicMock())
 
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"")
 
-    app.load_media(str(video))
+    app.player.load_media(str(video))
 
-    assert app.media_stack.currentWidget() is app.video_widget
+    assert app.player.currentWidget() is app.player.video_widget
     fake_player.setSource.assert_called_once()
     fake_player.play.assert_called_once()
 
@@ -302,33 +302,33 @@ def test_load_media_video_extension_switches_to_video_widget(app, monkeypatch, t
 
 def test_video_status_changed_replays_if_below_min_duration(app, monkeypatch):
     fake_player = MagicMock()
-    monkeypatch.setattr(app, "media_player", fake_player)
-    app.is_running = True
-    app.video_min_dur = 5.0
-    app.video_start_time = 100.0
+    monkeypatch.setattr(app.player, "media_player", fake_player)
+    app.player.session_started()
+    app.player.video_min_dur = 5.0
+    app.player.video_start_time = 100.0
     monkeypatch.setattr(time, "time", lambda: 102.0)
 
-    app.video_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)
+    app.player.video_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)
 
     fake_player.play.assert_called_once()
 
 
 def test_video_status_changed_advances_if_above_min_duration(app, monkeypatch):
-    app.is_running = True
-    app.video_min_dur = 1.0
-    app.video_start_time = 100.0
+    app.player.session_started()
+    app.player.video_min_dur = 1.0
+    app.player.video_start_time = 100.0
     monkeypatch.setattr(time, "time", lambda: 105.0)
     advanced = {}
-    monkeypatch.setattr(app, "show_next", lambda: advanced.setdefault("called", True))
+    monkeypatch.setattr(app.player, "show_next", lambda: advanced.setdefault("called", True))
 
-    app.video_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)
+    app.player.video_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)
 
     assert advanced.get("called") is True
 
 
 def test_video_status_changed_ignores_other_statuses(app, monkeypatch):
-    monkeypatch.setattr(app, "show_next", lambda: pytest.fail("should not advance"))
-    app.video_status_changed(QMediaPlayer.MediaStatus.LoadingMedia)
+    monkeypatch.setattr(app.player, "show_next", lambda: pytest.fail("should not advance"))
+    app.player.video_status_changed(QMediaPlayer.MediaStatus.LoadingMedia)
 
 
 # --- start / stop lifecycle ---
@@ -337,7 +337,7 @@ def test_video_status_changed_ignores_other_statuses(app, monkeypatch):
 def test_start_enables_controls_and_emits_session_started(app, qtbot, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
 
     with qtbot.waitSignal(app.session_started_event, timeout=1000):
         app.start()
@@ -352,7 +352,7 @@ def test_start_enables_controls_and_emits_session_started(app, qtbot, tmp_path):
 def test_start_when_already_running_does_not_reemit_session_started(app, qtbot, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
 
     with qtbot.assertNotEmitted(app.session_started_event, wait=200):
@@ -362,7 +362,7 @@ def test_start_when_already_running_does_not_reemit_session_started(app, qtbot, 
 def test_stop_disables_controls_and_emits_session_ended(app, qtbot, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
 
     with qtbot.waitSignal(app.session_ended_event, timeout=1000):
@@ -383,7 +383,7 @@ def test_stop_when_not_running_is_noop(app, qtbot):
 def test_stop_freezes_climax_banner_without_hiding_it(app, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
     app._update_climax_status_label("cum")
     assert app.climax_blink_timer.isActive()
@@ -407,7 +407,7 @@ def test_stop_when_no_climax_outcome_active_is_still_safe(app, tmp_path):
 
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
 
     app.stop()
@@ -423,42 +423,42 @@ def test_btn_next_action_advances_and_emits_skip_event(app, qtbot, tmp_path):
     files = [tmp_path / f"{i}.png" for i in range(2)]
     for f in files:
         f.write_bytes(b"")
-    app.playlist = files
-    app.current_index = 0
+    app.player.playlist = files
+    app.player.current_index = 0
 
     with qtbot.waitSignal(app.media_skipped_event, timeout=1000):
         app.btn_next_action()
 
-    assert app.current_index == 1
+    assert app.player.current_index == 1
 
 
 def test_btn_prev_action_goes_back_and_emits_repeat_event(app, qtbot, tmp_path):
     files = [tmp_path / f"{i}.png" for i in range(2)]
     for f in files:
         f.write_bytes(b"")
-    app.playlist = files
-    app.current_index = 1
+    app.player.playlist = files
+    app.player.current_index = 1
 
     with qtbot.waitSignal(app.media_repeated_event, timeout=1000):
         app.btn_prev_action()
 
-    assert app.current_index == 0
+    assert app.player.current_index == 0
 
 
 # --- callout label ---
 
 
 def test_display_new_tease_shows_label_with_text(app):
-    app.display_new_tease("hello")
-    assert app.callout_label.text() == "hello"
-    assert not app.callout_label.isHidden()
+    app.hud.show_tease("hello")
+    assert app.hud.callout_label.text() == "hello"
+    assert not app.hud.callout_label.isHidden()
 
 
 def test_hide_last_tease_hides_and_clears_label(app):
-    app.display_new_tease("hello")
-    app.hide_last_tease()
-    assert app.callout_label.text() == ""
-    assert app.callout_label.isHidden()
+    app.hud.show_tease("hello")
+    app.hud.hide_tease()
+    assert app.hud.callout_label.text() == ""
+    assert app.hud.callout_label.isHidden()
 
 
 # --- climax outcome ---
@@ -594,7 +594,7 @@ def test_beat_change_sweeps_the_beat_track(app):
 def test_beat_track_animates_only_while_a_session_runs(app, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     assert app.beat_track.frame_timer.isActive() is False
 
     app.start()
@@ -618,150 +618,150 @@ def test_beat_track_reads_upcoming_beats_from_the_handler(app):
 
 
 def test_record_chase_label_hidden_by_default(app):
-    assert app.record_chase_label.isHidden()
+    assert app.hud.record_chase_label.isHidden()
 
 
 def test_show_record_chase_defaults_to_true(app):
-    assert app.show_record_chase is True
+    assert app.hud.show_record_chase is True
 
 
 def test_starting_session_does_not_show_record_chase_below_threshold(app, tmp_path):
     app.score_tracker.history = [{"total_num_beat": 100}]
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
 
     app.start()
 
-    assert app.record_chase_label.isHidden()
+    assert app.hud.record_chase_label.isHidden()
 
 
 def test_record_chase_label_shows_once_threshold_crossed(app, tmp_path):
     app.score_tracker.history = [{"total_num_beat": 100}]
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
 
     app.score_tracker.beat_count = 90
-    app._update_record_chase()
+    app.hud.refresh_record_chase()
 
-    assert not app.record_chase_label.isHidden()
-    assert "Total Beats" in app.record_chase_label.text()
-    assert "90" in app.record_chase_label.text()
+    assert not app.hud.record_chase_label.isHidden()
+    assert "Total Beats" in app.hud.record_chase_label.text()
+    assert "90" in app.hud.record_chase_label.text()
 
 
 def test_beat_event_wired_to_record_chase_update(app, tmp_path):
     app.score_tracker.history = [{"total_num_beat": 1}]
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
 
     app.beat_handler.beat_event.emit()
 
     assert app.score_tracker.beat_count == 1
-    assert not app.record_chase_label.isHidden()
-    assert "New Total Beats Record!" in app.record_chase_label.text()
+    assert not app.hud.record_chase_label.isHidden()
+    assert "New Total Beats Record!" in app.hud.record_chase_label.text()
 
 
 def test_record_chase_label_hidden_when_setting_disabled(app, tmp_path):
     app.score_tracker.history = [{"total_num_beat": 100}]
-    app.show_record_chase = False
+    app.hud.show_record_chase = False
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
 
     app.score_tracker.beat_count = 90
-    app._update_record_chase()
+    app.hud.refresh_record_chase()
 
-    assert app.record_chase_label.isHidden()
+    assert app.hud.record_chase_label.isHidden()
 
 
 def test_stopping_session_hides_record_chase_label(app, tmp_path):
     app.score_tracker.history = [{"total_num_beat": 100}]
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
     app.score_tracker.beat_count = 90
-    app._update_record_chase()
-    assert not app.record_chase_label.isHidden()
+    app.hud.refresh_record_chase()
+    assert not app.hud.record_chase_label.isHidden()
 
     app.stop()
 
-    assert app.record_chase_label.isHidden()
+    assert app.hud.record_chase_label.isHidden()
 
 
 # --- session timer ---
 
 
 def test_session_timer_label_hidden_by_default(app):
-    assert app.session_timer_label.isHidden()
+    assert app.hud.session_timer_label.isHidden()
 
 
 def test_show_session_timer_defaults_to_true(app):
-    assert app.show_session_timer is True
+    assert app.hud.show_session_timer is True
 
 
 def test_starting_session_shows_session_timer_at_zero(app, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
 
     app.start()
 
-    assert not app.session_timer_label.isHidden()
-    assert "00:00" in app.session_timer_label.text()
+    assert not app.hud.session_timer_label.isHidden()
+    assert "00:00" in app.hud.session_timer_label.text()
 
 
 def test_session_timer_reflects_elapsed_time(app, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
 
     app.score_tracker.session_start_time -= 522
 
-    app._update_session_timer()
+    app.hud.refresh_clock()
 
-    assert "08:42" in app.session_timer_label.text()
+    assert "08:42" in app.hud.session_timer_label.text()
 
 
 def test_session_timer_hidden_when_setting_disabled(app, tmp_path):
-    app.show_session_timer = False
+    app.hud.show_session_timer = False
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
 
     app.start()
 
-    assert app.session_timer_label.isHidden()
+    assert app.hud.session_timer_label.isHidden()
 
 
 def test_stopping_session_hides_session_timer_label(app, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
-    assert not app.session_timer_label.isHidden()
+    assert not app.hud.session_timer_label.isHidden()
 
     app.stop()
 
-    assert app.session_timer_label.isHidden()
+    assert app.hud.session_timer_label.isHidden()
 
 
 def test_stopping_session_stops_the_session_timer_tick(app, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
-    assert app.session_timer_tick.isActive()
+    assert app.hud._clock.isActive()
 
     app.stop()
 
-    assert not app.session_timer_tick.isActive()
+    assert not app.hud._clock.isActive()
 
 
 def test_climax_handler_status_event_wired_to_label(app):
@@ -843,7 +843,20 @@ def test_show_long_term_statistics_passes_history_and_bests(app, monkeypatch):
 
 def test_defaults_dict_matches_init_defaults(app):
     for var_name, default_value in GoonerApp.DEFAULTS.items():
-        assert getattr(app, var_name) == default_value
+        assert getattr(app, var_name) == default_value, var_name
+
+
+def test_every_settings_owner_answers_for_its_own_defaults(app):
+    """Each object that reads a setting says what it is when unset, the way BeatHandler
+    already does - and says it in exactly one place. A key listed by two owners is a value
+    to hold in step, and a write to the wrong one would be silently ignored."""
+    owners = [app, app.hud, app.player, app.beat_handler, app.callout_handler, app.climax_handler]
+    seen = {}
+    for owner in owners:
+        for key in owner.DEFAULTS:
+            assert key not in seen, f"{key} is claimed by {seen.get(key)} and {type(owner).__name__}"
+            seen[key] = type(owner).__name__
+            assert hasattr(owner, key), f"{type(owner).__name__} defaults {key} but never reads it"
 
 
 # --- startup splash ---
@@ -998,7 +1011,7 @@ def test_socials_menu_has_discord_action(app, monkeypatch):
 
     captured = {}
     monkeypatch.setattr(
-        "src.GoonerApp.QDesktopServices.openUrl", lambda url: captured.setdefault("url", url.toString())
+        "src.utils.QDesktopServices.openUrl", lambda url: captured.setdefault("url", url.toString())
     )
 
     menu_bar = app.menuBar()
@@ -1023,7 +1036,7 @@ def test_help_menu_has_check_for_updates_action(app):
 
 
 def test_check_for_updates_checks_when_confirmed(app, monkeypatch):
-    monkeypatch.setattr(app, "_confirm_update_check", lambda: True)
+    monkeypatch.setattr("src.GoonerApp.update_dialogs.confirm_check", lambda parent: True)
     called = {}
     monkeypatch.setattr(app.update_checker, "check_now", lambda: called.setdefault("called", True))
 
@@ -1033,7 +1046,7 @@ def test_check_for_updates_checks_when_confirmed(app, monkeypatch):
 
 
 def test_check_for_updates_does_not_check_when_declined(app, monkeypatch):
-    monkeypatch.setattr(app, "_confirm_update_check", lambda: False)
+    monkeypatch.setattr("src.GoonerApp.update_dialogs.confirm_check", lambda parent: False)
     monkeypatch.setattr(
         app.update_checker, "check_now", lambda: pytest.fail("should not check when declined")
     )
@@ -1044,7 +1057,8 @@ def test_check_for_updates_does_not_check_when_declined(app, monkeypatch):
 def test_update_available_signal_shows_dialog(app, monkeypatch):
     captured = {}
     monkeypatch.setattr(
-        app, "_show_update_available_dialog", lambda tag, url: captured.update(tag=tag, url=url)
+        "src.GoonerApp.update_dialogs.show_available",
+        lambda parent, tag, url: captured.update(tag=tag, url=url),
     )
 
     app.update_checker.update_available.emit("v9.9.9", "https://example.com/release")
@@ -1054,7 +1068,9 @@ def test_update_available_signal_shows_dialog(app, monkeypatch):
 
 def test_up_to_date_signal_shows_dialog(app, monkeypatch):
     called = {}
-    monkeypatch.setattr(app, "_show_up_to_date_dialog", lambda: called.setdefault("called", True))
+    monkeypatch.setattr(
+        "src.GoonerApp.update_dialogs.show_up_to_date", lambda parent: called.setdefault("called", True)
+    )
 
     app.update_checker.up_to_date.emit()
 
@@ -1064,7 +1080,7 @@ def test_up_to_date_signal_shows_dialog(app, monkeypatch):
 def test_check_failed_signal_shows_dialog(app, monkeypatch):
     captured = {}
     monkeypatch.setattr(
-        app, "_show_update_check_failed_dialog", lambda msg: captured.setdefault("msg", msg)
+        "src.GoonerApp.update_dialogs.show_failed", lambda parent, msg: captured.setdefault("msg", msg)
     )
 
     app.update_checker.check_failed.emit("Host not found")
@@ -1078,7 +1094,7 @@ def test_vid_loudness_is_restored_from_settings(qtbot, qsettings, data_store):
     window = GoonerApp(settings=qsettings, data_store=data_store)
     qtbot.addWidget(window)
 
-    assert window.vid_loudness == 0.25
+    assert window.player.vid_loudness == 0.25
 
 
 def test_importing_gooner_app_does_not_pull_in_pyqtgraph():
@@ -1103,22 +1119,22 @@ def test_importing_gooner_app_does_not_pull_in_pyqtgraph():
 def test_stop_stops_video_playback(app, monkeypatch, tmp_path):
     """The player used to keep running behind the statistics dialog, and its EndOfMedia
     then restarted the whole slideshow with no session behind it."""
-    app.media_player = MagicMock()
-    app.playlist = [tmp_path / "a.png"]
+    app.player.media_player = MagicMock()
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     # load_media() stops the player on every slide, so only calls after this point count.
-    app.media_player.stop.reset_mock()
+    app.player.media_player.stop.reset_mock()
 
     app.stop()
 
-    app.media_player.stop.assert_called_once()
+    app.player.media_player.stop.assert_called_once()
 
 
 def test_stop_stops_a_running_gif(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     stopped = []
-    app.current_movie = type("FakeMovie", (), {"stop": lambda self: stopped.append(True)})()
+    app.player.current_movie = type("FakeMovie", (), {"stop": lambda self: stopped.append(True)})()
 
     app.stop()
 
@@ -1127,11 +1143,11 @@ def test_stop_stops_a_running_gif(app, tmp_path):
 
 def test_end_of_media_is_ignored_once_the_session_stopped(app, monkeypatch, tmp_path):
     advanced = []
-    monkeypatch.setattr(app, "show_next", lambda: advanced.append(True))
-    app.video_start_time = 0
+    monkeypatch.setattr(app.player, "show_next", lambda: advanced.append(True))
+    app.player.video_start_time = 0
 
     app.is_running = False
-    app.video_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)
+    app.player.video_status_changed(QMediaPlayer.MediaStatus.EndOfMedia)
 
     assert advanced == []
 
@@ -1139,38 +1155,38 @@ def test_end_of_media_is_ignored_once_the_session_stopped(app, monkeypatch, tmp_
 def test_an_unplayable_video_advances_instead_of_stalling(app, monkeypatch, tmp_path):
     """No EndOfMedia ever arrives for a codec the backend can't open, and the autoplay
     timer is stopped for videos - so the session used to sit on a black frame forever."""
-    app.playlist = [tmp_path / "a.mp4", tmp_path / "b.png"]
+    app.player.playlist = [tmp_path / "a.mp4", tmp_path / "b.png"]
     app.start()
     # What the video branch leaves behind: no autoplay timer, waiting on EndOfMedia only.
-    app.auto_play_timer.stop()
+    app.player.auto_play_timer.stop()
 
-    app.video_status_changed(QMediaPlayer.MediaStatus.InvalidMedia)
+    app.player.video_status_changed(QMediaPlayer.MediaStatus.InvalidMedia)
 
-    assert app.auto_play_timer.isActive()
+    assert app.player.auto_play_timer.isActive()
 
 
 def test_a_media_error_advances_instead_of_stalling(app, tmp_path):
-    app.playlist = [tmp_path / "a.mp4", tmp_path / "b.png"]
+    app.player.playlist = [tmp_path / "a.mp4", tmp_path / "b.png"]
     app.start()
-    app.auto_play_timer.stop()
+    app.player.auto_play_timer.stop()
 
-    app._on_media_error(QMediaPlayer.Error.ResourceError, "boom")
+    app.player._on_media_error(QMediaPlayer.Error.ResourceError, "boom")
 
-    assert app.auto_play_timer.isActive()
+    assert app.player.auto_play_timer.isActive()
 
 
 def test_a_media_error_outside_a_session_is_ignored(app):
     app.is_running = False
 
-    app._on_media_error(QMediaPlayer.Error.ResourceError, "boom")
+    app.player._on_media_error(QMediaPlayer.Error.ResourceError, "boom")
 
-    assert not app.auto_play_timer.isActive()
+    assert not app.player.auto_play_timer.isActive()
 
 
 def test_starting_a_new_session_cancels_a_pending_denied_stop(app, tmp_path):
     """The 5s stop armed by a denied outcome used to be an uncancellable singleShot, so it
     could land on a session started after the old one had already been stopped."""
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app._on_climax_outcome("denied")
     assert app._denied_stop_timer.isActive()
@@ -1228,37 +1244,37 @@ def test_settings_keys_come_from_an_explicit_group_constant(app):
 def test_session_timer_stays_hidden_outside_a_session(app):
     """SettingsDialog calls this unconditionally on save, and it used to show a frozen clock
     built from the previous session's start time."""
-    app.show_session_timer = True
+    app.hud.show_session_timer = True
     app.is_running = False
 
-    app._update_session_timer()
+    app.hud.refresh_clock()
 
-    assert app.session_timer_label.isHidden()
+    assert app.hud.session_timer_label.isHidden()
 
 
 def test_record_chase_stays_hidden_outside_a_session(app):
-    app.show_record_chase = True
+    app.hud.show_record_chase = True
     app.is_running = False
 
-    app._update_record_chase()
+    app.hud.refresh_record_chase()
 
-    assert app.record_chase_label.isHidden()
+    assert app.hud.record_chase_label.isHidden()
 
 
 def test_session_timer_shows_during_a_session(app, tmp_path):
-    app.show_session_timer = True
-    app.playlist = [tmp_path / "a.png"]
+    app.hud.show_session_timer = True
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
-    app._update_session_timer()
+    app.hud.refresh_clock()
 
-    assert not app.session_timer_label.isHidden()
+    assert not app.hud.session_timer_label.isHidden()
 
 
 def test_closing_the_window_records_the_session(app, qtbot, tmp_path):
     """Quitting mid-session used to drop it entirely - no history entry, no personal
     records, as if it never happened."""
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     before = len(app.score_tracker.get_history())
 
@@ -1273,7 +1289,7 @@ def test_closing_the_window_does_not_open_the_statistics_dialog(app, monkeypatch
     asked for - the session is recorded silently instead."""
     shown = {}
     monkeypatch.setattr(app, "show_statistics", lambda: shown.setdefault("called", True))
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     app.close()
@@ -1287,34 +1303,6 @@ def test_closing_the_window_without_a_session_is_harmless(app):
     app.close()
 
     assert len(app.score_tracker.get_history()) == before
-
-
-def test_a_foreign_scheme_url_is_not_opened(app, monkeypatch):
-    """release_url comes straight from the GitHub API response - anything but http(s)
-    would hand an arbitrary protocol handler to the shell on one click."""
-    opened = []
-    monkeypatch.setattr("src.GoonerApp.QDesktopServices.openUrl", lambda url: opened.append(url))
-
-    app._open_external_url("file:///C:/Windows/System32/calc.exe")
-
-    assert opened == []
-
-
-def test_an_https_url_is_opened(app, monkeypatch):
-    opened = []
-    monkeypatch.setattr("src.GoonerApp.QDesktopServices.openUrl", lambda url: opened.append(url))
-
-    app._open_external_url("https://github.com/owner/repo/releases")
-
-    assert [u.toString() for u in opened] == ["https://github.com/owner/repo/releases"]
-
-
-def test_update_consent_text_mentions_the_user_agent(app):
-    """The dialog claimed 'nothing else is sent' while the request carries a
-    self-identifying User-Agent that lands in GitHub's access logs."""
-    text = app._update_check_consent_text()
-
-    assert "User-Agent" in text
 
 
 # --- diagnostic logging (opt-in) ---
@@ -1399,7 +1387,7 @@ def test_a_saved_diagnostic_log_level_is_restored(qtbot, qsettings, data_store):
 def test_showing_a_medium_is_recorded(app, tmp_path):
     img = tmp_path / "a.png"
     img.write_bytes(b"")
-    app.playlist = [img]
+    app.player.playlist = [img]
     app.start()
 
     paths = [path for _at, path in app.session_recorder._media]
@@ -1408,7 +1396,7 @@ def test_showing_a_medium_is_recorded(app, tmp_path):
 
 
 def test_starting_a_segment_is_recorded(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     assert app.session_recorder._segments
@@ -1416,9 +1404,9 @@ def test_starting_a_segment_is_recorded(app, tmp_path):
 
 
 def test_the_recording_is_reset_for_each_session(app, tmp_path):
-    app.playlist = [tmp_path / "a.png", tmp_path / "b.png"]
+    app.player.playlist = [tmp_path / "a.png", tmp_path / "b.png"]
     app.start()
-    app.show_next()
+    app.player.show_next()
     app._end_session(show_statistics=False)
     assert len(app.session_recorder._media) >= 2
 
@@ -1442,7 +1430,7 @@ def test_the_timeline_reaches_the_statistics_dialog(app, tmp_path, monkeypatch):
             return None
 
     monkeypatch.setattr("src.GoonerApp.StatisticsDialog", FakeStatisticsDialog)
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app._end_session(show_statistics=True)
 
@@ -1450,7 +1438,7 @@ def test_the_timeline_reaches_the_statistics_dialog(app, tmp_path, monkeypatch):
 
 
 def test_a_fake_climax_is_recorded_for_the_timeline(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     app.climax_handler.fake_climax_triggered_event.emit()
@@ -1486,30 +1474,30 @@ def test_a_replay_shows_the_recorded_media_in_order(app, tmp_path):
 
 def test_a_replay_uses_the_recorded_media_gaps(app, tmp_path):
     """The pacing is part of what was saved, not just the beats."""
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     script = _replay_script([{"at_sec": 0.0, "path": str(tmp_path / "a.png")},
                              {"at_sec": 7.0, "path": str(tmp_path / "a.png")}])
 
     app.start(script=script)
 
-    assert app.auto_play_timer.interval() == 7000
+    assert app.player.auto_play_timer.interval() == 7000
 
 
 def test_a_replay_falls_back_to_the_settings_once_the_script_runs_out(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
-    app.min_dur = app.max_dur = 2.0
+    app.player.playlist = [tmp_path / "a.png"]
+    app.player.min_dur = app.player.max_dur = 2.0
     app.start(script=_replay_script([{"at_sec": 0.0, "path": str(tmp_path / "a.png")}]))
 
-    app.recalc_autoplay_timer()  # the single recorded gap is already spent
+    app.player.recalc_autoplay_timer()  # the single recorded gap is already spent
 
-    assert app.auto_play_timer.interval() == 2000
+    assert app.player.auto_play_timer.interval() == 2000
 
 
 def test_ignoring_the_paths_uses_the_loaded_playlist(app, tmp_path):
     """Replaying someone else's difficulty against your own library."""
     mine = tmp_path / "mine.png"
     mine.write_bytes(b"")
-    app.playlist = [mine]
+    app.player.playlist = [mine]
     script = _replay_script([{"at_sec": 0.0, "path": r"C:\someone\else.png"}], ignore_paths=True)
 
     app.start(script=script)
@@ -1519,55 +1507,55 @@ def test_ignoring_the_paths_uses_the_loaded_playlist(app, tmp_path):
 
 
 def test_a_replay_without_paths_keeps_the_recorded_gaps(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
-    app.min_dur = app.max_dur = 99.0
+    app.player.playlist = [tmp_path / "a.png"]
+    app.player.min_dur = app.player.max_dur = 99.0
     script = _replay_script([{"at_sec": 0.0}, {"at_sec": 6.0}], ignore_paths=True)
 
     app.start(script=script)
 
-    assert app.auto_play_timer.interval() == 6000
+    assert app.player.auto_play_timer.interval() == 6000
 
 
 def test_a_replayed_video_does_not_escape_its_recorded_gap(app, tmp_path, monkeypatch):
     """load_media normally stops the autoplay timer for video and advances on EndOfMedia -
     in a replay the recorded gap wins and cuts the clip where it was cut before."""
-    app.media_player = MagicMock()
-    app.audio_output = MagicMock()
+    app.player.media_player = MagicMock()
+    app.player.audio_output = MagicMock()
     clip = tmp_path / "clip.mp4"
     clip.write_bytes(b"")
     script = _replay_script([{"at_sec": 0.0, "path": str(clip)}, {"at_sec": 5.0, "path": str(clip)}])
 
     app.start(script=script)
 
-    assert app.auto_play_timer.isActive()
-    assert app.auto_play_timer.interval() == 5000
+    assert app.player.auto_play_timer.isActive()
+    assert app.player.auto_play_timer.interval() == 5000
 
 
 def test_a_normal_session_afterwards_is_not_scripted(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
-    app.min_dur = app.max_dur = 3.0
+    app.player.playlist = [tmp_path / "a.png"]
+    app.player.min_dur = app.player.max_dur = 3.0
     app.start(script=_replay_script([{"at_sec": 0.0, "path": str(tmp_path / "a.png")},
                                      {"at_sec": 9.0, "path": str(tmp_path / "a.png")}]))
     app._end_session(show_statistics=False)
 
     app.start()
 
-    assert app.auto_play_timer.interval() == 3000
+    assert app.player.auto_play_timer.interval() == 3000
 
 
 def test_a_video_starting_a_session_is_not_cut_short_by_the_autoplay_timer(app, tmp_path):
     """load_media deliberately leaves video off the autoplay timer - it advances on
     EndOfMedia, honouring video_min_dur. start() used to restart the timer right after,
     so the first clip of a session was cut after a random 0.5-4s."""
-    app.media_player = MagicMock()
-    app.audio_output = MagicMock()
+    app.player.media_player = MagicMock()
+    app.player.audio_output = MagicMock()
     clip = tmp_path / "clip.mp4"
     clip.write_bytes(b"")
-    app.playlist = [clip]
+    app.player.playlist = [clip]
 
     app.start()
 
-    assert app.auto_play_timer.isActive() is False
+    assert app.player.auto_play_timer.isActive() is False
 
 
 # --- saving a session for later ---
@@ -1637,7 +1625,7 @@ def test_a_replay_reaches_the_climax_handler_with_the_recorded_times(app, tmp_pa
     """The planner is told the script directly; the climax only hears about the session
     through session_planned_event, so the script has to travel with it."""
     saved = session_files.to_saved_session(_recorded_timeline())
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
 
     app.start(script=SessionScript(saved))
 
@@ -1678,8 +1666,8 @@ def test_replaying_a_session_plays_the_recorded_files_in_the_recorded_order(app,
 
     assert app.replay_session(saved) is True
 
-    assert [str(path) for path in app.playlist] == session_files.recorded_paths(saved)
-    assert app.current_index == 0
+    assert [str(path) for path in app.player.playlist] == session_files.recorded_paths(saved)
+    assert app.player.current_index == 0
     assert app.is_running is True
 
 
@@ -1695,23 +1683,23 @@ def test_replaying_a_session_replays_its_segments_and_its_climax(app, tmp_path):
 def test_replaying_against_your_own_library_leaves_the_playlist_alone(app, tmp_path):
     saved = _saved_with_media(tmp_path)
     mine = [tmp_path / "mine1.png", tmp_path / "mine2.png"]
-    app.playlist = list(mine)
+    app.player.playlist = list(mine)
 
     assert app.replay_session(saved, ignore_paths=True) is True
 
-    assert app.playlist == mine
+    assert app.player.playlist == mine
 
 
 def test_replaying_against_your_own_library_needs_one_to_be_loaded(app, tmp_path):
     saved = _saved_with_media(tmp_path)
-    app.playlist = []
+    app.player.playlist = []
 
     assert app.replay_session(saved, ignore_paths=True) is False
     assert app.is_running is False
 
 
 def test_a_replay_ends_the_session_that_is_already_running(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     ended = []
     app.session_ended_event.connect(lambda: ended.append(True))
@@ -1725,9 +1713,9 @@ def test_a_replay_ends_the_session_that_is_already_running(app, tmp_path):
 def test_a_replay_starts_its_recording_fresh(app, tmp_path):
     """The replay is a session of its own - it can be saved again, and what it records has
     to be what it just played, not the tail of whatever came before."""
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
-    app.show_next()
+    app.player.show_next()
 
     app.replay_session(_saved_with_media(tmp_path))
 
@@ -1759,12 +1747,12 @@ def test_the_sessions_menu_opens_the_saved_sessions_manager(app, monkeypatch):
 def test_replaying_against_your_own_library_starts_it_at_the_beginning(app, tmp_path):
     """The index is left over from whatever played before - and a replay of a long session
     leaves it far past the end of a short own library, which walked straight off it."""
-    app.playlist = [tmp_path / "mine1.png", tmp_path / "mine2.png"]
-    app.current_index = 7
+    app.player.playlist = [tmp_path / "mine1.png", tmp_path / "mine2.png"]
+    app.player.current_index = 7
 
     assert app.replay_session(_saved_with_media(tmp_path), ignore_paths=True) is True
 
-    assert app.current_index == 0
+    assert app.player.current_index == 0
 
 
 # --- reporting what actually happened ---
@@ -1775,7 +1763,7 @@ def test_the_outcome_buttons_stay_hidden_until_something_is_announced(app):
 
 
 def test_a_real_climax_asks_what_happened(app, tmp_path, qtbot):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.showMaximized()
     qtbot.waitExposed(app)
@@ -1788,7 +1776,7 @@ def test_a_real_climax_asks_what_happened(app, tmp_path, qtbot):
 def test_a_fake_climax_asks_exactly_the_same_thing(app, tmp_path, qtbot):
     """If the buttons only showed up for the real one they would *be* the announcement -
     a fake only works while it is indistinguishable."""
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.showMaximized()
     qtbot.waitExposed(app)
@@ -1800,7 +1788,7 @@ def test_a_fake_climax_asks_exactly_the_same_thing(app, tmp_path, qtbot):
 
 
 def test_reporting_at_a_real_climax_is_written_down(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.climax_handler.outcome_decided_event.emit("denied")
 
@@ -1811,7 +1799,7 @@ def test_reporting_at_a_real_climax_is_written_down(app, tmp_path):
 
 
 def test_reporting_hides_the_buttons_again(app, tmp_path, qtbot):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.showMaximized()
     qtbot.waitExposed(app)
@@ -1824,7 +1812,7 @@ def test_reporting_hides_the_buttons_again(app, tmp_path, qtbot):
 
 
 def test_coming_at_a_fake_out_counts_as_falling_for_it(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.climax_handler.fake_climax_triggered_event.emit()
 
@@ -1836,7 +1824,7 @@ def test_coming_at_a_fake_out_counts_as_falling_for_it(app, tmp_path):
 
 
 def test_holding_out_through_a_fake_out_is_not_counted_as_falling_for_it(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.climax_handler.fake_climax_triggered_event.emit()
 
@@ -1846,7 +1834,7 @@ def test_holding_out_through_a_fake_out_is_not_counted_as_falling_for_it(app, tm
 
 
 def test_an_unanswered_fake_out_takes_its_buttons_away_at_the_reveal(app, tmp_path, qtbot):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.showMaximized()
     qtbot.waitExposed(app)
@@ -1862,7 +1850,7 @@ def test_a_denied_session_waits_for_the_answer_instead_of_stopping_after_five_se
     app, tmp_path
 ):
     """The buttons would otherwise be gone before the user could reach them."""
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     app.climax_handler.outcome_decided_event.emit("denied")
@@ -1875,7 +1863,7 @@ def test_a_denied_session_waits_for_the_answer_instead_of_stopping_after_five_se
 def test_answering_after_a_denial_ends_the_session(app, tmp_path, monkeypatch):
     ended = []
     monkeypatch.setattr(app, "_end_session", lambda show_statistics: ended.append(show_statistics))
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.climax_handler.outcome_decided_event.emit("denied")
 
@@ -1888,7 +1876,7 @@ def test_stopping_by_hand_asks_how_it_ended(app, tmp_path, monkeypatch):
     """A session the user ends has no outcome at all otherwise, and every average silently
     counts it as a session that never climaxed."""
     monkeypatch.setattr(app, "_ask_how_it_ended", lambda: "stopped")
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     app.stop()
@@ -1899,7 +1887,7 @@ def test_stopping_by_hand_asks_how_it_ended(app, tmp_path, monkeypatch):
 def test_stopping_does_not_ask_again_when_the_climax_already_did(app, tmp_path, monkeypatch):
     asked = []
     monkeypatch.setattr(app, "_ask_how_it_ended", lambda: asked.append(True) or "came")
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.climax_handler.outcome_decided_event.emit("real")
     app.btn_came.click()
@@ -1916,7 +1904,7 @@ def test_closing_the_window_never_asks(app, tmp_path, monkeypatch):
 
     asked = []
     monkeypatch.setattr(app, "_ask_how_it_ended", lambda: asked.append(True) or "came")
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     app.closeEvent(QCloseEvent())
@@ -1928,7 +1916,7 @@ def test_the_question_can_be_switched_off(app, tmp_path, monkeypatch):
     asked = []
     monkeypatch.setattr(app, "_ask_how_it_ended", lambda: asked.append(True) or "came")
     app.ask_for_outcome = False
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     app.climax_handler.outcome_decided_event.emit("real")
@@ -1945,7 +1933,7 @@ def test_falling_for_a_fake_out_gets_its_own_line(app, tmp_path, monkeypatch):
     monkeypatch.setattr(
         app.callout_handler, "force_output_sentence", lambda key: spoken.append(key)
     )
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.climax_handler.fake_climax_triggered_event.emit()
 
@@ -1984,14 +1972,14 @@ def test_the_outcome_buttons_do_not_crush_the_beat_track(app, qtbot):
 def test_the_edge_button_is_only_live_during_a_session(app, tmp_path):
     assert app.btn_edge.isEnabled() is False
 
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     assert app.btn_edge.isEnabled() is True
 
 
 def test_reaching_your_edge_buys_a_pause_and_pushes_the_climax_back(app, tmp_path):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.beat_handler.edge_pause_dur = 15
     app.climax_handler.climax_active = True
     app.climax_handler.min_climax_after = app.climax_handler.max_climax_after = 600.0
@@ -2010,7 +1998,7 @@ def test_reaching_your_edge_gets_its_own_line(app, tmp_path, monkeypatch):
     monkeypatch.setattr(
         app.callout_handler, "force_output_sentence", lambda key: spoken.append(key)
     )
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     app.btn_edge.click()
@@ -2020,7 +2008,7 @@ def test_reaching_your_edge_gets_its_own_line(app, tmp_path, monkeypatch):
 
 def test_a_second_edge_is_refused_until_the_cooldown_is_up(app, tmp_path):
     """Holding the key down would otherwise turn the session into a nap."""
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.beat_handler.edge_cooldown_sec = 60
     app.start()
     app.btn_edge.click()
@@ -2033,7 +2021,7 @@ def test_a_second_edge_is_refused_until_the_cooldown_is_up(app, tmp_path):
 
 
 def test_the_cooldown_gives_the_button_back(app, tmp_path, qtbot):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.beat_handler.edge_cooldown_sec = 1
     app.start()
     app.btn_edge.click()
@@ -2046,7 +2034,7 @@ def test_the_cooldown_gives_the_button_back(app, tmp_path, qtbot):
 
 def test_the_edge_button_goes_away_at_the_climax(app, tmp_path, qtbot):
     """Nothing left to be relieved of, and the planner refuses it anyway."""
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.showMaximized()
     qtbot.waitExposed(app)
@@ -2057,7 +2045,7 @@ def test_the_edge_button_goes_away_at_the_climax(app, tmp_path, qtbot):
 
 
 def test_a_new_session_hands_the_edge_button_back(app, tmp_path, qtbot):
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.showMaximized()
     qtbot.waitExposed(app)
@@ -2072,7 +2060,7 @@ def test_a_new_session_hands_the_edge_button_back(app, tmp_path, qtbot):
 
 def test_the_edge_button_hides_entirely_when_switched_off(app, tmp_path, qtbot):
     app.beat_handler.edge_relief_active = False
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.showMaximized()
     qtbot.waitExposed(app)
 
@@ -2084,7 +2072,7 @@ def test_the_edge_button_hides_entirely_when_switched_off(app, tmp_path, qtbot):
 def test_an_edge_the_planner_refuses_costs_nothing(app, tmp_path, monkeypatch):
     """Refused mid-pause or after the climax - it must not burn the cooldown or count."""
     monkeypatch.setattr(app.beat_handler, "edge_relief", lambda: 0.0)
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     app.btn_edge.click()
@@ -2106,7 +2094,7 @@ def test_finishing_a_session_judges_it_for_achievements(app, tmp_path, monkeypat
         return []
 
     monkeypatch.setattr(app.achievement_tracker, "evaluate", fake_evaluate)
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     app._end_session(show_statistics=False)
@@ -2128,7 +2116,7 @@ def test_newly_earned_achievements_reach_the_statistics_dialog(app, tmp_path, mo
 
     monkeypatch.setattr("src.GoonerApp.StatisticsDialog", FakeStats)
     monkeypatch.setattr(app.achievement_tracker, "evaluate", lambda played, history: [CATALOGUE[0]])
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
 
     app._end_session(show_statistics=True)
@@ -2173,7 +2161,7 @@ def test_answering_after_any_climax_ends_the_session(app, tmp_path, monkeypatch)
     monkeypatch.setattr(app, "_end_session", lambda show_statistics: ended.append(show_statistics))
     for announced in ("real", "ruined", "denied"):
         ended.clear()
-        app.playlist = [tmp_path / "a.png"]
+        app.player.playlist = [tmp_path / "a.png"]
         app.is_running = True
         app.climax_handler.outcome_decided_event.emit(announced)
 
@@ -2187,7 +2175,7 @@ def test_reporting_at_a_fake_out_leaves_the_session_running(app, tmp_path, monke
     """The real climax is still to come - ending here would cut the session short on a joke."""
     ended = []
     monkeypatch.setattr(app, "_end_session", lambda show_statistics: ended.append(show_statistics))
-    app.playlist = [tmp_path / "a.png"]
+    app.player.playlist = [tmp_path / "a.png"]
     app.start()
     app.climax_handler.fake_climax_triggered_event.emit()
 

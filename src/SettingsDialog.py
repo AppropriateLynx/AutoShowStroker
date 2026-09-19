@@ -41,27 +41,27 @@ class SettingsDialog(QDialog):
 
         self._current_layout = self._new_tab("Playback")
         self.add_section_header("Slideshow Timing (Pictures/GIFs)")
-        self.add_setting("Min. duration (s):", "min_dur", self.main_app, float, 0.1, 60.0, 0.1)
-        self.add_setting("Max. duration (s):", "max_dur", self.main_app, float, 0.1, 60.0, 0.1)
-        self.add_setting("Video Min. duration (s):", "video_min_dur", self.main_app, float, 0.5, 30.0, 0.1)
+        self.add_setting("Min. duration (s):", "min_dur", self.main_app.player, float, 0.1, 60.0, 0.1)
+        self.add_setting("Max. duration (s):", "max_dur", self.main_app.player, float, 0.1, 60.0, 0.1)
+        self.add_setting("Video Min. duration (s):", "video_min_dur", self.main_app.player, float, 0.5, 30.0, 0.1)
         self.add_section_header("General Settings")
         self.add_setting("Beat Volume", "beat_loudness", self.beat_handler, float, 0.0, 1.0, 0.1)
-        self.add_setting("Video Volume", "vid_loudness", self.main_app, float, 0.0, 1.0, 0.1)
+        self.add_setting("Video Volume", "vid_loudness", self.main_app.player, float, 0.0, 1.0, 0.1)
         self.show_startup_splash_checkbox = QCheckBox("Show startup splash animation")
         self.show_startup_splash_checkbox.setChecked(self.main_app.show_startup_splash)
         self._current_layout.addWidget(self.show_startup_splash_checkbox)
         self.show_record_chase_checkbox = QCheckBox("Show live personal-record chase")
-        self.show_record_chase_checkbox.setChecked(self.main_app.show_record_chase)
+        self.show_record_chase_checkbox.setChecked(self.main_app.hud.show_record_chase)
         self._current_layout.addWidget(self.show_record_chase_checkbox)
         self.show_session_timer_checkbox = QCheckBox("Show session timer")
-        self.show_session_timer_checkbox.setChecked(self.main_app.show_session_timer)
+        self.show_session_timer_checkbox.setChecked(self.main_app.hud.show_session_timer)
         self._current_layout.addWidget(self.show_session_timer_checkbox)
         self.playback_reset_button = self.add_reset_button(
             ["min_dur", "max_dur", "video_min_dur", "beat_loudness", "vid_loudness"],
             checkbox_defaults=[
                 (self.show_startup_splash_checkbox, self.main_app.DEFAULTS["show_startup_splash"]),
-                (self.show_record_chase_checkbox, self.main_app.DEFAULTS["show_record_chase"]),
-                (self.show_session_timer_checkbox, self.main_app.DEFAULTS["show_session_timer"]),
+                (self.show_record_chase_checkbox, self.main_app.hud.DEFAULTS["show_record_chase"]),
+                (self.show_session_timer_checkbox, self.main_app.hud.DEFAULTS["show_session_timer"]),
             ],
         )
         self._current_layout.addStretch()
@@ -362,14 +362,13 @@ class SettingsDialog(QDialog):
         self.main_app.show_startup_splash = self.show_startup_splash_checkbox.isChecked()
 
         settings.setValue("GoonerApp/show_record_chase", self.show_record_chase_checkbox.isChecked())
-        self.main_app.show_record_chase = self.show_record_chase_checkbox.isChecked()
-        self.main_app._update_record_chase()
+        self.main_app.hud.show_record_chase = self.show_record_chase_checkbox.isChecked()
 
         settings.setValue("GoonerApp/show_session_timer", self.show_session_timer_checkbox.isChecked())
-        self.main_app.show_session_timer = self.show_session_timer_checkbox.isChecked()
+        self.main_app.hud.show_session_timer = self.show_session_timer_checkbox.isChecked()
         settings.setValue("GoonerApp/ask_for_outcome", self.ask_for_outcome_checkbox.isChecked())
         self.main_app.ask_for_outcome = self.ask_for_outcome_checkbox.isChecked()
-        self.main_app._update_session_timer()
+        self.main_app.hud.refresh()
 
         new_selected_patterns = []
         for name, checkbox in self.beat_checkboxes.items():

@@ -1,8 +1,12 @@
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QImageReader, QPixmap
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QDesktopServices, QImageReader, QPixmap
+
+from src import applog
+
+log = applog.get_logger(__name__)
 
 
 def get_project_root() -> Path:
@@ -80,3 +84,17 @@ def load_scaled_pixmap(file_path: str, target_size) -> QPixmap:
     if image.isNull():
         return QPixmap()
     return QPixmap.fromImage(image)
+
+
+def open_external_url(url_string):
+    """Hands a URL to the browser, but only if it is one.
+
+    The single route out of the app to a web page. release_url is whatever the GitHub API
+    response said, and if that response is ever attacker-influenced, a file:// or custom
+    scheme URL would otherwise be handed to the default Windows handler on a single click.
+    """
+    url = QUrl(url_string)
+    if url.scheme() not in ("http", "https"):
+        log.warning("Refusing to open a non-web URL: %r", url_string)
+        return
+    QDesktopServices.openUrl(url)
