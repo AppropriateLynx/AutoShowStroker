@@ -43,7 +43,7 @@ def test_a_half_typed_address_does_not_block_every_other_setting(app, dialog):
     dialog.settings_fields["max_dur"]["widget"].setValue(9)
     dialog.settings_fields["min_dur"]["widget"].setValue(8)
     dialog.accept_settings()
-    assert app.min_dur == 8
+    assert app.player.min_dur == 8
 
 
 def test_an_impossible_stroke_range_still_blocks_the_save(app, dialog):
@@ -51,9 +51,9 @@ def test_an_impossible_stroke_range_still_blocks_the_save(app, dialog):
     dialog.intiface_tab.maximum.setValue(20)
     dialog.settings_fields["max_dur"]["widget"].setValue(9)
     dialog.settings_fields["min_dur"]["widget"].setValue(8)
-    old = app.min_dur
+    old = app.player.min_dur
     dialog.accept_settings()
-    assert app.min_dur == old
+    assert app.player.min_dur == old
     assert not app.intiface.controller.enabled
 
 

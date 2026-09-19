@@ -41,12 +41,12 @@ class SettingsDialog(QDialog):
 
         self._current_layout = self._new_tab("Playback")
         self.add_section_header("Slideshow Timing (Pictures/GIFs)")
-        self.add_setting("Min. duration (s):", "min_dur", self.main_app, float, 0.1, 60.0, 0.1)
-        self.add_setting("Max. duration (s):", "max_dur", self.main_app, float, 0.1, 60.0, 0.1)
-        self.add_setting("Video Min. duration (s):", "video_min_dur", self.main_app, float, 0.5, 30.0, 0.1)
+        self.add_setting("Min. duration (s):", "min_dur", self.main_app.player, float, 0.1, 60.0, 0.1)
+        self.add_setting("Max. duration (s):", "max_dur", self.main_app.player, float, 0.1, 60.0, 0.1)
+        self.add_setting("Video Min. duration (s):", "video_min_dur", self.main_app.player, float, 0.5, 30.0, 0.1)
         self.add_section_header("General Settings")
         self.add_setting("Beat Volume", "beat_loudness", self.beat_handler, float, 0.0, 1.0, 0.1)
-        self.add_setting("Video Volume", "vid_loudness", self.main_app, float, 0.0, 1.0, 0.1)
+        self.add_setting("Video Volume", "vid_loudness", self.main_app.player, float, 0.0, 1.0, 0.1)
         self.show_startup_splash_checkbox = QCheckBox("Show startup splash animation")
         self.show_startup_splash_checkbox.setChecked(self.main_app.show_startup_splash)
         self._current_layout.addWidget(self.show_startup_splash_checkbox)
@@ -60,8 +60,8 @@ class SettingsDialog(QDialog):
             ["min_dur", "max_dur", "video_min_dur", "beat_loudness", "vid_loudness"],
             checkbox_defaults=[
                 (self.show_startup_splash_checkbox, self.main_app.DEFAULTS["show_startup_splash"]),
-                (self.show_record_chase_checkbox, self.main_app.DEFAULTS["show_record_chase"]),
-                (self.show_session_timer_checkbox, self.main_app.DEFAULTS["show_session_timer"]),
+                (self.show_record_chase_checkbox, self.main_app.hud.DEFAULTS["show_record_chase"]),
+                (self.show_session_timer_checkbox, self.main_app.hud.DEFAULTS["show_session_timer"]),
             ],
         )
         self._current_layout.addStretch()

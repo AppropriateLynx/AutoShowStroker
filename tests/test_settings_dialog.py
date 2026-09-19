@@ -12,8 +12,8 @@ def dialog(app, qtbot):
 
 
 def test_settings_fields_initialized_from_target_object(app, dialog):
-    assert dialog.settings_fields["min_dur"]["widget"].value() == app.min_dur
-    assert dialog.settings_fields["min_dur"]["object"] is app
+    assert dialog.settings_fields["min_dur"]["widget"].value() == app.player.min_dur
+    assert dialog.settings_fields["min_dur"]["object"] is app.player
     assert dialog.settings_fields["min_dur"]["type"] is float
 
     assert dialog.settings_fields["min_pause_dur"]["type"] is int
@@ -85,7 +85,7 @@ def test_manage_phrase_files_button_opens_dialog(app, dialog, monkeypatch):
 def test_accept_settings_applies_spinbox_values_to_target(app, dialog):
     dialog.settings_fields["min_dur"]["widget"].setValue(1.23)
     dialog.accept_settings()
-    assert app.min_dur == pytest.approx(1.23)
+    assert app.player.min_dur == pytest.approx(1.23)
 
 
 def test_accept_settings_casts_int_fields(app, dialog):
@@ -274,23 +274,25 @@ def test_playback_reset_button_resets_fields(app, dialog):
     dialog.settings_fields["beat_loudness"]["widget"].setValue(0.0)
     dialog.settings_fields["vid_loudness"]["widget"].setValue(0.0)
     dialog.show_startup_splash_checkbox.setChecked(not app.DEFAULTS["show_startup_splash"])
-    dialog.show_record_chase_checkbox.setChecked(not app.DEFAULTS["show_record_chase"])
-    dialog.show_session_timer_checkbox.setChecked(not app.DEFAULTS["show_session_timer"])
+    dialog.show_record_chase_checkbox.setChecked(not app.hud.DEFAULTS["show_record_chase"])
+    dialog.show_session_timer_checkbox.setChecked(not app.hud.DEFAULTS["show_session_timer"])
 
     dialog.playback_reset_button.click()
 
-    assert dialog.settings_fields["min_dur"]["widget"].value() == pytest.approx(app.DEFAULTS["min_dur"])
-    assert dialog.settings_fields["max_dur"]["widget"].value() == pytest.approx(app.DEFAULTS["max_dur"])
+    assert dialog.settings_fields["min_dur"]["widget"].value() == pytest.approx(app.player.DEFAULTS["min_dur"])
+    assert dialog.settings_fields["max_dur"]["widget"].value() == pytest.approx(app.player.DEFAULTS["max_dur"])
     assert dialog.settings_fields["video_min_dur"]["widget"].value() == pytest.approx(
-        app.DEFAULTS["video_min_dur"]
+        app.player.DEFAULTS["video_min_dur"]
     )
     assert dialog.settings_fields["beat_loudness"]["widget"].value() == pytest.approx(
         app.beat_handler.DEFAULTS["beat_loudness"]
     )
-    assert dialog.settings_fields["vid_loudness"]["widget"].value() == pytest.approx(app.DEFAULTS["vid_loudness"])
+    assert dialog.settings_fields["vid_loudness"]["widget"].value() == pytest.approx(
+        app.player.DEFAULTS["vid_loudness"]
+    )
     assert dialog.show_startup_splash_checkbox.isChecked() == app.DEFAULTS["show_startup_splash"]
-    assert dialog.show_record_chase_checkbox.isChecked() == app.DEFAULTS["show_record_chase"]
-    assert dialog.show_session_timer_checkbox.isChecked() == app.DEFAULTS["show_session_timer"]
+    assert dialog.show_record_chase_checkbox.isChecked() == app.hud.DEFAULTS["show_record_chase"]
+    assert dialog.show_session_timer_checkbox.isChecked() == app.hud.DEFAULTS["show_session_timer"]
 
 
 def test_beat_reset_button_resets_fields(app, dialog):
@@ -351,11 +353,11 @@ def test_callout_reset_button_resets_fields(app, dialog):
 
 def test_reset_buttons_do_not_persist_until_save(app, dialog):
     dialog.settings_fields["min_dur"]["widget"].setValue(9.9)
-    original = app.min_dur
+    original = app.player.min_dur
 
     dialog.playback_reset_button.click()
 
-    assert app.min_dur == original
+    assert app.player.min_dur == original
 
 
 # --- P0: settings that would crash the beat engine must not be saveable ---

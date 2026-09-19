@@ -5,6 +5,7 @@ session is running, so the "hide when there is no session" rule can be checked w
 building a main window and starting one.
 """
 import pytest
+from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QLabel
 
 from src.SessionHudWidget import SessionHudWidget
@@ -29,9 +30,12 @@ class _TrackerDouble:
 
 
 @pytest.fixture
-def hud(qtbot):
-    def build(tracker=None, **kwargs):
-        widget = SessionHudWidget(QLabel("media"), tracker or _TrackerDouble(), **kwargs)
+def hud(qtbot, tmp_path):
+    def build(tracker=None, **stored):
+        settings = QSettings(str(tmp_path / "hud.ini"), QSettings.Format.IniFormat)
+        for name, value in stored.items():
+            settings.setValue(f"{SessionHudWidget.SETTINGS_GROUP}/{name}", value)
+        widget = SessionHudWidget(QLabel("media"), tracker or _TrackerDouble(), settings)
         qtbot.addWidget(widget)
         return widget
 
@@ -152,10 +156,11 @@ def test_a_tease_is_shown_and_then_cleared(hud):
     assert widget.callout_label.isHidden()
 
 
-def test_the_content_widget_sits_under_the_captions(qtbot):
+def test_the_content_widget_sits_under_the_captions(qtbot, tmp_path):
     """All four share one grid cell - that is what makes it an overlay rather than a row."""
     content = QLabel("media")
-    widget = SessionHudWidget(content, _TrackerDouble())
+    settings = QSettings(str(tmp_path / "hud.ini"), QSettings.Format.IniFormat)
+    widget = SessionHudWidget(content, _TrackerDouble(), settings)
     qtbot.addWidget(widget)
 
     grid = widget.layout()

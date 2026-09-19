@@ -27,12 +27,21 @@ class SessionHudWidget(QWidget):
 
     TICK_MS = 1000
 
-    def __init__(self, content, score_tracker, show_record_chase=True, show_session_timer=True,
-                 parent=None):
+    # These were always stored under GoonerApp/ and they stay there, so no installation has
+    # to migrate. The widget owns them because it is the thing they switch on and off.
+    SETTINGS_GROUP = "GoonerApp"
+    DEFAULTS = {
+        "show_record_chase": True,
+        "show_session_timer": True,
+    }
+
+    def __init__(self, content, score_tracker, settings, parent=None):
         super().__init__(parent)
         self.score_tracker = score_tracker
-        self.show_record_chase = show_record_chase
-        self.show_session_timer = show_session_timer
+        for name, fallback in self.DEFAULTS.items():
+            setattr(self, name, bool(
+                settings.value(f"{self.SETTINGS_GROUP}/{name}", fallback, type=bool)
+            ))
         self._running = False
         # The all-time bests as they stood when this session began. Held rather than read
         # live, because the chase is against the record you walked in with - once you beat
