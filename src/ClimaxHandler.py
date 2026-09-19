@@ -362,7 +362,7 @@ class ClimaxHandler(QObject):
             # No rhythm to ride out a denial. Stopping it here is what makes disobedience
             # mean anything: whatever happens next is the user's own doing rather than the
             # app still driving them through it.
-            self.beat_handler.stop("Hands off.")
+            self.beat_handler.stop()
         else:
             # The rhythm she said it over is the one that stays. Without this a new beat, a
             # pause or a beat-change callout would land on top of the climax.

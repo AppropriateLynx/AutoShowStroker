@@ -102,46 +102,38 @@ def test_pause_loop_resumes_and_resets_frequency(handler, qtbot):
     assert handler.cur_freq != 0  # the next planned segment goes on the air right away
 
 
-def test_toggle_blink_alternates_state(handler, qtbot):
-    handler.is_red = False
-    with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
-        handler.toggle_blink()
-    assert handler.is_red is True
-    assert blocker.args == ["DOWN", "down"]
-
-    with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
-        handler.toggle_blink()
-    assert handler.is_red is False
-    assert blocker.args == ["UP", "up"]
-
-
-def test_stop_emits_idle_beat_meter_reset(handler, qtbot):
+def test_stop_reports_the_meter_idle(handler, qtbot):
     with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
         handler.stop()
-    assert blocker.args == ["Strokemeter appears here.", "idle"]
+    assert blocker.args == ["idle"]
 
 
-def test_beat_segment_emits_new_beat_meter_update(handler, qtbot):
+def test_a_new_segment_reports_a_new_beat(handler, qtbot):
     with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
         handler.start_beat()
-    text, kind = blocker.args
-    assert text == f"New Beat! {handler.current_beat_pattern}"
-    assert kind == "new_beat"
+    assert blocker.args == ["new_beat"]
 
 
-def test_start_pause_emits_pause_meter_update(handler, qtbot):
-    handler.min_pause_dur = 5
-    handler.max_pause_dur = 5
+def test_a_pause_reports_itself_and_how_far_it_has_run(handler, qtbot):
+    """The meter used to be handed a sentence to print. It gets a state now, and the
+    track draws the countdown as a bar - so what a pause has to expose is its progress,
+    which cur_pause_dur alone cannot answer because it does not know the total."""
+    handler.min_pause_dur = handler.max_pause_dur = 4
     with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
         handler.start_pause()
-    assert blocker.args == ["Pause: 5 seconds left.", "pause"]
+    assert blocker.args == ["pause"]
+    assert handler.pause_progress() == pytest.approx(1.0, abs=0.05)
+
+    handler.pause_loop()
+    assert 0.6 < handler.pause_progress() < 0.9
+
+    handler.cur_pause_dur = 1
+    handler.pause_loop()
+    assert handler.pause_progress() == 0.0  # over, and nothing left to draw
 
 
-def test_pause_loop_emits_pause_meter_update_on_tick(handler, qtbot):
-    handler.cur_pause_dur = 3
-    with qtbot.waitSignal(handler.beat_meter_update_event, timeout=1000) as blocker:
-        handler.pause_loop()
-    assert blocker.args == ["Pause: 2 seconds left.", "pause"]
+def test_nothing_is_paused_before_a_pause_starts(handler):
+    assert handler.pause_progress() == 0.0
 
 
 # --- difficulty ramping ---
@@ -369,6 +361,19 @@ def _arm(handler, pattern, freq=1.0, position=0, remaining_ms=100):
     handler.beat_meter_timer.start(remaining_ms)
 
 
+# QTimer.remainingTime() answers in whole milliseconds and the clock keeps moving
+# between arming the timer and reading it back, so a note the test set up for 0.100s
+# arrives as 0.099 about as often as not. pytest.approx defaults to a *relative*
+# tolerance of 1e-6, i.e. 0.1 plus or minus a ten-millionth of a second, which no real
+# timer can satisfy - these assertions are about where notes land relative to each other,
+# a second or a quarter-second apart, so a millisecond of slack decides nothing.
+BEAT_TIMING_SLACK = 0.01
+
+
+def offsets(handler, horizon=2.0):
+    return [offset for offset, _audible, _weight in handler.upcoming_beats(horizon)]
+
+
 def _arm_before_a_boundary(handler, next_segment, ends_in=0.4, pattern=None, freq=1.0, remaining_ms=100):
     """As _arm, plus a running segment that ends in `ends_in` seconds and a plan holding
     `next_segment` behind it."""
@@ -466,10 +471,8 @@ def test_upcoming_beats_spaces_the_next_segment_by_its_own_frequency(handler):
     already belongs to the next segment."""
     _arm_before_a_boundary(handler, Segment("beat", 10.0, 4.0, "Standard Beat", 1), ends_in=0.4)
 
-    times = [round(t, 3) for t, _a, _w in handler.upcoming_beats(2.0)]
-
     # 0.1 and 1.1 at 1 Hz (1.1 is the note that trips the boundary), then 0.25s apart.
-    assert times == [0.1, 1.1, 1.35, 1.6, 1.85]
+    assert offsets(handler) == pytest.approx([0.1, 1.1, 1.35, 1.6, 1.85], abs=BEAT_TIMING_SLACK)
 
 
 def test_upcoming_beats_keeps_the_boundary_note_on_the_old_pattern(handler):
@@ -483,13 +486,13 @@ def test_upcoming_beats_keeps_the_boundary_note_on_the_old_pattern(handler):
 
     upcoming = handler.upcoming_beats(2.0)
 
-    assert [(round(t, 3), a) for t, a, _w in upcoming] == [(0.1, True), (0.6, False), (1.6, True)]
+    assert [t for t, _a, _w in upcoming] == pytest.approx([0.1, 0.6, 1.6], abs=BEAT_TIMING_SLACK)
+    assert [a for _t, a, _w in upcoming] == [True, False, True]
 
 
 def test_upcoming_beats_stops_at_a_planned_pause(handler):
     _arm_before_a_boundary(handler, Segment("pause", 5.0, None, None, 1), ends_in=0.4)
-    times = [t for t, _a, _w in handler.upcoming_beats(2.0)]
-    assert times == pytest.approx([0.1, 1.1])
+    assert offsets(handler) == pytest.approx([0.1, 1.1], abs=BEAT_TIMING_SLACK)
 
 
 def test_upcoming_beats_stops_where_the_plan_runs_out(handler):
@@ -497,12 +500,12 @@ def test_upcoming_beats_stops_where_the_plan_runs_out(handler):
     handler._current_segment = Segment("beat", 10.0, 1.0, "Test", 0)
     handler._current_segment_end = time.time() + 0.4
     handler._plan.clear()
-    assert [t for t, _a, _w in handler.upcoming_beats(2.0)] == pytest.approx([0.1, 1.1])
+    assert offsets(handler) == pytest.approx([0.1, 1.1], abs=BEAT_TIMING_SLACK)
 
 
 def test_upcoming_beats_skips_a_segment_whose_pattern_was_deleted(handler):
     _arm_before_a_boundary(handler, Segment("beat", 10.0, 4.0, "Ghost Pattern", 1), ends_in=0.4)
-    assert [t for t, _a, _w in handler.upcoming_beats(2.0)] == pytest.approx([0.1, 1.1])
+    assert offsets(handler) == pytest.approx([0.1, 1.1], abs=BEAT_TIMING_SLACK)
 
 
 # --- P0 crash paths: an unusable selection, inverted bounds, a corrupt pattern file ---
@@ -721,3 +724,22 @@ def test_a_pause_never_counts_down_from_zero(handler):
     handler.start_pause()
 
     assert handler.cur_pause_dur == 1
+
+
+def test_note_scheduled_event_fires_for_every_note_the_rhythm_commits_to(qsettings, qtbot):
+    """The one hook device output hangs off. It says nothing about what the note is -
+    upcoming_beats() answers that - only that the last prediction is now stale."""
+    handler = BeatHandler(settings=qsettings)
+    handler.ramping_active = False
+    handler.min_beat_freq = handler.max_beat_freq = 4.0
+    handler.min_beat_dur = handler.max_beat_dur = 30.0
+    handler.pause_chance = 0
+    handler.selected_beat_patterns = ["Standard Beat"]
+    scheduled = []
+    handler.note_scheduled_event.connect(lambda: scheduled.append(True))
+    handler.start_beat()
+    assert len(scheduled) == 1
+    handler.beat()
+    handler.beat()
+    assert len(scheduled) == 3
+    handler.stop()

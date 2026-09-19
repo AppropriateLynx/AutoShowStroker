@@ -4,15 +4,20 @@ from src.BeatTrackWidget import BeatTrackWidget
 
 
 class _StubBeatHandler:
-    """The widget only ever asks the handler for upcoming notes - nothing else."""
+    """The widget asks the handler for upcoming notes and how far a pause has run -
+    nothing else."""
 
-    def __init__(self, upcoming=None):
+    def __init__(self, upcoming=None, pause_left=0.0):
         self.upcoming = upcoming or []
         self.horizons = []
+        self.pause_left = pause_left
 
     def upcoming_beats(self, horizon_sec):
         self.horizons.append(horizon_sec)
         return self.upcoming
+
+    def pause_progress(self):
+        return self.pause_left
 
 
 @pytest.fixture
@@ -50,88 +55,83 @@ def test_hit_zone_is_near_the_left_edge(widget):
 # --- caption never sits on top of the notes ---
 
 
-def test_notes_sit_below_the_caption_band(widget):
-    widget.set_status("New Beat! [1, 2, 2, -1, -1]", "new_beat")
-    # A note's whole circle has to clear the caption band, or the text renders on top
-    # of incoming notes (which is exactly what it did before this was fixed).
-    assert widget._note_center_y() - widget._note_radius() >= widget._caption_height()
-
-
 def test_notes_stay_inside_the_widget_when_squeezed(qtbot, handler):
     # The climax banner takes roughly half the fixed 110px footer while it's visible.
     w = BeatTrackWidget(handler)
     qtbot.addWidget(w)
     w.resize(800, 48)
-    w.set_status("New Beat! [1]", "new_beat")
+    w.set_status("new_beat")
 
-    assert w._note_center_y() - w._note_radius() >= w._caption_height()
+    assert w._note_center_y() - w._note_radius() >= 0
     assert w._note_center_y() + w._note_radius() <= w.height()
-
-
-def test_caption_band_is_zero_without_a_caption(widget):
-    assert widget._caption_height() == 0
 
 
 def test_notes_still_drawn_while_paused(widget):
     """The segment behind the pause is already planned, so its notes fly in across the
     last seconds of the countdown instead of appearing halfway down the track the moment
     the beat comes back."""
-    widget.set_status("Pause: 7 seconds left.", "pause")
+    widget.set_status("pause")
     assert widget._notes_visible() is True
 
 
 def test_notes_hidden_while_idle(widget):
-    widget.set_status("Strokemeter appears here.", "idle")
+    widget.set_status("idle")
     assert widget._notes_visible() is False
 
 
 def test_notes_visible_during_a_running_beat(widget):
-    widget.set_status("New Beat! [1]", "new_beat")
-    assert widget._notes_visible() is True
-    widget.set_status("UP", "up")
+    widget.set_status("new_beat")
     assert widget._notes_visible() is True
 
 
-# --- status caption ---
+# --- state ---
 
 
-def test_starts_with_no_caption(widget):
-    assert widget._caption == ""
-
-
-def test_set_status_stores_caption_and_kind(widget):
-    widget.set_status("New Beat! [1, 2]", "new_beat")
-    assert widget._caption == "New Beat! [1, 2]"
+def test_set_status_stores_the_kind(widget):
+    widget.set_status("new_beat")
     assert widget._kind == "new_beat"
 
 
-def test_blink_kinds_update_kind_but_never_overwrite_the_caption(widget):
-    # "UP"/"DOWN" is redundant once notes visibly land on the hit zone - the meaningful
-    # caption (pattern / pause countdown) has to survive the blink updates.
-    widget.set_status("New Beat! [1, 2]", "new_beat")
+def test_an_unknown_kind_still_paints(widget):
+    """Colours are looked up per kind, and one with no entry has to fall back rather
+    than take the whole footer down with it."""
+    widget.set_status("a kind nobody has defined")
 
-    widget.set_status("UP", "up")
-    assert widget._caption == "New Beat! [1, 2]"
-    widget.set_status("DOWN", "down")
-    assert widget._caption == "New Beat! [1, 2]"
+    assert widget._kind == "a kind nobody has defined"
+    widget.grab()
 
 
-def test_pause_status_replaces_the_caption(widget):
-    widget.set_status("New Beat! [1]", "new_beat")
-    widget.set_status("Pause: 7 seconds left.", "pause")
-    assert widget._caption == "Pause: 7 seconds left."
-    assert widget._kind == "pause"
+# --- the pause bar ---
 
 
-def test_idle_status_replaces_the_caption(widget):
-    widget.set_status("New Beat! [1]", "new_beat")
-    widget.set_status("Strokemeter appears here.", "idle")
-    assert widget._caption == "Strokemeter appears here."
+def test_the_pause_bar_only_exists_during_a_pause(widget, handler):
+    """It replaced the "Pause: 7 seconds left." caption. The track only looks 2.5s
+    ahead, so a longer pause used to show an empty lane and a number with nothing
+    connecting them; the bar runs the way the notes run and empties where they land."""
+    handler.pause_left = 0.5
+    widget.set_status("new_beat")
+    assert widget._pause_bar_rect() is None
+
+    widget.set_status("pause")
+    assert widget._pause_bar_rect() is not None
 
 
-def test_unknown_kind_does_not_raise(widget):
-    widget.set_status("something", "not_a_real_kind")
-    assert widget._kind == "not_a_real_kind"
+def test_the_pause_bar_shrinks_back_towards_the_hit_zone(widget, handler):
+    widget.set_status("pause")
+    handler.pause_left = 1.0
+    full = widget._pause_bar_rect()
+    handler.pause_left = 0.25
+    nearly_over = widget._pause_bar_rect()
+
+    assert full.left() == pytest.approx(nearly_over.left())
+    assert nearly_over.width() < full.width()
+    assert full.right() == pytest.approx(widget.width())
+
+
+def test_a_finished_pause_draws_no_bar(widget, handler):
+    widget.set_status("pause")
+    handler.pause_left = 0.0
+    assert widget._pause_bar_rect() is None
 
 
 # --- only audible steps are drawn ---
@@ -141,7 +141,7 @@ def test_silent_steps_are_not_drawn(widget, handler):
     # Hollow "ghost" notes for the pattern's silent steps read as confusing extra beats -
     # the rests stay visible as gaps in the spacing instead.
     handler.upcoming = [(0.0, True, 1), (0.5, False, 1), (1.0, True, 2)]
-    widget.set_status("New Beat! [1, -1, 2]", "new_beat")
+    widget.set_status("new_beat")
 
     visible = widget._visible_notes()
 
@@ -150,7 +150,7 @@ def test_silent_steps_are_not_drawn(widget, handler):
 
 def test_visible_notes_are_shown_while_paused(widget, handler):
     handler.upcoming = [(2.1, True, 1)]
-    widget.set_status("Pause: 3 seconds left.", "pause")
+    widget.set_status("pause")
     assert widget._visible_notes() == [(2.1, 1)]
 
 
@@ -201,7 +201,7 @@ def test_painting_during_a_change_transition_does_not_raise(qtbot, handler):
     w = BeatTrackWidget(handler)
     qtbot.addWidget(w)
     w.resize(800, 110)
-    w.set_status("New Beat! [1, 2]", "new_beat")
+    w.set_status("new_beat")
     w.pulse_change()
 
     w.grab()
@@ -256,7 +256,7 @@ def test_painting_notes_does_not_raise(qtbot, handler):
     w = BeatTrackWidget(handler)
     qtbot.addWidget(w)
     w.resize(800, 110)
-    w.set_status("New Beat! [1, -2, 1, 4]", "new_beat")
+    w.set_status("new_beat")
     w.flash()
 
     w.grab()
@@ -266,7 +266,7 @@ def test_painting_asks_the_handler_for_its_lead_time_window(qtbot, handler):
     w = BeatTrackWidget(handler)
     qtbot.addWidget(w)
     w.resize(800, 110)
-    w.set_status("New Beat! [1]", "new_beat")
+    w.set_status("new_beat")
 
     w.grab()
 
@@ -298,6 +298,6 @@ def test_painting_a_paused_track_does_not_raise(qtbot, handler):
     w = BeatTrackWidget(handler)
     qtbot.addWidget(w)
     w.resize(800, 110)
-    w.set_status("Pause: 4 seconds left.", "pause")
+    w.set_status("pause")
 
     w.grab()

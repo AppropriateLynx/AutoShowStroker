@@ -336,6 +336,31 @@ CHANGELOG = {
         "</ul>"
         "Find the one that broke you. Then find out if it still can."
     ),
+    "0.14.0": (
+        "GoonerApp stops asking you to do the stroking."
+        "<ul>"
+        "<li><b>Your stroker moves with the Strokemeter.</b> Point <b>Settings &gt; Device</b> "
+        "at Intiface Central and every beat it plays, your device plays too - the same "
+        "rhythm, the same pauses, the same run-in to your climax, with the pattern change "
+        "it is about to throw at you already in hand. It does not chase the beat, it "
+        "arrives on it</li>"
+        "<li><b>Set how far it goes.</b> A minimum and a maximum, so the stroke is yours "
+        "and not the hardware\'s idea of one. Test both ends before you start</li>"
+        "<li><b>Space still stops everything.</b> The panic key mutes you, hides the window "
+        "<i>and</i> stops the device, in that order and immediately. So does ending the "
+        "session, losing the connection, and closing the app. Nothing starts moving "
+        "again by itself afterwards - a <b>Resume Device</b> button sits next to Mute "
+        "and waits for you to mean it</li>"
+        "<li><b>Off every single time you start.</b> Not remembered, not assumed - device "
+        "output is a switch you throw deliberately, and throwing it tells you exactly what "
+        "leaves this machine before anything does. The app ships with no address of its "
+        "own; the only one it will ever talk to is the one you type in yourself</li>"
+        "<li><b>And it is a folder you can delete.</b> No stroker, no interest? Remove "
+        "<code>src/plugins/intiface</code> and the app will not so much as blink</li>"
+        "</ul>"
+        "Marked Beta, because nobody has held one of these while it ran yet. Be the first, "
+        "and tell us on the Discord how it went."
+    ),
 }
 
 

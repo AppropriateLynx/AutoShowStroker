@@ -24,6 +24,18 @@ def build_exe() -> Path:
         [
             find_pyinstaller(), "--noconfirm", "--onefile", "--windowed",
             "--add-data", "res;res", "--add-data", "VERSION;.",
+            # Every optional plugin needs a line here. They are looked up by name at
+            # runtime (see src/plugins/__init__.py), which import analysis cannot follow,
+            # so without this the .exe starts with the plugin silently missing and
+            # nothing says so except the log. Naming the entry module is enough - what it
+            # imports is followed from there. --collect-submodules cannot do this job:
+            # it resolves the package through the *building* interpreter, which has no
+            # repo root on its path, and it fails quietly when it cannot.
+            "--hidden-import", "src.plugins.intiface.plugin",
+            # QtWebSockets is not reachable by import analysis either, because only a
+            # plugin uses it. Without it the .exe ships with no Qt6WebSockets.dll and
+            # device output cannot connect to anything at all.
+            "--hidden-import", "PyQt6.QtWebSockets",
             "--icon", "res/icons/favicon.ico", "--name", "GoonerApp", "main.py",
         ],
         cwd=ROOT, check=True,
