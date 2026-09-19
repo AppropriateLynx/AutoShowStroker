@@ -6,6 +6,7 @@ from PyQt6.QtCore import QSettings, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QMovie
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QGraphicsDropShadowEffect,
     QGridLayout,
@@ -28,6 +29,7 @@ from src.CalloutHandler import CalloutHandler
 from src.ClimaxHandler import ClimaxHandler
 from src.HelpDialog import HelpDialog
 from src.MediaFolderPickerDialog import MediaFolderPickerDialog
+from src.plugins import load_optional_plugin
 from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
 from src.SessionRecorder import SessionRecorder
@@ -78,6 +80,10 @@ class GoonerApp(QMainWindow):
     media_repeated_event = pyqtSignal()
     media_skipped_event = pyqtSignal()
     media_shown_event = pyqtSignal(str)
+    # The panic key was pressed. Anything that has to become harmless right now - not at
+    # the end of the session, now - hangs off here rather than being called by name from
+    # panic() itself.
+    panic_event = pyqtSignal()
 
     # Single source of truth: __init__ reads these as its fallbacks, and the
     # SettingsDialog "Reset to defaults" buttons read the same dict.
@@ -295,6 +301,8 @@ class GoonerApp(QMainWindow):
         controls_layout.addWidget(self.btn_next)
         controls_layout.addWidget(self.btn_edge)
         controls_layout.addWidget(self.btn_mute)
+        # Optional components add themselves here later - see add_control_widget.
+        self.controls_layout = controls_layout
 
         self.auto_play_timer = QTimer()
         self.auto_play_timer.timeout.connect(self.next_img_timer)
@@ -357,7 +365,6 @@ class GoonerApp(QMainWindow):
         self._climax_status_colors = ("transparent", "transparent")
 
         self.beat_track = BeatTrackWidget(self.beat_handler)
-        self.beat_track.set_status("Strokemeter appears here.", "idle")
         self.beat_handler.register_beat_meter_update_event(self._update_beat_track)
 
         # Fixed total height so the media area above never wobbles when the climax label
@@ -413,6 +420,12 @@ class GoonerApp(QMainWindow):
 
         self.update_checker = UpdateChecker(get_current_version())
 
+        # Optional and genuinely removable: delete src/plugins/intiface/ and this is None,
+        # the Device tab is never built, and nothing else in the app notices.
+        self.intiface = load_optional_plugin("intiface", self)
+        if self.intiface:
+            self.intiface.shutdown_finished.connect(self._finish_deferred_close)
+
         self._setup_signal_handler()
 
     def keyPressEvent(self, event):
@@ -451,8 +464,18 @@ class GoonerApp(QMainWindow):
         """Instant hide-and-silence: minimizes the window and mutes audio in one keypress.
         Deliberately does not stop/pause the session (see Ctrl+Space) or auto-unmute on
         restore - the user decides when sound comes back, same as toggling Mute normally."""
+        self.panic_event.emit()
         self.set_muted(True)
         self.showMinimized()
+
+    def add_control_widget(self, widget):
+        """A slot in the controls row for an optional component (see src/plugins).
+
+        NoFocus is applied here rather than left to the caller for the same reason the
+        built-in buttons get it: a focused QPushButton swallows Space, and Space is Panic.
+        """
+        widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.controls_layout.addWidget(widget)
 
     def set_muted(self, muted: bool):
         self.is_muted = muted
@@ -473,6 +496,8 @@ class GoonerApp(QMainWindow):
         self.callout_label.setText("")
 
     def _setup_signal_handler(self):
+        if self.intiface:
+            self.intiface.attach()
         self.beat_handler.register_beat_pause_events(self.score_tracker.beat_paused, self.score_tracker.beat_resumed)
         self.beat_handler.register_beat_pause_events(self.callout_handler.pause_started,
                                                      self.callout_handler.pause_ended)
@@ -896,7 +921,32 @@ class GoonerApp(QMainWindow):
         """
         if self.is_running:
             self._end_session(show_statistics=False)
+        if self.intiface and self.intiface.shutdown():
+            # The window goes away first and the teardown happens behind it. In an app
+            # with a panic key, "gone from the screen" is the part that has to be
+            # instant - waiting half a second for a socket to close before the window
+            # disappears is exactly the wrong way round. The event loop stays alive to
+            # deliver the device's stop, and shutdown_finished calls close() again.
+            self.hide()
+            event.ignore()
+            return
         super().closeEvent(event)
+
+    def _finish_deferred_close(self):
+        """The window was hidden and the close deferred; the wait is over.
+
+        The quit has to be spelled out. Qt ends the program by itself only when the last
+        *visible* window is closed, and this one has been hidden since the X was pressed,
+        so closing it now is silent - which left the process running with nothing on
+        screen and nothing to click, until somebody found it in a task manager.
+        """
+        self.close()
+        self._quit_application()
+
+    @staticmethod
+    def _quit_application():
+        """A seam, so a test can watch for the quit without ending its own event loop."""
+        QApplication.quit()
 
     def _end_session(self, show_statistics: bool):
         self.auto_play_timer.stop()
@@ -1155,8 +1205,8 @@ class GoonerApp(QMainWindow):
         if self._climax_status_text:
             self.climax_status_label.setStyleSheet(self._climax_label_style(self._climax_status_colors[0]))
 
-    def _update_beat_track(self, text, kind):
-        self.beat_track.set_status(text, kind)
+    def _update_beat_track(self, kind):
+        self.beat_track.set_status(kind)
 
     def _start_record_chase(self):
         self._session_start_bests = self.score_tracker.get_all_time_bests()

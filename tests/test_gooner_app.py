@@ -559,24 +559,20 @@ def test_climax_blink_interval_is_fast(app):
 
 def test_beat_track_starts_idle(app):
     assert app.beat_track._kind == "idle"
-    assert app.beat_track._caption == "Strokemeter appears here."
 
 
-def test_update_beat_track_sets_caption_and_kind(app):
-    for kind, text in [("new_beat", "New Beat! [1]"), ("pause", "Pause: 5s")]:
-        app._update_beat_track(text, kind)
-        assert app.beat_track._caption == text
+def test_update_beat_track_sets_the_kind(app):
+    for kind in ("new_beat", "pause", "idle"):
+        app._update_beat_track(kind)
         assert app.beat_track._kind == kind
 
 
 def test_beat_handler_meter_updates_reach_the_gooner_app_owned_widget(app):
-    app._update_beat_track("New Beat! [1]", "new_beat")
+    """BeatHandler owns no widget - it says what the meter should read and GoonerApp
+    owns the thing that reads it."""
+    app.beat_handler.beat_meter_update_event.emit("pause")
 
-    app.beat_handler.toggle_blink()
-
-    # The blink kinds drive the track's state but must not clobber the real caption.
-    assert app.beat_track._kind in ("up", "down")
-    assert app.beat_track._caption == "New Beat! [1]"
+    assert app.beat_track._kind == "pause"
 
 
 def test_beat_event_flashes_the_beat_track(app):
@@ -2198,3 +2194,29 @@ def test_reporting_at_a_fake_out_leaves_the_session_running(app, tmp_path, monke
     app.btn_came.click()
 
     assert ended == []
+
+
+def test_a_close_that_waits_for_the_device_still_ends_the_process(app, monkeypatch):
+    """Qt ends the program by itself only when the last *visible* window is closed. The
+    window is hidden the instant the X is pressed so the device teardown can happen behind
+    it - which makes the close that follows silent, and left the process running with
+    nothing on screen until somebody killed it."""
+    quits = []
+    monkeypatch.setattr(app.intiface, "shutdown", lambda: True)
+    monkeypatch.setattr(app, "_quit_application", lambda: quits.append(True))
+    app.show()
+    app.close()
+    assert not app.isVisible()
+    assert not quits, "the device has not finished stopping yet"
+    app.intiface.shutdown_finished.emit()
+    assert quits
+
+
+def test_a_close_with_nothing_to_wait_for_needs_no_help(app, monkeypatch):
+    quits = []
+    monkeypatch.setattr(app.intiface, "shutdown", lambda: False)
+    monkeypatch.setattr(app, "_quit_application", lambda: quits.append(True))
+    app.show()
+    app.close()
+    assert not app.isVisible()
+    assert not quits, "the window closed while visible, so Qt ends the program itself"

@@ -355,3 +355,29 @@ def test_achievements_are_counted_and_deletable(app, dialog):
 
     assert app.achievement_tracker.unlocked == {}
     assert dialog.category_counts()["achievements"] == 0
+
+
+def test_device_output_is_disclosed_here_too(dialog):
+    """The diagnostic log lives in this dialog rather than in Settings because it is the
+    one thing that writes extra data about the user. An outbound network connection is at
+    least that, so it gets named here as well - the switch stays in Settings, where it is
+    next to the address and the test buttons it needs."""
+    text = dialog.device_output_label.text()
+    assert "off" in text.lower()
+    assert "Settings" in text
+
+
+def test_clearing_all_settings_also_drops_a_live_device_connection(dialog, app, monkeypatch):
+    from unittest.mock import MagicMock
+    forget = MagicMock()
+    monkeypatch.setattr(app.intiface, "forget_settings", forget)
+    dialog.clear_categories(["settings"])
+    assert forget.called
+
+
+def test_the_dialog_works_without_the_device_plugin(app, qtbot):
+    app.intiface = None
+    dialog = PrivacyDataDialog(app, parent=app)
+    qtbot.addWidget(dialog)
+    assert dialog.device_output_label is None
+    dialog.clear_categories(["settings"])

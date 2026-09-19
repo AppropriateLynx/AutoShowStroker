@@ -15,9 +15,12 @@ HIT_ZONE_X_RATIO = 0.12
 HIT_ZONE_WIDTH = 6
 NOTE_RADIUS = 11
 FLASH_MS = 130
-CAPTION_MARGIN = 10
-CAPTION_PADDING = 4
 TRACK_INSET = 4
+# The pause bar: how much of the track it spans when the pause has just begun, and how
+# far down the lane it sits. It shrinks back towards the hit zone as the pause runs out,
+# so it travels the same way the notes do and arrives at the same place they land.
+PAUSE_BAR_HEIGHT_RATIO = 1.6   # of the note radius, so it shrinks with a squeezed footer
+PAUSE_BAR_ALPHA = 85
 
 # A sweep of light runs across the track when the rhythm changes. It used to do a job -
 # the prediction was re-seeded at every change, every note jumped at once, and the notes
@@ -27,8 +30,8 @@ TRACK_INSET = 4
 CHANGE_FLASH_MS = 420
 SWEEP_WIDTH_RATIO = 0.18
 
-# Only the idle track has nothing to draw - upcoming_beats() is empty there anyway, so it
-# shows just its caption. "pause" is deliberately NOT here: the segment waiting behind the
+# Only the idle track has nothing to draw - upcoming_beats() is empty there anyway.
+# "pause" is deliberately NOT here: the segment waiting behind the
 # pause is already planned, so its notes fly in across the last couple of seconds of the
 # countdown. Suppressing them meant the track sat empty and then had notes appear halfway
 # down it the instant the beat came back.
@@ -37,18 +40,14 @@ _NOTELESS_KINDS = ("idle",)
 # (track background, caption color) per beat_meter_update_event kind. The track keeps a
 # stable backdrop and only the accents move - unlike the old QLabel, which flashed its
 # whole background on every beat because that was the only signal it could give.
+# Track background per state. There is nothing else to colour any more - the caption
+# these used to tint is gone.
 KIND_COLORS = {
-    "idle": (theme.SURFACE_DARK, theme.TEXT),
-    "up": (theme.SURFACE_DARK, theme.TEXT),
-    "down": (theme.SURFACE_DARK, theme.TEXT),
-    "new_beat": (theme.SURFACE_DARK, theme.ACCENT),
-    "pause": (theme.PAUSE, theme.TEXT),
+    "idle": theme.SURFACE_DARK,
+    "new_beat": theme.SURFACE_DARK,
+    "pause": theme.PAUSE,
 }
-_FALLBACK_COLORS = (theme.SURFACE_DARK, theme.TEXT)
-
-# Kinds whose text is just the alternating blink caption - meaningless once notes
-# visibly land on the hit zone, so they never overwrite the real caption.
-_BLINK_KINDS = ("up", "down")
+_FALLBACK_COLOR = theme.SURFACE_DARK
 
 
 class BeatTrackWidget(QWidget):
@@ -73,7 +72,6 @@ class BeatTrackWidget(QWidget):
     def __init__(self, beat_handler, parent=None):
         super().__init__(parent)
         self.beat_handler = beat_handler
-        self._caption = ""
         self._kind = "idle"
         self._flash_until = 0.0
         self._change_started_at = None
@@ -95,10 +93,8 @@ class BeatTrackWidget(QWidget):
         self.frame_timer.stop()
         self.update()
 
-    def set_status(self, text, kind):
+    def set_status(self, kind):
         self._kind = kind
-        if kind not in _BLINK_KINDS:
-            self._caption = text
         self.update()
 
     def flash(self):
@@ -153,18 +149,9 @@ class BeatTrackWidget(QWidget):
             if is_audible
         ]
 
-    def _caption_height(self) -> float:
-        """Height of the band reserved for the caption. The caption gets its own band
-        rather than sharing the notes' row - drawn over them it landed directly on top
-        of incoming notes, worst of all in the squeezed-footer case."""
-        if not self._caption:
-            return 0
-        return self.fontMetrics().height() + CAPTION_PADDING
-
     def _note_lane(self) -> tuple[float, float]:
-        """(top, height) of the strip the notes travel through, below the caption band."""
-        top = self._caption_height() + TRACK_INSET
-        return top, max(1.0, self.height() - TRACK_INSET - top)
+        """(top, height) of the strip the notes travel through."""
+        return TRACK_INSET, max(1.0, self.height() - TRACK_INSET * 2)
 
     def _note_center_y(self) -> float:
         top, height = self._note_lane()
@@ -181,16 +168,16 @@ class BeatTrackWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        background, caption_color = KIND_COLORS.get(self._kind, _FALLBACK_COLORS)
+        background = KIND_COLORS.get(self._kind, _FALLBACK_COLOR)
         track_rect = QRectF(2, 2, self.width() - 4, self.height() - 4)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(background))
         painter.drawRoundedRect(track_rect, 8, 8)
 
         self._paint_hit_zone(painter)
+        self._paint_pause_bar(painter)
         self._paint_notes(painter)
         self._paint_change_sweep(painter, track_rect)
-        self._paint_caption(painter, track_rect, caption_color)
 
         painter.end()
 
@@ -241,22 +228,35 @@ class BeatTrackWidget(QWidget):
         painter.setBrush(gradient)
         painter.drawRoundedRect(track_rect, 8, 8)
 
-    def _paint_caption(self, painter, track_rect, caption_color) -> None:
-        if not self._caption:
+    def _pause_bar_rect(self):
+        """Where the pause bar sits, or None when there is no pause left to show.
+
+        It replaces the "Pause: 7 seconds left." caption, and says it better: the track
+        only looks LEAD_TIME_SEC ahead, so a longer pause used to show an empty lane and
+        a number with nothing connecting them. The bar runs the way the notes run and
+        empties into the same place they land.
+        """
+        progress = self.beat_handler.pause_progress()
+        if self._kind != "pause" or progress <= 0:
+            return None
+        hit_x = self._hit_zone_x()
+        top, height = self._note_lane()
+        bar_height = min(height, self._note_radius() * PAUSE_BAR_HEIGHT_RATIO)
+        return QRectF(
+            hit_x,
+            top + height / 2 - bar_height / 2,
+            max(1.0, (self.width() - hit_x) * progress),
+            bar_height,
+        )
+
+    def _paint_pause_bar(self, painter) -> None:
+        rect = self._pause_bar_rect()
+        if rect is None:
             return
-        painter.setPen(QColor(caption_color))
-        text_rect = QRectF(
-            track_rect.left() + CAPTION_MARGIN,
-            track_rect.top(),
-            max(1.0, track_rect.width() - CAPTION_MARGIN * 2),
-            self._caption_height(),
-        )
-        # Vertically centered in the whole track while nothing is in flight (pause/idle),
-        # otherwise kept to its own band at the top so notes never run underneath it.
-        if not self._notes_visible():
-            text_rect = QRectF(text_rect.left(), track_rect.top(), text_rect.width(), track_rect.height())
-        painter.drawText(
-            text_rect,
-            int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-            self._caption,
-        )
+        color = QColor(theme.ACCENT)
+        color.setAlpha(PAUSE_BAR_ALPHA)
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawRoundedRect(rect, rect.height() / 2, rect.height() / 2)
+        painter.restore()
