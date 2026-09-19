@@ -361,6 +361,16 @@ CHANGELOG = {
         "Marked Beta, because nobody has held one of these while it ran yet. Be the first, "
         "and tell us on the Discord how it went."
     ),
+    "0.14.1": (
+        "Stop now means stop."
+        "<ul>"
+        "<li><b>You hit Stop, it stops.</b> The question about how it ended used to arrive "
+        "while the beat was still going and the clip still running behind it - so the "
+        "longer you took to answer, the longer you were still being worked. Everything "
+        "falls silent first, and then you are asked</li>"
+        "</ul>"
+        "Your answer still counts for exactly as much as it did."
+    ),
 }
 
 
