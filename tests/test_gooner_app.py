@@ -449,16 +449,16 @@ def test_btn_prev_action_goes_back_and_emits_repeat_event(app, qtbot, tmp_path):
 
 
 def test_display_new_tease_shows_label_with_text(app):
-    app.display_new_tease("hello")
-    assert app.callout_label.text() == "hello"
-    assert not app.callout_label.isHidden()
+    app.hud.show_tease("hello")
+    assert app.hud.callout_label.text() == "hello"
+    assert not app.hud.callout_label.isHidden()
 
 
 def test_hide_last_tease_hides_and_clears_label(app):
-    app.display_new_tease("hello")
-    app.hide_last_tease()
-    assert app.callout_label.text() == ""
-    assert app.callout_label.isHidden()
+    app.hud.show_tease("hello")
+    app.hud.hide_tease()
+    assert app.hud.callout_label.text() == ""
+    assert app.hud.callout_label.isHidden()
 
 
 # --- climax outcome ---
@@ -618,11 +618,11 @@ def test_beat_track_reads_upcoming_beats_from_the_handler(app):
 
 
 def test_record_chase_label_hidden_by_default(app):
-    assert app.record_chase_label.isHidden()
+    assert app.hud.record_chase_label.isHidden()
 
 
 def test_show_record_chase_defaults_to_true(app):
-    assert app.show_record_chase is True
+    assert app.hud.show_record_chase is True
 
 
 def test_starting_session_does_not_show_record_chase_below_threshold(app, tmp_path):
@@ -633,7 +633,7 @@ def test_starting_session_does_not_show_record_chase_below_threshold(app, tmp_pa
 
     app.start()
 
-    assert app.record_chase_label.isHidden()
+    assert app.hud.record_chase_label.isHidden()
 
 
 def test_record_chase_label_shows_once_threshold_crossed(app, tmp_path):
@@ -644,11 +644,11 @@ def test_record_chase_label_shows_once_threshold_crossed(app, tmp_path):
     app.start()
 
     app.score_tracker.beat_count = 90
-    app._update_record_chase()
+    app.hud.refresh_record_chase()
 
-    assert not app.record_chase_label.isHidden()
-    assert "Total Beats" in app.record_chase_label.text()
-    assert "90" in app.record_chase_label.text()
+    assert not app.hud.record_chase_label.isHidden()
+    assert "Total Beats" in app.hud.record_chase_label.text()
+    assert "90" in app.hud.record_chase_label.text()
 
 
 def test_beat_event_wired_to_record_chase_update(app, tmp_path):
@@ -661,22 +661,22 @@ def test_beat_event_wired_to_record_chase_update(app, tmp_path):
     app.beat_handler.beat_event.emit()
 
     assert app.score_tracker.beat_count == 1
-    assert not app.record_chase_label.isHidden()
-    assert "New Total Beats Record!" in app.record_chase_label.text()
+    assert not app.hud.record_chase_label.isHidden()
+    assert "New Total Beats Record!" in app.hud.record_chase_label.text()
 
 
 def test_record_chase_label_hidden_when_setting_disabled(app, tmp_path):
     app.score_tracker.history = [{"total_num_beat": 100}]
-    app.show_record_chase = False
+    app.hud.show_record_chase = False
     img = tmp_path / "a.png"
     img.write_bytes(b"")
     app.playlist = [img]
     app.start()
 
     app.score_tracker.beat_count = 90
-    app._update_record_chase()
+    app.hud.refresh_record_chase()
 
-    assert app.record_chase_label.isHidden()
+    assert app.hud.record_chase_label.isHidden()
 
 
 def test_stopping_session_hides_record_chase_label(app, tmp_path):
@@ -686,23 +686,23 @@ def test_stopping_session_hides_record_chase_label(app, tmp_path):
     app.playlist = [img]
     app.start()
     app.score_tracker.beat_count = 90
-    app._update_record_chase()
-    assert not app.record_chase_label.isHidden()
+    app.hud.refresh_record_chase()
+    assert not app.hud.record_chase_label.isHidden()
 
     app.stop()
 
-    assert app.record_chase_label.isHidden()
+    assert app.hud.record_chase_label.isHidden()
 
 
 # --- session timer ---
 
 
 def test_session_timer_label_hidden_by_default(app):
-    assert app.session_timer_label.isHidden()
+    assert app.hud.session_timer_label.isHidden()
 
 
 def test_show_session_timer_defaults_to_true(app):
-    assert app.show_session_timer is True
+    assert app.hud.show_session_timer is True
 
 
 def test_starting_session_shows_session_timer_at_zero(app, tmp_path):
@@ -712,8 +712,8 @@ def test_starting_session_shows_session_timer_at_zero(app, tmp_path):
 
     app.start()
 
-    assert not app.session_timer_label.isHidden()
-    assert "00:00" in app.session_timer_label.text()
+    assert not app.hud.session_timer_label.isHidden()
+    assert "00:00" in app.hud.session_timer_label.text()
 
 
 def test_session_timer_reflects_elapsed_time(app, tmp_path):
@@ -724,20 +724,20 @@ def test_session_timer_reflects_elapsed_time(app, tmp_path):
 
     app.score_tracker.session_start_time -= 522
 
-    app._update_session_timer()
+    app.hud.refresh_clock()
 
-    assert "08:42" in app.session_timer_label.text()
+    assert "08:42" in app.hud.session_timer_label.text()
 
 
 def test_session_timer_hidden_when_setting_disabled(app, tmp_path):
-    app.show_session_timer = False
+    app.hud.show_session_timer = False
     img = tmp_path / "a.png"
     img.write_bytes(b"")
     app.playlist = [img]
 
     app.start()
 
-    assert app.session_timer_label.isHidden()
+    assert app.hud.session_timer_label.isHidden()
 
 
 def test_stopping_session_hides_session_timer_label(app, tmp_path):
@@ -745,11 +745,11 @@ def test_stopping_session_hides_session_timer_label(app, tmp_path):
     img.write_bytes(b"")
     app.playlist = [img]
     app.start()
-    assert not app.session_timer_label.isHidden()
+    assert not app.hud.session_timer_label.isHidden()
 
     app.stop()
 
-    assert app.session_timer_label.isHidden()
+    assert app.hud.session_timer_label.isHidden()
 
 
 def test_stopping_session_stops_the_session_timer_tick(app, tmp_path):
@@ -757,11 +757,11 @@ def test_stopping_session_stops_the_session_timer_tick(app, tmp_path):
     img.write_bytes(b"")
     app.playlist = [img]
     app.start()
-    assert app.session_timer_tick.isActive()
+    assert app.hud._clock.isActive()
 
     app.stop()
 
-    assert not app.session_timer_tick.isActive()
+    assert not app.hud._clock.isActive()
 
 
 def test_climax_handler_status_event_wired_to_label(app):
@@ -841,9 +841,24 @@ def test_show_long_term_statistics_passes_history_and_bests(app, monkeypatch):
     assert captured["all_time_bests"] == app.score_tracker.get_all_time_bests()
 
 
+# DEFAULTS is the persistence fallback for all of these, but two of them are owned by the
+# overlay widget rather than the window - naming them keeps this check honest instead of
+# quietly passing because getattr found something else.
+HUD_OWNED_DEFAULTS = {"show_record_chase", "show_session_timer"}
+
+
 def test_defaults_dict_matches_init_defaults(app):
     for var_name, default_value in GoonerApp.DEFAULTS.items():
-        assert getattr(app, var_name) == default_value
+        owner = app.hud if var_name in HUD_OWNED_DEFAULTS else app
+        assert getattr(owner, var_name) == default_value, var_name
+
+
+def test_every_hud_owned_default_really_lives_on_the_hud(app):
+    """Guards the list above: if one of these moves back onto the window, the test over
+    DEFAULTS would keep passing against the wrong object."""
+    for var_name in HUD_OWNED_DEFAULTS:
+        assert not hasattr(app, var_name), f"{var_name} has two owners again"
+        assert hasattr(app.hud, var_name)
 
 
 # --- startup splash ---
@@ -1231,31 +1246,31 @@ def test_settings_keys_come_from_an_explicit_group_constant(app):
 def test_session_timer_stays_hidden_outside_a_session(app):
     """SettingsDialog calls this unconditionally on save, and it used to show a frozen clock
     built from the previous session's start time."""
-    app.show_session_timer = True
+    app.hud.show_session_timer = True
     app.is_running = False
 
-    app._update_session_timer()
+    app.hud.refresh_clock()
 
-    assert app.session_timer_label.isHidden()
+    assert app.hud.session_timer_label.isHidden()
 
 
 def test_record_chase_stays_hidden_outside_a_session(app):
-    app.show_record_chase = True
+    app.hud.show_record_chase = True
     app.is_running = False
 
-    app._update_record_chase()
+    app.hud.refresh_record_chase()
 
-    assert app.record_chase_label.isHidden()
+    assert app.hud.record_chase_label.isHidden()
 
 
 def test_session_timer_shows_during_a_session(app, tmp_path):
-    app.show_session_timer = True
+    app.hud.show_session_timer = True
     app.playlist = [tmp_path / "a.png"]
     app.start()
 
-    app._update_session_timer()
+    app.hud.refresh_clock()
 
-    assert not app.session_timer_label.isHidden()
+    assert not app.hud.session_timer_label.isHidden()
 
 
 def test_closing_the_window_records_the_session(app, qtbot, tmp_path):

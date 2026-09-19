@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
     QGraphicsDropShadowEffect,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -33,6 +32,7 @@ from src.MediaFolderPickerDialog import MediaFolderPickerDialog
 from src.plugins import load_optional_plugin
 from src.PrivacyDataDialog import PrivacyDataDialog
 from src.ScoreTracker import ScoreTracker
+from src.SessionHudWidget import SessionHudWidget
 from src.SessionRecorder import SessionRecorder
 from src.SessionScript import SessionScript
 from src.SettingsDialog import SettingsDialog
@@ -144,6 +144,10 @@ class GoonerApp(QMainWindow):
     def _load_settings(self):
         """Every stored preference in one place, rather than scattered between widgets.
 
+        The two exceptions are the overlay switches, which SessionHudWidget owns outright -
+        see _build_overlay. Keeping a second copy here would mean two values to hold in step,
+        and a write to the wrong one being silently ignored.
+
         Fallbacks come from DEFAULTS, not from repeated literals - three of these used to
         carry their own copies of 4.0/0.5/1.5 while the lines beside them already read the
         dict.
@@ -155,12 +159,6 @@ class GoonerApp(QMainWindow):
         )
         self.show_startup_splash = bool(
             self.settings.value("GoonerApp/show_startup_splash", self.DEFAULTS["show_startup_splash"], type=bool)
-        )
-        self.show_record_chase = bool(
-            self.settings.value("GoonerApp/show_record_chase", self.DEFAULTS["show_record_chase"], type=bool)
-        )
-        self.show_session_timer = bool(
-            self.settings.value("GoonerApp/show_session_timer", self.DEFAULTS["show_session_timer"], type=bool)
         )
         self.ask_for_outcome = bool(
             self.settings.value("GoonerApp/ask_for_outcome", self.DEFAULTS["ask_for_outcome"], type=bool)
@@ -190,7 +188,6 @@ class GoonerApp(QMainWindow):
         self._announced_outcome = None
         # What the session just ended earned, held between judging it and showing the recap.
         self._new_achievements = []
-        self._session_start_bests = {}
 
     def _create_handlers(self):
         """The objects that hold a session.
@@ -228,9 +225,6 @@ class GoonerApp(QMainWindow):
         self._denied_stop_timer = QTimer(self)
         self._denied_stop_timer.setSingleShot(True)
         self._denied_stop_timer.timeout.connect(self.stop)
-
-        self.session_timer_tick = QTimer()
-        self.session_timer_tick.timeout.connect(self._update_session_timer)
 
         self.climax_blink_timer = QTimer()
         self.climax_blink_timer.timeout.connect(self._toggle_climax_blink)
@@ -274,7 +268,7 @@ class GoonerApp(QMainWindow):
         return media_container
 
     def _build_overlay(self):
-        """The picture, with everything that floats on top of it in the same grid cell."""
+        """The picture, with the session captions laid over it - see SessionHudWidget."""
         self.media_stack = QStackedWidget()
 
         self.image_label = QLabel("No Gooning files selected yet.")
@@ -295,66 +289,19 @@ class GoonerApp(QMainWindow):
         self.media_player.mediaStatusChanged.connect(self.video_status_changed)
         self.media_player.errorOccurred.connect(self._on_media_error)
 
-        self.callout_label = QLabel("")
-        self.callout_label.setWordWrap(True)
-        self.callout_label.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter)
-        self.callout_label.setStyleSheet(f"""
-                    color: {theme.ACCENT};
-                    font-size: 24px;
-                    padding: 8px;
-                    background-color: rgba(45, 29, 58, 0.9);
-                    border-radius: 10px;
-                """)
-        self.callout_label.hide()
-
-        self.record_chase_label = self._build_hud_label()
-        self.session_timer_label = self._build_hud_label()
-
-        self.overlay_widget = QWidget()
-        self.overlay_layout = QGridLayout(self.overlay_widget)
-        self.overlay_layout.setContentsMargins(0, 0, 0, 0)
-        self.overlay_layout.setSpacing(0)
-
-        self.overlay_layout.addWidget(self.media_stack, 0, 0)
-        self.overlay_layout.addWidget(
-            self.callout_label,
-            0, 0,
-            Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter
+        # The widget owns these from here on; DEFAULTS stays the single source for the
+        # fallbacks, which the settings dialog's reset buttons read too.
+        self.hud = SessionHudWidget(
+            self.media_stack,
+            self.score_tracker,
+            show_record_chase=bool(self.settings.value(
+                "GoonerApp/show_record_chase", self.DEFAULTS["show_record_chase"], type=bool
+            )),
+            show_session_timer=bool(self.settings.value(
+                "GoonerApp/show_session_timer", self.DEFAULTS["show_session_timer"], type=bool
+            )),
         )
-        self.overlay_layout.addWidget(
-            self.record_chase_label,
-            0, 0,
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight
-        )
-        self.overlay_layout.addWidget(
-            self.session_timer_label,
-            0, 0,
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
-        )
-        return self.overlay_widget
-
-    def _build_hud_label(self):
-        """A small glowing caption in a corner of the media - the record chase, the clock.
-
-        Both were spelled out twice with identical styling, and a second copy of a
-        stylesheet is the kind of duplication that quietly drifts apart.
-        """
-        label = QLabel("")
-        label.setStyleSheet(f"""
-                    color: {theme.ACCENT};
-                    font-size: 13px;
-                    font-weight: bold;
-                    padding: 6px 10px;
-                    background-color: rgba(45, 29, 58, 0.85);
-                    border-radius: 8px;
-                """)
-        glow = QGraphicsDropShadowEffect()
-        glow.setColor(QColor(theme.ACCENT))
-        glow.setBlurRadius(18)
-        glow.setOffset(0, 0)
-        label.setGraphicsEffect(glow)
-        label.hide()
-        return label
+        return self.hud
 
     def _build_controls_row(self):
         self.controls_container = QWidget()
@@ -510,14 +457,6 @@ class GoonerApp(QMainWindow):
     def toggle_mute(self):
         self.set_muted(not self.is_muted)
 
-    def display_new_tease(self, tease: str):
-        self.callout_label.setText(tease)
-        self.callout_label.show()
-
-    def hide_last_tease(self):
-        self.callout_label.hide()
-        self.callout_label.setText("")
-
     def _setup_signal_handler(self):
         if self.intiface:
             self.intiface.attach()
@@ -526,7 +465,7 @@ class GoonerApp(QMainWindow):
                                                      self.callout_handler.pause_ended)
 
         self.beat_handler.register_beat_event(self.score_tracker.beat)
-        self.beat_handler.register_beat_event(self._update_record_chase)
+        self.beat_handler.register_beat_event(self.hud.refresh_record_chase)
         self.beat_handler.register_beat_event(self.beat_track.flash)
 
         self.beat_handler.register_beat_change_event(self.score_tracker.beat_changed)
@@ -560,13 +499,11 @@ class GoonerApp(QMainWindow):
         self.register_start_event(self.session_recorder.session_started)
         self.register_start_event(self.callout_handler.session_started)
         self.register_start_event(self.climax_handler.session_started)
-        self.register_start_event(self._start_record_chase)
-        self.register_start_event(self._start_session_timer)
+        self.register_start_event(self.hud.session_started)
         self.register_start_event(self.beat_track.start)
 
         self.register_end_event(self.score_tracker.session_ended)
-        self.register_end_event(self._end_record_chase)
-        self.register_end_event(self._end_session_timer)
+        self.register_end_event(self.hud.session_ended)
         self.register_end_event(self.beat_track.stop)
 
         self.register_media_skip_event(self.score_tracker.media_skipped)
@@ -575,7 +512,7 @@ class GoonerApp(QMainWindow):
         self.register_media_repeat_event(self.score_tracker.media_repeated)
         self.register_media_repeat_event(self.callout_handler.media_repeated)
 
-        self.callout_handler.register_new_tease_event(self.display_new_tease, self.hide_last_tease)
+        self.callout_handler.register_new_tease_event(self.hud.show_tease, self.hud.hide_tease)
 
         # Wrapped in lambdas rather than connecting update_dialogs.show_* directly: PyQt binds
         # a direct connection to the function object at connect() time, so a later
@@ -1165,52 +1102,6 @@ class GoonerApp(QMainWindow):
 
     def _update_beat_track(self, kind):
         self.beat_track.set_status(kind)
-
-    def _start_record_chase(self):
-        self._session_start_bests = self.score_tracker.get_all_time_bests()
-        self._update_record_chase()
-
-    def _end_record_chase(self):
-        self.record_chase_label.hide()
-
-    def _update_record_chase(self):
-        # SettingsDialog calls this on every save, including outside a session, where
-        # live_metrics() still reports the *previous* session's numbers.
-        if not self.is_running or not self.show_record_chase:
-            self.record_chase_label.hide()
-            return
-        status = self.score_tracker.record_chase_status(self._session_start_bests)
-        if status is None:
-            self.record_chase_label.hide()
-            return
-        metric, current, best = status
-        label = ScoreTracker.PR_METRIC_LABELS[metric]
-        current_text = ScoreTracker.format_metric_value(metric, current)
-        if current >= best:
-            text = f"\U0001f3c6 New {label} Record! {current_text}"
-        else:
-            best_text = ScoreTracker.format_metric_value(metric, best)
-            text = f"\U0001f3c6 Closing in on your {label} record: {current_text} / {best_text}"
-        self.record_chase_label.setText(text)
-        self.record_chase_label.show()
-
-    def _start_session_timer(self):
-        self.session_timer_tick.start(1000)
-        self._update_session_timer()
-
-    def _end_session_timer(self):
-        self.session_timer_tick.stop()
-        self.session_timer_label.hide()
-
-    def _update_session_timer(self):
-        # Same reasoning as _update_record_chase: without this, saving settings after a
-        # session put a frozen clock back on screen, counting from the old start time.
-        if not self.is_running or not self.show_session_timer:
-            self.session_timer_label.hide()
-            return
-        elapsed = self.score_tracker.live_metrics().get("total_dur_sec", 0)
-        self.session_timer_label.setText(f"⏱ {format_clock(elapsed)}")
-        self.session_timer_label.show()
 
     def register_start_event(self, handler):
         self.session_started_event.connect(handler)

@@ -157,35 +157,35 @@ def test_accept_settings_updates_show_startup_splash(app, dialog):
 
 
 def test_record_chase_checkbox_initialized_from_app(app, dialog):
-    assert dialog.show_record_chase_checkbox.isChecked() == app.show_record_chase
+    assert dialog.show_record_chase_checkbox.isChecked() == app.hud.show_record_chase
 
 
 def test_accept_settings_updates_show_record_chase(app, dialog, monkeypatch):
     called = {}
-    monkeypatch.setattr(app, "_update_record_chase", lambda: called.setdefault("called", True))
-    dialog.show_record_chase_checkbox.setChecked(not app.show_record_chase)
+    monkeypatch.setattr(app.hud, "refresh", lambda: called.setdefault("called", True))
+    dialog.show_record_chase_checkbox.setChecked(not app.hud.show_record_chase)
     expected = dialog.show_record_chase_checkbox.isChecked()
 
     dialog.accept_settings()
 
-    assert app.show_record_chase == expected
+    assert app.hud.show_record_chase == expected
     assert app.settings.value("GoonerApp/show_record_chase", type=bool) == expected
     assert called.get("called") is True
 
 
 def test_session_timer_checkbox_initialized_from_app(app, dialog):
-    assert dialog.show_session_timer_checkbox.isChecked() == app.show_session_timer
+    assert dialog.show_session_timer_checkbox.isChecked() == app.hud.show_session_timer
 
 
 def test_accept_settings_updates_show_session_timer(app, dialog, monkeypatch):
     called = {}
-    monkeypatch.setattr(app, "_update_session_timer", lambda: called.setdefault("called", True))
-    dialog.show_session_timer_checkbox.setChecked(not app.show_session_timer)
+    monkeypatch.setattr(app.hud, "refresh", lambda: called.setdefault("called", True))
+    dialog.show_session_timer_checkbox.setChecked(not app.hud.show_session_timer)
     expected = dialog.show_session_timer_checkbox.isChecked()
 
     dialog.accept_settings()
 
-    assert app.show_session_timer == expected
+    assert app.hud.show_session_timer == expected
     assert app.settings.value("GoonerApp/show_session_timer", type=bool) == expected
     assert called.get("called") is True
 

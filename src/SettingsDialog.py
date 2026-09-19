@@ -51,10 +51,10 @@ class SettingsDialog(QDialog):
         self.show_startup_splash_checkbox.setChecked(self.main_app.show_startup_splash)
         self._current_layout.addWidget(self.show_startup_splash_checkbox)
         self.show_record_chase_checkbox = QCheckBox("Show live personal-record chase")
-        self.show_record_chase_checkbox.setChecked(self.main_app.show_record_chase)
+        self.show_record_chase_checkbox.setChecked(self.main_app.hud.show_record_chase)
         self._current_layout.addWidget(self.show_record_chase_checkbox)
         self.show_session_timer_checkbox = QCheckBox("Show session timer")
-        self.show_session_timer_checkbox.setChecked(self.main_app.show_session_timer)
+        self.show_session_timer_checkbox.setChecked(self.main_app.hud.show_session_timer)
         self._current_layout.addWidget(self.show_session_timer_checkbox)
         self.playback_reset_button = self.add_reset_button(
             ["min_dur", "max_dur", "video_min_dur", "beat_loudness", "vid_loudness"],
@@ -362,14 +362,13 @@ class SettingsDialog(QDialog):
         self.main_app.show_startup_splash = self.show_startup_splash_checkbox.isChecked()
 
         settings.setValue("GoonerApp/show_record_chase", self.show_record_chase_checkbox.isChecked())
-        self.main_app.show_record_chase = self.show_record_chase_checkbox.isChecked()
-        self.main_app._update_record_chase()
+        self.main_app.hud.show_record_chase = self.show_record_chase_checkbox.isChecked()
 
         settings.setValue("GoonerApp/show_session_timer", self.show_session_timer_checkbox.isChecked())
-        self.main_app.show_session_timer = self.show_session_timer_checkbox.isChecked()
+        self.main_app.hud.show_session_timer = self.show_session_timer_checkbox.isChecked()
         settings.setValue("GoonerApp/ask_for_outcome", self.ask_for_outcome_checkbox.isChecked())
         self.main_app.ask_for_outcome = self.ask_for_outcome_checkbox.isChecked()
-        self.main_app._update_session_timer()
+        self.main_app.hud.refresh()
 
         new_selected_patterns = []
         for name, checkbox in self.beat_checkboxes.items():
