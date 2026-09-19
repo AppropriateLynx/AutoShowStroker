@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import QSettings, Qt, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QIcon, QMovie
+from PyQt6.QtGui import QAction, QColor, QIcon, QMovie
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import (
@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src import applog, changelog, media_kinds, session_files, theme
+from src import applog, changelog, media_kinds, session_files, theme, update_dialogs
 from src.achievements import AchievementTracker
 from src.BeatHandler import BeatHandler
 from src.BeatTrackWidget import BeatTrackWidget
@@ -39,7 +39,13 @@ from src.SettingsDialog import SettingsDialog
 from src.StatisticsDialog import StatisticsDialog
 from src.UpdateChecker import UpdateChecker
 from src.user_data import UserDataStore
-from src.utils import format_clock, get_current_version, get_project_root, load_scaled_pixmap
+from src.utils import (
+    format_clock,
+    get_current_version,
+    get_project_root,
+    load_scaled_pixmap,
+    open_external_url,
+)
 from src.WhatsNewDialog import WhatsNewDialog
 
 # How long the "denied" banner stays up before the session is ended for the user.
@@ -571,15 +577,17 @@ class GoonerApp(QMainWindow):
 
         self.callout_handler.register_new_tease_event(self.display_new_tease, self.hide_last_tease)
 
-        # Wrapped in lambdas (rather than connecting the bound methods directly) so tests can
-        # monkeypatch app._show_*_dialog after construction - PyQt binds a direct connection to
-        # the method object at connect() time, which a later monkeypatch.setattr(app, ...)
-        # can't retroactively intercept, since the signal already holds the original reference.
+        # Wrapped in lambdas rather than connecting update_dialogs.show_* directly: PyQt binds
+        # a direct connection to the function object at connect() time, so a later
+        # monkeypatch of the module attribute could not retroactively intercept it. The
+        # lambda looks the name up when the signal fires, which is what makes these testable.
         self.update_checker.update_available.connect(
-            lambda tag, url: self._show_update_available_dialog(tag, url)
+            lambda tag, url: update_dialogs.show_available(self, tag, url)
         )
-        self.update_checker.up_to_date.connect(lambda: self._show_up_to_date_dialog())
-        self.update_checker.check_failed.connect(lambda message: self._show_update_check_failed_dialog(message))
+        self.update_checker.up_to_date.connect(lambda: update_dialogs.show_up_to_date(self))
+        self.update_checker.check_failed.connect(
+            lambda message: update_dialogs.show_failed(self, message)
+        )
 
     def create_menu_bar(self):
         menu_bar = self.menuBar()
@@ -683,80 +691,13 @@ class GoonerApp(QMainWindow):
         dialog.deleteLater()
 
     def open_discord_invite(self):
-        QDesktopServices.openUrl(QUrl(self.DISCORD_INVITE_URL))
+        open_external_url(self.DISCORD_INVITE_URL)
 
     def check_for_updates(self):
-        if self._confirm_update_check():
+        """The Help menu entry. The question, the request and the answer live apart: see
+        update_dialogs for what the user is asked and told, UpdateChecker for what is sent."""
+        if update_dialogs.confirm_check(self):
             self.update_checker.check_now()
-
-    @staticmethod
-    def _update_check_consent_text() -> str:
-        """Spells out everything that actually goes over the wire.
-
-        This used to say "nothing else is sent" flat out, which wasn't quite true: the
-        request carries a User-Agent identifying the app, so GitHub's access logs tie an IP
-        to "runs GoonerApp". Small, but a privacy promise is worth nothing unless it's exact.
-        """
-        return (
-            "This will send one request to GitHub.com to check the latest release version.\n\n"
-            'It carries your IP address (unavoidable for any web request) and a User-Agent of '
-            '"GoonerApp-UpdateChecker", which identifies the app to GitHub. Nothing else is '
-            "sent - no folders, no filenames, no statistics, nothing identifying you or your "
-            "machine - and this never runs on its own.\n\n"
-            "Continue?"
-        )
-
-    def _confirm_update_check(self) -> bool:
-        # Built via explicit QMessageBox(...) + exec() rather than the static .question()
-        # convenience method - the static convenience methods are separate C++ entry points
-        # that bypass Python-level QMessageBox.exec entirely, so tests/_no_modal_dialogs
-        # can't neuter them and a real modal loop would open during tests.
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Question)
-        box.setWindowTitle("Check for Updates?")
-        box.setText(self._update_check_consent_text())
-        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        box.setDefaultButton(QMessageBox.StandardButton.No)
-        box.exec()
-        return box.clickedButton() is box.button(QMessageBox.StandardButton.Yes)
-
-    def _show_update_available_dialog(self, latest_tag, release_url):
-        box = QMessageBox(self)
-        box.setWindowTitle("Update Available")
-        box.setText(f"A new version is available: {latest_tag} (you're on v{get_current_version()}).")
-        open_button = box.addButton("Open Releases Page", QMessageBox.ButtonRole.ActionRole)
-        box.addButton("Close", QMessageBox.ButtonRole.RejectRole)
-        box.exec()
-        if box.clickedButton() is open_button:
-            self._open_external_url(release_url)
-
-    @staticmethod
-    def _open_external_url(url_string):
-        """Opens a URL only if it is http(s).
-
-        release_url is whatever the GitHub API response said. If that response is ever
-        attacker-influenced, a file:// or custom-scheme URL would be handed to the default
-        Windows handler on a single click.
-        """
-        url = QUrl(url_string)
-        if url.scheme() not in ("http", "https"):
-            log.warning("Refusing to open a non-web URL: %r", url_string)
-            return
-        QDesktopServices.openUrl(url)
-
-    def _show_up_to_date_dialog(self):
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Information)
-        box.setWindowTitle("Up to Date")
-        box.setText(f"You're on the latest version (v{get_current_version()}).")
-        box.exec()
-
-    def _show_update_check_failed_dialog(self, message):
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Icon.Warning)
-        box.setWindowTitle("Update Check Failed")
-        box.setText(f"Couldn't check for updates:\n{message}")
-        box.exec()
 
     def btn_next_action(self):
         self.show_next()

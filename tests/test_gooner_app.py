@@ -998,7 +998,7 @@ def test_socials_menu_has_discord_action(app, monkeypatch):
 
     captured = {}
     monkeypatch.setattr(
-        "src.GoonerApp.QDesktopServices.openUrl", lambda url: captured.setdefault("url", url.toString())
+        "src.utils.QDesktopServices.openUrl", lambda url: captured.setdefault("url", url.toString())
     )
 
     menu_bar = app.menuBar()
@@ -1023,7 +1023,7 @@ def test_help_menu_has_check_for_updates_action(app):
 
 
 def test_check_for_updates_checks_when_confirmed(app, monkeypatch):
-    monkeypatch.setattr(app, "_confirm_update_check", lambda: True)
+    monkeypatch.setattr("src.GoonerApp.update_dialogs.confirm_check", lambda parent: True)
     called = {}
     monkeypatch.setattr(app.update_checker, "check_now", lambda: called.setdefault("called", True))
 
@@ -1033,7 +1033,7 @@ def test_check_for_updates_checks_when_confirmed(app, monkeypatch):
 
 
 def test_check_for_updates_does_not_check_when_declined(app, monkeypatch):
-    monkeypatch.setattr(app, "_confirm_update_check", lambda: False)
+    monkeypatch.setattr("src.GoonerApp.update_dialogs.confirm_check", lambda parent: False)
     monkeypatch.setattr(
         app.update_checker, "check_now", lambda: pytest.fail("should not check when declined")
     )
@@ -1044,7 +1044,8 @@ def test_check_for_updates_does_not_check_when_declined(app, monkeypatch):
 def test_update_available_signal_shows_dialog(app, monkeypatch):
     captured = {}
     monkeypatch.setattr(
-        app, "_show_update_available_dialog", lambda tag, url: captured.update(tag=tag, url=url)
+        "src.GoonerApp.update_dialogs.show_available",
+        lambda parent, tag, url: captured.update(tag=tag, url=url),
     )
 
     app.update_checker.update_available.emit("v9.9.9", "https://example.com/release")
@@ -1054,7 +1055,9 @@ def test_update_available_signal_shows_dialog(app, monkeypatch):
 
 def test_up_to_date_signal_shows_dialog(app, monkeypatch):
     called = {}
-    monkeypatch.setattr(app, "_show_up_to_date_dialog", lambda: called.setdefault("called", True))
+    monkeypatch.setattr(
+        "src.GoonerApp.update_dialogs.show_up_to_date", lambda parent: called.setdefault("called", True)
+    )
 
     app.update_checker.up_to_date.emit()
 
@@ -1064,7 +1067,7 @@ def test_up_to_date_signal_shows_dialog(app, monkeypatch):
 def test_check_failed_signal_shows_dialog(app, monkeypatch):
     captured = {}
     monkeypatch.setattr(
-        app, "_show_update_check_failed_dialog", lambda msg: captured.setdefault("msg", msg)
+        "src.GoonerApp.update_dialogs.show_failed", lambda parent, msg: captured.setdefault("msg", msg)
     )
 
     app.update_checker.check_failed.emit("Host not found")
@@ -1287,34 +1290,6 @@ def test_closing_the_window_without_a_session_is_harmless(app):
     app.close()
 
     assert len(app.score_tracker.get_history()) == before
-
-
-def test_a_foreign_scheme_url_is_not_opened(app, monkeypatch):
-    """release_url comes straight from the GitHub API response - anything but http(s)
-    would hand an arbitrary protocol handler to the shell on one click."""
-    opened = []
-    monkeypatch.setattr("src.GoonerApp.QDesktopServices.openUrl", lambda url: opened.append(url))
-
-    app._open_external_url("file:///C:/Windows/System32/calc.exe")
-
-    assert opened == []
-
-
-def test_an_https_url_is_opened(app, monkeypatch):
-    opened = []
-    monkeypatch.setattr("src.GoonerApp.QDesktopServices.openUrl", lambda url: opened.append(url))
-
-    app._open_external_url("https://github.com/owner/repo/releases")
-
-    assert [u.toString() for u in opened] == ["https://github.com/owner/repo/releases"]
-
-
-def test_update_consent_text_mentions_the_user_agent(app):
-    """The dialog claimed 'nothing else is sent' while the request carries a
-    self-identifying User-Agent that lands in GitHub's access logs."""
-    text = app._update_check_consent_text()
-
-    assert "User-Agent" in text
 
 
 # --- diagnostic logging (opt-in) ---
