@@ -102,7 +102,24 @@ class GoonerApp(QMainWindow):
 
     def __init__(self, settings: QSettings | None = None, data_store=None):
         super().__init__()
+        self._bootstrap(settings, data_store)
+        self._load_settings()
+        self._init_state()
+        self._create_handlers()
+        self._create_timers()
+        self._build_window()
+        self._setup_signal_handler()
 
+    # --- construction -------------------------------------------------------------------
+    # This used to be one 330-line __init__ in which widget building, settings reading and
+    # handler construction were interleaved, so none of the three could be read without
+    # skipping over the other two. These methods are that same sequence cut along the
+    # concerns instead of along the order things happened to get written in. Nothing here
+    # changed behaviour; the call order above is load-bearing in exactly one place, noted
+    # at the method that needs it.
+
+    def _bootstrap(self, settings, data_store):
+        """Storage and logging. First, so everything after it can already log."""
         self.settings = settings if settings is not None else QSettings("GoonerCock", "GoonerApp")
         self.data_store = data_store if data_store is not None else UserDataStore()
         # Configured before anything else runs, so the very first warnings (a failed
@@ -118,20 +135,104 @@ class GoonerApp(QMainWindow):
         self.data_store.migrate_legacy_location()
         self.data_store.prune_legacy_registry_keys(self.settings)
 
-        self.setWindowTitle("Auto Hero Generation")
+    def _load_settings(self):
+        """Every stored preference in one place, rather than scattered between widgets.
 
+        Fallbacks come from DEFAULTS, not from repeated literals - three of these used to
+        carry their own copies of 4.0/0.5/1.5 while the lines beside them already read the
+        dict.
+        """
+        self.max_dur = float(self.settings.value("GoonerApp/max_dur", self.DEFAULTS["max_dur"]))
+        self.min_dur = float(self.settings.value("GoonerApp/min_dur", self.DEFAULTS["min_dur"]))
+        self.video_min_dur = float(
+            self.settings.value("GoonerApp/video_min_dur", self.DEFAULTS["video_min_dur"])
+        )
+        self.show_startup_splash = bool(
+            self.settings.value("GoonerApp/show_startup_splash", self.DEFAULTS["show_startup_splash"], type=bool)
+        )
+        self.show_record_chase = bool(
+            self.settings.value("GoonerApp/show_record_chase", self.DEFAULTS["show_record_chase"], type=bool)
+        )
+        self.show_session_timer = bool(
+            self.settings.value("GoonerApp/show_session_timer", self.DEFAULTS["show_session_timer"], type=bool)
+        )
+        self.ask_for_outcome = bool(
+            self.settings.value("GoonerApp/ask_for_outcome", self.DEFAULTS["ask_for_outcome"], type=bool)
+        )
+        self.vid_loudness = self.DEFAULTS["vid_loudness"]
+        if self.settings:
+            self.vid_loudness = float(self.settings.value("GoonerApp/vid_loudness", self.vid_loudness))
+
+    def _init_state(self):
+        """Plain attributes with no Qt object behind them."""
         self.current_movie = None
+        self.playlist: list[Path] = []
+        self.current_index = 0
+        self.video_start_time = 0
+        self.is_running = False
+        self._was_maximized_before_fullscreen = False
+        self.is_muted = False
+        self._edge_cooldown_left = 0
+        self._climax_blink_on = False
+        self._climax_status_text = ""
+        self._climax_status_colors = ("transparent", "transparent")
+        # Set while replaying a saved session - see start(). None for a live one.
+        self._script = None
+        # Whether this session's outcome has already been reported, so Stop does not ask a
+        # second time for something the climax buttons already answered.
+        self._outcome_answered = False
+        self._announced_outcome = None
+        # What the session just ended earned, held between judging it and showing the recap.
+        self._new_achievements = []
+        self._session_start_bests = {}
 
-        project_root = get_project_root()
+    def _create_handlers(self):
+        """The objects that hold a session.
 
-        icon_path = project_root / 'res' / 'icons' / 'favicon.ico'
+        Ordering note: this runs before _build_window() because BeatTrackWidget takes the
+        rhythm it draws as a constructor argument, and the Intiface plugin reads
+        main_app.beat_handler as it is built.
+        """
+        self.beat_handler = BeatHandler(settings=self.settings, data_store=self.data_store)
+        self.callout_handler = CalloutHandler(self.settings, data_store=self.data_store)
+        self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
+        self.score_tracker = ScoreTracker(settings=self.settings, data_store=self.data_store)
+        self.achievement_tracker = AchievementTracker(data_store=self.data_store)
+        # Keeps the running session's timeline for the Session Explorer. In memory only -
+        # it holds media paths, which never go near the data directory. See SessionRecorder.
+        self.session_recorder = SessionRecorder()
+        self.update_checker = UpdateChecker(get_current_version())
+        # Optional and genuinely removable: delete src/plugins/intiface/ and this is None,
+        # the Device tab is never built, and nothing else in the app notices.
+        self.intiface = load_optional_plugin("intiface", self)
+        if self.intiface:
+            self.intiface.shutdown_finished.connect(self._finish_deferred_close)
 
-        str_icon_path = str(icon_path.resolve())
+    def _create_timers(self):
+        self.auto_play_timer = QTimer()
+        self.auto_play_timer.timeout.connect(self.next_img_timer)
 
-        if icon_path.exists():
-            self.setWindowIcon(QIcon(str_icon_path))
-        else:
-            log.warning("Window icon not found at %s", str_icon_path)
+        # Held rather than a fire-and-forget QTimer.singleShot so start() can cancel it -
+        # and so a test can check it without monkeypatching QTimer itself.
+        # Ticks once a second while the edge button is cooling down, so the button can
+        # count down rather than just sitting there dead.
+        self._edge_cooldown_timer = QTimer(self)
+        self._edge_cooldown_timer.timeout.connect(self._tick_edge_cooldown)
+
+        self._denied_stop_timer = QTimer(self)
+        self._denied_stop_timer.setSingleShot(True)
+        self._denied_stop_timer.timeout.connect(self.stop)
+
+        self.session_timer_tick = QTimer()
+        self.session_timer_tick.timeout.connect(self._update_session_timer)
+
+        self.climax_blink_timer = QTimer()
+        self.climax_blink_timer.timeout.connect(self._toggle_climax_blink)
+
+    def _build_window(self):
+        """The window itself: media area on top, footer below, menu bar across it."""
+        self.setWindowTitle("Auto Hero Generation")
+        self._apply_window_icon()
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -140,17 +241,38 @@ class GoonerApp(QMainWindow):
         layout.setSpacing(0)
 
         self.main_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.main_splitter.addWidget(self._build_media_area())
+        self.main_splitter.addWidget(self._build_footer())
+        # No setSizes() here: footer_container is setFixedHeight(110), so the splitter
+        # cannot size it at all and any numbers here would be inert.
+        layout.addWidget(self.main_splitter)
 
+        self.create_menu_bar()
+
+    def _apply_window_icon(self):
+        icon_path = get_project_root() / 'res' / 'icons' / 'favicon.ico'
+        str_icon_path = str(icon_path.resolve())
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str_icon_path))
+        else:
+            log.warning("Window icon not found at %s", str_icon_path)
+
+    def _build_media_area(self):
+        """What is playing, and the buttons that decide what plays next."""
         media_container = QWidget()
         media_layout = QVBoxLayout(media_container)
         media_layout.setContentsMargins(0, 0, 0, 0)
         media_layout.setSpacing(0)
+        media_layout.addWidget(self._build_overlay(), stretch=4)
+        media_layout.addWidget(self._build_controls_row())
+        return media_container
 
+    def _build_overlay(self):
+        """The picture, with everything that floats on top of it in the same grid cell."""
         self.media_stack = QStackedWidget()
 
         self.image_label = QLabel("No Gooning files selected yet.")
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
         self.image_label.setMinimumSize(1, 1)
         self.image_label.setStyleSheet(
             f"background-color: {theme.SURFACE_DARK}; color: {theme.TEXT}; font-size: 20px; border-radius: 12px;"
@@ -170,7 +292,6 @@ class GoonerApp(QMainWindow):
         self.callout_label = QLabel("")
         self.callout_label.setWordWrap(True)
         self.callout_label.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter)
-
         self.callout_label.setStyleSheet(f"""
                     color: {theme.ACCENT};
                     font-size: 24px;
@@ -180,37 +301,8 @@ class GoonerApp(QMainWindow):
                 """)
         self.callout_label.hide()
 
-        self.record_chase_label = QLabel("")
-        self.record_chase_label.setStyleSheet(f"""
-                    color: {theme.ACCENT};
-                    font-size: 13px;
-                    font-weight: bold;
-                    padding: 6px 10px;
-                    background-color: rgba(45, 29, 58, 0.85);
-                    border-radius: 8px;
-                """)
-        record_chase_glow = QGraphicsDropShadowEffect()
-        record_chase_glow.setColor(QColor(theme.ACCENT))
-        record_chase_glow.setBlurRadius(18)
-        record_chase_glow.setOffset(0, 0)
-        self.record_chase_label.setGraphicsEffect(record_chase_glow)
-        self.record_chase_label.hide()
-
-        self.session_timer_label = QLabel("")
-        self.session_timer_label.setStyleSheet(f"""
-                    color: {theme.ACCENT};
-                    font-size: 13px;
-                    font-weight: bold;
-                    padding: 6px 10px;
-                    background-color: rgba(45, 29, 58, 0.85);
-                    border-radius: 8px;
-                """)
-        session_timer_glow = QGraphicsDropShadowEffect()
-        session_timer_glow.setColor(QColor(theme.ACCENT))
-        session_timer_glow.setBlurRadius(18)
-        session_timer_glow.setOffset(0, 0)
-        self.session_timer_label.setGraphicsEffect(session_timer_glow)
-        self.session_timer_label.hide()
+        self.record_chase_label = self._build_hud_label()
+        self.session_timer_label = self._build_hud_label()
 
         self.overlay_widget = QWidget()
         self.overlay_layout = QGridLayout(self.overlay_widget)
@@ -218,30 +310,47 @@ class GoonerApp(QMainWindow):
         self.overlay_layout.setSpacing(0)
 
         self.overlay_layout.addWidget(self.media_stack, 0, 0)
-
         self.overlay_layout.addWidget(
             self.callout_label,
             0, 0,
             Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignCenter
         )
-
         self.overlay_layout.addWidget(
             self.record_chase_label,
             0, 0,
             Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight
         )
-
         self.overlay_layout.addWidget(
             self.session_timer_label,
             0, 0,
             Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
         )
+        return self.overlay_widget
 
-        media_layout.addWidget(self.overlay_widget, stretch=4)
+    def _build_hud_label(self):
+        """A small glowing caption in a corner of the media - the record chase, the clock.
 
-        self.playlist: list[Path] = []
-        self.current_index = 0
+        Both were spelled out twice with identical styling, and a second copy of a
+        stylesheet is the kind of duplication that quietly drifts apart.
+        """
+        label = QLabel("")
+        label.setStyleSheet(f"""
+                    color: {theme.ACCENT};
+                    font-size: 13px;
+                    font-weight: bold;
+                    padding: 6px 10px;
+                    background-color: rgba(45, 29, 58, 0.85);
+                    border-radius: 8px;
+                """)
+        glow = QGraphicsDropShadowEffect()
+        glow.setColor(QColor(theme.ACCENT))
+        glow.setBlurRadius(18)
+        glow.setOffset(0, 0)
+        label.setGraphicsEffect(glow)
+        label.hide()
+        return label
 
+    def _build_controls_row(self):
         self.controls_container = QWidget()
         controls_layout = QHBoxLayout(self.controls_container)
 
@@ -303,51 +412,16 @@ class GoonerApp(QMainWindow):
         controls_layout.addWidget(self.btn_mute)
         # Optional components add themselves here later - see add_control_widget.
         self.controls_layout = controls_layout
+        return self.controls_container
 
-        self.auto_play_timer = QTimer()
-        self.auto_play_timer.timeout.connect(self.next_img_timer)
+    def _build_footer(self):
+        """The climax banner, the outcome question, and the note track under both.
 
-        # Held rather than a fire-and-forget QTimer.singleShot so start() can cancel it -
-        # and so a test can check it without monkeypatching QTimer itself.
-        # Ticks once a second while the edge button is cooling down, so the button can
-        # count down rather than just sitting there dead.
-        self._edge_cooldown_timer = QTimer(self)
-        self._edge_cooldown_timer.timeout.connect(self._tick_edge_cooldown)
-        self._edge_cooldown_left = 0
-
-        self._denied_stop_timer = QTimer(self)
-        self._denied_stop_timer.setSingleShot(True)
-        self._denied_stop_timer.timeout.connect(self.stop)
-
-        self.session_timer_tick = QTimer()
-        self.session_timer_tick.timeout.connect(self._update_session_timer)
-
-        # Fallbacks come from DEFAULTS, not from repeated literals - these three used to
-        # carry their own copies of 4.0/0.5/1.5 while the lines right below already read
-        # the dict.
-        self.max_dur = float(self.settings.value("GoonerApp/max_dur", self.DEFAULTS["max_dur"]))
-        self.min_dur = float(self.settings.value("GoonerApp/min_dur", self.DEFAULTS["min_dur"]))
-        self.video_min_dur = float(
-            self.settings.value("GoonerApp/video_min_dur", self.DEFAULTS["video_min_dur"])
-        )
-        self.show_startup_splash = bool(
-            self.settings.value("GoonerApp/show_startup_splash", self.DEFAULTS["show_startup_splash"], type=bool)
-        )
-        self.show_record_chase = bool(
-            self.settings.value("GoonerApp/show_record_chase", self.DEFAULTS["show_record_chase"], type=bool)
-        )
-        self.show_session_timer = bool(
-            self.settings.value("GoonerApp/show_session_timer", self.DEFAULTS["show_session_timer"], type=bool)
-        )
-        self.ask_for_outcome = bool(
-            self.settings.value("GoonerApp/ask_for_outcome", self.DEFAULTS["ask_for_outcome"], type=bool)
-        )
-
-        media_layout.addWidget(self.controls_container)
-        self.main_splitter.addWidget(media_container)
-
-        self.beat_handler = BeatHandler(settings=self.settings, data_store=self.data_store)
-
+        Fixed total height so the media area above never wobbles when the banner appears or
+        disappears - only the split *within* this container changes (the note track expands
+        to fill it via stretch when the banner is hidden, shrinks when it is shown). The one
+        exception is the outcome row - see FOOTER_HEIGHT_WITH_OUTCOME.
+        """
         self.climax_status_label = QLabel("")
         self.climax_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.climax_status_label.setStyleSheet(self._climax_label_style("transparent"))
@@ -358,19 +432,9 @@ class GoonerApp(QMainWindow):
         climax_glow.setOffset(0, 0)
         self.climax_status_label.setGraphicsEffect(climax_glow)
 
-        self.climax_blink_timer = QTimer()
-        self.climax_blink_timer.timeout.connect(self._toggle_climax_blink)
-        self._climax_blink_on = False
-        self._climax_status_text = ""
-        self._climax_status_colors = ("transparent", "transparent")
-
         self.beat_track = BeatTrackWidget(self.beat_handler)
         self.beat_handler.register_beat_meter_update_event(self._update_beat_track)
 
-        # Fixed total height so the media area above never wobbles when the climax label
-        # appears/disappears - only the split *within* this container changes (beat_meter
-        # expands to fill it via stretch when the label is hidden, shrinks when it's shown).
-        # The one exception is the outcome row - see FOOTER_HEIGHT_WITH_OUTCOME.
         self.footer_container = QWidget()
         self.footer_container.setFixedHeight(self.FOOTER_HEIGHT)
         self.footer_layout = QVBoxLayout(self.footer_container)
@@ -379,54 +443,7 @@ class GoonerApp(QMainWindow):
         self.footer_layout.addWidget(self.climax_status_label, stretch=0)
         self.footer_layout.addWidget(self._build_outcome_row(), stretch=0)
         self.footer_layout.addWidget(self.beat_track, stretch=1)
-        self.main_splitter.addWidget(self.footer_container)
-
-        self.video_start_time = 0
-
-
-        # No setSizes() here: footer_container is setFixedHeight(110) above, so the
-        # splitter cannot size it at all and any numbers here would be inert.
-
-        layout.addWidget(self.main_splitter)
-
-        self.create_menu_bar()
-
-        self.vid_loudness = self.DEFAULTS["vid_loudness"]
-        if self.settings:
-            self.vid_loudness = float(self.settings.value("GoonerApp/vid_loudness", self.vid_loudness))
-
-        self.is_running = False
-        self._was_maximized_before_fullscreen = False
-        self.is_muted = False
-
-        self.callout_handler = CalloutHandler(self.settings, data_store=self.data_store)
-
-        self.score_tracker = ScoreTracker(settings=self.settings, data_store=self.data_store)
-        self.achievement_tracker = AchievementTracker(data_store=self.data_store)
-        # Keeps the running session's timeline for the Session Explorer. In memory only -
-        # it holds media paths, which never go near the data directory. See SessionRecorder.
-        self.session_recorder = SessionRecorder()
-        # Set while replaying a saved session - see start(). None for a live one.
-        self._script = None
-        # Whether this session's outcome has already been reported, so Stop does not ask
-        # a second time for something the climax buttons already answered.
-        self._outcome_answered = False
-        self._announced_outcome = None
-        # What the session just ended earned, held between judging it and showing the recap.
-        self._new_achievements = []
-        self._session_start_bests = {}
-
-        self.climax_handler = ClimaxHandler(self.beat_handler, self.callout_handler, settings=self.settings)
-
-        self.update_checker = UpdateChecker(get_current_version())
-
-        # Optional and genuinely removable: delete src/plugins/intiface/ and this is None,
-        # the Device tab is never built, and nothing else in the app notices.
-        self.intiface = load_optional_plugin("intiface", self)
-        if self.intiface:
-            self.intiface.shutdown_finished.connect(self._finish_deferred_close)
-
-        self._setup_signal_handler()
+        return self.footer_container
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_F or event.key() == Qt.Key.Key_F11:
