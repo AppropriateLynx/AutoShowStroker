@@ -17,6 +17,9 @@ class UpdateChecker(QObject):
     explicitly triggered by the user."""
 
     GITHUB_RELEASES_API_URL = "https://api.github.com/repos/pohupremmail-svg/AutoShowStroker/releases/latest"
+    # Read back by update_dialogs.consent_text(), which promises the user exactly this
+    # header. Naming it once is what keeps the promise and the request from disagreeing.
+    USER_AGENT = b"GoonerApp-UpdateChecker"
 
     update_available = pyqtSignal(str, str)  # latest_tag, release_html_url
     up_to_date = pyqtSignal()
@@ -30,7 +33,7 @@ class UpdateChecker(QObject):
     def check_now(self):
         request = QNetworkRequest(QUrl(self.GITHUB_RELEASES_API_URL))
         # GitHub's API rejects requests with no User-Agent.
-        request.setRawHeader(b"User-Agent", b"GoonerApp-UpdateChecker")
+        request.setRawHeader(b"User-Agent", self.USER_AGENT)
         request.setTransferTimeout(10000)
         log.info("Update check: requesting %s", self.GITHUB_RELEASES_API_URL)
         reply = self._manager.get(request)
