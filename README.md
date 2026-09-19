@@ -2,7 +2,7 @@
 
 A specialized, interactive PyQt6 multimedia application designed to transform your local media library (images, GIFs, and videos) into a dynamic, personalized "Cock Hero" session. The app combines a randomized playlist with a configurable, interactive rhythm generator ("Strokemeter") and motivational text instructions (callouts).
 
-**100% local and private.** Your media, session history, and settings never leave your machine — no account, no login, no telemetry, no cloud calls of any kind. There are exactly two opt-in exceptions, both off until you ask for them: Help > Check for Updates pings GitHub.com when you explicitly click it, and optional device output (Settings > Device) connects to an Intiface server whose address you type in yourself. That second one ships disabled, switches itself off again at every launch, asks before it connects, and lives in a folder you can delete outright — see below.
+**100% local and private.** Your media, session history, and settings never leave your machine — no account, no login, no telemetry, no cloud calls of any kind. There are exactly two opt-in exceptions, both off until you ask for them: Help > Check for Updates pings GitHub.com when you explicitly click it, and optional device output (Settings > Device) connects to an Intiface server at the address you confirm, defaulting to this PC. That second one ships disabled, switches itself off again at every launch, asks before it connects, and lives in a folder you can delete outright — see below.
 
 Local still means written somewhere, so: your data (session history, custom patterns, custom phrase files, remembered media folders, saved sessions) lives as plain JSON in `%LOCALAPPDATA%\GoonerCock\GoonerApp`, and your settings in `HKEY_CURRENT_USER\Software\GoonerCock\GoonerApp`. GoonerApp is portable, so deleting the `.exe` leaves both behind — **Help > Privacy & Data** shows the exact paths, opens the data folder, and deletes any of it per category.
 
@@ -65,7 +65,7 @@ once cannot quietly open a network connection on some later launch. It has not b
 against physical hardware yet; tell us how it went on the Discord.
 
 1. Start [Intiface Central](https://intiface.com/central/), start its server, and connect your device there.
-2. Open **Settings > Device** and put in the address Intiface Central shows for its server. GoonerApp ships no address of its own — only you know which machine your server is on, and an app that promises to contact nothing has no business carrying one around.
+2. Open **Settings > Device**. The server defaults to `ws://0.0.0.0:12345`, which connects to Intiface on this PC through `127.0.0.1`. Change the address if your server uses a different port or runs on another computer.
 3. Set the **minimum (DOWN)** and **maximum (UP)** positions. The default range is **25–75%**, deliberately conservative for a feature no one has run on real hardware yet.
 4. Tick **Enable device output**. It tells you exactly what will go over the wire and asks before it connects; the address you typed is quoted back, because if it is not this machine those commands cross your network. Ticking it connects there and then — it is an action, not a preference, which is why it does not wait for Save. The stroke range does wait for Save, like every other setting in that window.
 5. **Test Up** / **Test Down** check the endpoints, one movement of one second each. **Scan for Devices** repeats discovery. Start a session to sync, or **Resume Device Sync** if one is already running.

@@ -23,13 +23,10 @@ def allow_consent(monkeypatch):
     return asked
 
 
-def test_the_device_tab_ships_no_address_of_its_own(dialog):
-    """Intiface Central shows the address its server listens on, and that is the only
-    one that can be right for a given machine. Filling one in for the user would also
-    mean shipping a network address inside an app that promises not to contact any."""
+def test_the_device_tab_defaults_to_local_intiface_without_enabling_output(dialog):
     tab = dialog.intiface_tab
     assert not tab.enabled.isChecked()
-    assert tab.server.text() == ""
+    assert tab.server.text() == "ws://0.0.0.0:12345"
     assert tab.minimum.value() == 25
     assert tab.maximum.value() == 75
     assert not tab.test_up.isEnabled()
@@ -88,6 +85,7 @@ def test_enabling_with_no_address_says_so_instead_of_connecting(app, dialog, all
     configure = MagicMock()
     monkeypatch.setattr(app.intiface.controller, "configure", configure)
     tab = dialog.intiface_tab
+    tab.server.clear()
     tab.enabled.click()
     assert not tab.enabled.isChecked()
     assert "Intiface Central" in tab.error.text()

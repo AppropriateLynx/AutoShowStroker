@@ -28,7 +28,8 @@ BETA_NOTICE = (
 )
 ADDRESS_HINT = (
     "Start Intiface Central, start its server and connect your device there. Intiface "
-    "Central shows the address its server is listening on - put that in below. The first "
+    "Central's default local address is ws://0.0.0.0:12345; the app connects to it on "
+    "this PC using 127.0.0.1. For a server on another computer, enter its address below. The first "
     "device it offers with linear movement support is the one that gets used."
 )
 SYNC_NOTE = (

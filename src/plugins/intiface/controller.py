@@ -126,7 +126,12 @@ class _IntifaceWorker(QObject):
         self._socket.abort()
         # The address is the user's own and may name a machine on their network, so it is
         # never written to the log - the same rule media folders follow.
-        self._socket.open(QUrl(self._url))
+        url = QUrl(self._url)
+        # Intiface can display its wildcard bind address. Connect to the local
+        # server through loopback; 0.0.0.0 is not a client destination on Windows.
+        if url.host() == "0.0.0.0":
+            url.setHost("127.0.0.1")
+        self._socket.open(url)
         self._connect_timeout.start(REQUEST_TIMEOUT_MS)
 
     def _connected(self):
@@ -368,11 +373,7 @@ class IntifaceController(QObject):
     """GUI-facing connection state and safety latch. Networking is reached only through
     signals, and the rhythm is not reached at all - BeatSync calls on_target()."""
 
-    # No address ships with the app. Intiface Central shows the one its own server is
-    # listening on, which is the only one that can be right for a given machine - and
-    # guessing on the user's behalf would mean baking a network address into a program
-    # whose whole promise is that it does not contact any.
-    DEFAULTS = {"server_url": "", "min_position": 0.25, "max_position": 0.75}
+    DEFAULTS = {"server_url": "ws://0.0.0.0:12345", "min_position": 0.25, "max_position": 0.75}
     state_changed = pyqtSignal()
     shutdown_finished = pyqtSignal()
     # Losing a device latches device sync off - nothing moves again until the user says
@@ -404,6 +405,7 @@ class IntifaceController(QObject):
             setattr(self, key, default)
         try:
             url = str(settings.value(f"{SETTINGS_PREFIX}/server_url", self.server_url))
+            url = url.strip() or self.DEFAULTS["server_url"]
             low = float(settings.value(f"{SETTINGS_PREFIX}/min_position", self.min_position))
             high = float(settings.value(f"{SETTINGS_PREFIX}/max_position", self.max_position))
             self.validate_positions(low, high)

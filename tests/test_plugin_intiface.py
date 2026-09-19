@@ -81,6 +81,25 @@ def test_disabled_by_default_never_starts_a_worker(controller):
     assert not controller.has_worker
 
 
+@pytest.mark.parametrize("saved_url", ["", "   "])
+def test_empty_saved_address_uses_local_default(qsettings, saved_url):
+    qsettings.setValue("IntifaceController/server_url", saved_url)
+    fresh = IntifaceController(qsettings)
+    assert fresh.server_url == "ws://0.0.0.0:12345"
+    assert not fresh.has_worker
+    assert not fresh.enabled
+
+
+def test_wildcard_address_connects_to_loopback(controller, server, qtbot):
+    url = f"ws://0.0.0.0:{server.serverPort()}"
+    controller.configure(True, url, 0.25, 0.75)
+    qtbot.waitUntil(lambda: bool(controller.device_name), timeout=3000)
+    assert controller.device_name == "Test Linear"
+    assert controller.server_url == url
+    assert controller.settings.value("IntifaceController/server_url") == url
+    assert commands(server, "RequestServerInfo")[0]["MessageVersion"] == 3
+
+
 @pytest.mark.parametrize("url,low,high", [
     ("https://localhost", 0.1, 0.9), ("ws://", 0.1, 0.9),
     ("ws://localhost:99999", 0.1, 0.9), ("ws://localhost", -0.1, 0.9),
