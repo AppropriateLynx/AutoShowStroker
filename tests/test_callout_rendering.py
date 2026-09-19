@@ -12,30 +12,30 @@ from src.VideoDisplay import VideoDisplay
 @pytest.mark.parametrize("size", [(1000, 750), (650, 950)])
 def test_video_and_callout_render_together(app, qtbot, monkeypatch, size):
     app.resize(*size)
-    app.media_stack.setCurrentWidget(app.video_widget)
+    app.player.setCurrentWidget(app.player.video_widget)
     app.show()
     qtbot.waitUntil(app.isVisible)
 
     # Use the real player's output, with a synthetic frame instead of a decoder/audio.
     # Match the media area's aspect ratio so the pixel checks avoid letterboxing.
-    frame_image = QImage(app.video_widget.size(), QImage.Format.Format_RGB32)
+    frame_image = QImage(app.player.video_widget.size(), QImage.Format.Format_RGB32)
     frame_image.fill(QColor("#168040"))
-    app.media_player.videoSink().setVideoFrame(QVideoFrame(frame_image))
+    app.player.media_player.videoSink().setVideoFrame(QVideoFrame(frame_image))
     monkeypatch.setattr(app.callout_handler, "pick_phrase", lambda _: "Callout visibility test")
     app.callout_handler.active_callout = True
     app.callout_handler.talking_chance = 1.0
     app.callout_handler.session_started()
 
     def rendered_together():
-        snapshot = app.overlay_widget.grab().toImage()
+        snapshot = app.hud.grab().toImage()
         snapshot.setDevicePixelRatio(1)
-        scale = app.overlay_widget.devicePixelRatioF()
+        scale = app.hud.devicePixelRatioF()
         # Video must be present in the same composed image as the text.
-        point = app.video_widget.mapTo(app.overlay_widget, QPoint(20, 20))
+        point = app.player.video_widget.mapTo(app.hud, QPoint(20, 20))
         if snapshot.pixelColor(int(point.x() * scale), int(point.y() * scale)) != QColor("#168040"):
             return False
-        label = app.callout_label
-        origin = label.mapTo(app.overlay_widget, QPoint(0, 0))
+        label = app.hud.callout_label
+        origin = label.mapTo(app.hud, QPoint(0, 0))
         text_color = QColor(theme.ACCENT)
         return any(
             snapshot.pixelColor(x, y) == text_color
@@ -44,12 +44,12 @@ def test_video_and_callout_render_together(app, qtbot, monkeypatch, size):
         )
 
     qtbot.waitUntil(rendered_together, timeout=1000)
-    assert app.callout_label.isVisible()
+    assert app.hud.callout_label.isVisible()
 
     # The overlays must survive both frame updates and switching away from video.
-    app.media_stack.setCurrentWidget(app.image_label)
-    app.media_stack.setCurrentWidget(app.video_widget)
-    app.media_player.videoSink().setVideoFrame(QVideoFrame(frame_image))
+    app.player.setCurrentWidget(app.player.image_label)
+    app.player.setCurrentWidget(app.player.video_widget)
+    app.player.media_player.videoSink().setVideoFrame(QVideoFrame(frame_image))
     qtbot.waitUntil(rendered_together, timeout=1000)
 
 
