@@ -46,10 +46,15 @@ MESSAGE = (
     "below has the technical part - copy it into the Discord."
 )
 
-# Guards against the failure mode this module exists to survive: something inside the report
-# raising, and the hook being called again to report that. The Intiface controller hit the
-# same shape and took the app down with unbounded recursion.
-_reporting = False
+# True while a dialog is on screen. QMessageBox.exec() runs a nested event loop, so Qt keeps
+# dispatching while the box is up - a timer firing there and raising comes straight back
+# here, into this handler from inside itself. Without the guard that is a modal box opened
+# on top of a modal box.
+#
+# It guards *only* the dialog. An earlier version bailed out of the whole handler, which
+# meant a failure occurring during the report was never even written down - defeating the
+# one thing this module exists to do.
+_showing = False
 
 # Faults already put in front of the user this session. Because the app now survives an
 # unhandled exception, the same one can happen again - something failing in a paint or a
@@ -71,25 +76,30 @@ def _signature(exc_type, tb):
 
 
 def _report(exc_type, value, tb):
-    global _reporting
+    global _showing
     if issubclass(exc_type, KeyboardInterrupt):
         # Someone asking the program to stop, not a crash. Hand it back to Python.
         sys.__excepthook__(exc_type, value, tb)
         return
-    if _reporting:
+
+    # Unconditional, and before anything else. Every failure is recorded, including one that
+    # happens while an earlier one is being reported, and a dialog that cannot be built
+    # cannot cost the record. Whether this reaches a file is the user's choice - applog is
+    # opt-in - but it is never this module's decision to skip it.
+    log.error("Unhandled exception", exc_info=(exc_type, value, tb))
+
+    if _showing:
+        return
+    signature = _signature(exc_type, tb)
+    if signature in _already_shown:
         return
 
-    _reporting = True
+    _already_shown.add(signature)
+    _showing = True
     try:
-        # First, and on its own, so a dialog that cannot be built cannot cost the record.
-        # Whether this reaches a file is the user's choice - applog is opt-in.
-        log.error("Unhandled exception", exc_info=(exc_type, value, tb))
-        signature = _signature(exc_type, tb)
-        if signature not in _already_shown:
-            _already_shown.add(signature)
-            _show_dialog(exc_type, value, tb)
+        _show_dialog(exc_type, value, tb)
     finally:
-        _reporting = False
+        _showing = False
 
 
 def _show_dialog(exc_type, value, tb):

@@ -55,7 +55,7 @@ def restore_excepthook():
     original = sys.excepthook
     yield
     sys.excepthook = original
-    crash_handler._reporting = False
+    crash_handler._showing = False
     crash_handler._already_shown.clear()
 
 
@@ -102,21 +102,47 @@ def test_the_user_is_shown_something_they_can_report(shown_dialogs, captured_log
     assert "_boom" in details, "the detail is not a traceback"
 
 
-def test_a_crash_while_reporting_a_crash_does_not_recurse(qapp, captured_log, monkeypatch):
-    """The same trap the Intiface controller hit: a failure path that re-enters itself. Here
-    it would be unbounded recursion inside the one handler that is supposed to survive."""
-    attempts = []
-
+def test_a_broken_dialog_is_survived(qapp, captured_log, monkeypatch):
+    """A display that cannot be built is not allowed to become a second crash."""
     def exploding_box(_box):
-        attempts.append(1)
         raise RuntimeError("even the dialog is broken")
 
     monkeypatch.setattr(QMessageBox, "exec", exploding_box)
     crash_handler.install()
 
+    _raise_and_report()   # must not raise
+
+
+def test_a_failure_inside_the_dialogs_own_event_loop(qapp, captured_log, monkeypatch):
+    """The re-entry that can really happen, and the reason this needs a guard at all.
+
+    QMessageBox.exec() runs a nested event loop, so Qt keeps dispatching while the box is
+    up. A timer firing there and raising goes straight back to sys.excepthook - into this
+    handler, from inside itself. Without a guard that is a modal box opened on top of a
+    modal box; guarded wrongly, the second failure is dropped without being recorded, which
+    would defeat the point of the module.
+    """
+    attempts = []
+
+    def reentering_box(_box):
+        attempts.append(1)
+        if len(attempts) == 1:
+            try:
+                raise RuntimeError("a timer misfired while the box was up")
+            except RuntimeError:
+                sys.excepthook(*sys.exc_info())
+
+    monkeypatch.setattr(QMessageBox, "exec", reentering_box)
+    crash_handler.install()
+
     _raise_and_report()
 
-    assert len(attempts) == 1, "the handler re-entered itself"
+    assert len(attempts) == 1, "a second box was opened on top of the first"
+    logged = [logging.Formatter().formatException(r.exc_info) for r in captured_log if r.exc_info]
+    assert any("the thing exploded" in entry for entry in logged), "the first failure was lost"
+    assert any("a timer misfired" in entry for entry in logged), (
+        "the failure that happened during the report was never recorded"
+    )
 
 
 def test_a_broken_dialog_still_leaves_the_log_entry(qapp, captured_log, monkeypatch):
