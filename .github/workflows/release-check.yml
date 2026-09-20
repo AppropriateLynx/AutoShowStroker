@@ -1,0 +1,59 @@
+# Builds the executable from what is actually committed, and refuses it if anything the
+# app needs did not survive PyInstaller.
+#
+# Only on a version tag. Building on every pull request would cost a minute and 60 MB that
+# nobody collects, on changes that by the project's own rules never get released.
+#
+# This is not the same check as running scripts/verify_frozen.py locally, and it is worth
+# being clear about the difference: a local build uses your working tree, this one uses only
+# what is in the repository. A resource that exists on your disk but was never committed
+# passes locally and fails here - which is exactly the failure a local check cannot see.
+#
+# Whether it is a gate or a detector depends on the release procedure. `gh release create`
+# makes the tag itself, so if the release is cut that way this fires after the asset is
+# already public and tells you quickly that it is broken. Pushing the tag first, waiting for
+# this, and only then calling `gh release create` against the existing tag makes it a real
+# gate - see the release steps in CLAUDE.md.
+name: Release check
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      # A tag that disagrees with VERSION means one of the two was typed by hand and got it
+      # wrong. verify_frozen.py compares the *bundled* VERSION against the repo's; nothing
+      # else compares either of them against the tag the release will carry.
+      - name: The tag matches VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match VERSION $version" >&2
+            exit 1
+          fi
+          echo "Tag $GITHUB_REF_NAME matches VERSION $version"
+
+      - run: python scripts/build.py
+
+      - run: python scripts/verify_frozen.py
