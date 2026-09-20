@@ -619,6 +619,10 @@ class GoonerApp(QMainWindow):
     def stop(self):
         if not self.is_running:
             return
+        # Stop means stop. Everything goes quiet here, before the question is asked: it used
+        # to be asked over a session that was still running, so the rhythm kept playing and a
+        # video kept going behind the box for however long the user took to answer.
+        self._halt_session()
         if self.ask_for_outcome and not self._outcome_answered:
             reported = self._ask_how_it_ended()
             if reported is not None:
@@ -661,22 +665,37 @@ class GoonerApp(QMainWindow):
         """A seam, so a test can watch for the quit without ending its own event loop."""
         QApplication.quit()
 
-    def _end_session(self, show_statistics: bool):
-        # Called first, not hung off session_ended_event at the bottom of this method:
-        # playback was once left running here, and the video kept going (with sound) behind
-        # the modal statistics dialog, its EndOfMedia then restarting the whole slideshow
-        # with no session, no beat and the controls greyed out.
+    def _halt_session(self):
+        """Everything that has to fall silent, and nothing that writes anything down.
+
+        Split out so stop() can halt the session *before* asking how it ended, while the
+        bookkeeping below still happens after the answer - ScoreTracker writes the history
+        entry from session_ended_event, so a report that arrived later would be lost.
+
+        Does nothing once the session is already halted, which is what lets _end_session()
+        go on calling it for every other way out without stopping a stopped player twice.
+        The player is stopped here rather than from session_ended_event: playback was once
+        left running, and a video kept going (with sound) behind the modal statistics
+        dialog, its EndOfMedia then restarting the whole slideshow with no session, no beat
+        and the controls greyed out.
+        """
+        if not self.is_running:
+            return
         self.player.session_ended()
+        self.hud.session_ended()
         self._denied_stop_timer.stop()
         self.beat_handler.stop()
-        self.btn_load.setText("Set Gooning Folder and Start.")
+        self._edge_cooldown_timer.stop()
+        self._freeze_climax_blink()
         self.is_running = False
+        self.btn_load.setText("Set Gooning Folder and Start.")
         self.btn_next.setEnabled(False)
         self.btn_prev.setEnabled(False)
         self.btn_stop.setEnabled(False)
-        self._edge_cooldown_timer.stop()
         self.btn_edge.setEnabled(False)
-        self._freeze_climax_blink()
+
+    def _end_session(self, show_statistics: bool):
+        self._halt_session()
         log.info(
             "Session ended after %s (statistics shown: %s)",
             format_clock(self.score_tracker.live_metrics().get("total_dur_sec", 0)),
