@@ -9,11 +9,10 @@
 # what is in the repository. A resource that exists on your disk but was never committed
 # passes locally and fails here - which is exactly the failure a local check cannot see.
 #
-# Whether it is a gate or a detector depends on the release procedure. `gh release create`
-# makes the tag itself, so if the release is cut that way this fires after the asset is
-# already public and tells you quickly that it is broken. Pushing the tag first, waiting for
-# this, and only then calling `gh release create` against the existing tag makes it a real
-# gate - see the release steps in CLAUDE.md.
+# The executable it builds is the one that gets published: it is attached to a **draft**
+# release for the tag, which the maintainer then writes notes for and publishes. So the
+# binary users download is provably the one built from committed source and verified here,
+# and nothing becomes public without a human pressing the button.
 name: Release check
 
 on:
@@ -23,7 +22,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # Needed to attach the verified build to the tag's release. Nothing else here writes.
+  contents: write
 
 jobs:
   frozen-build:
@@ -57,3 +57,22 @@ jobs:
       - run: python scripts/build.py
 
       - run: python scripts/verify_frozen.py
+
+      # Only after the verification passes, so a refused build can never reach the Releases
+      # tab. Created as a draft: the release notes are written by hand in the app's own
+      # voice, and a tag push should not put anything in front of users on its own.
+      - name: Attach the verified build to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME exists - replacing its asset with this build."
+            gh release upload "$GITHUB_REF_NAME" dist/GoonerApp.exe --clobber
+          else
+            notes="Draft - write the user-facing notes, then publish."
+            notes="$notes The attached build was made from this tag and passed scripts/verify_frozen.py."
+            gh release create "$GITHUB_REF_NAME" dist/GoonerApp.exe \
+              --draft --title "$GITHUB_REF_NAME" --notes "$notes"
+          fi
