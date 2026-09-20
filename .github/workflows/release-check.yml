@@ -1,0 +1,78 @@
+# Builds the executable from what is actually committed, and refuses it if anything the
+# app needs did not survive PyInstaller.
+#
+# Only on a version tag. Building on every pull request would cost a minute and 60 MB that
+# nobody collects, on changes that by the project's own rules never get released.
+#
+# This is not the same check as running scripts/verify_frozen.py locally, and it is worth
+# being clear about the difference: a local build uses your working tree, this one uses only
+# what is in the repository. A resource that exists on your disk but was never committed
+# passes locally and fails here - which is exactly the failure a local check cannot see.
+#
+# The executable it builds is the one that gets published: it is attached to a **draft**
+# release for the tag, which the maintainer then writes notes for and publishes. So the
+# binary users download is provably the one built from committed source and verified here,
+# and nothing becomes public without a human pressing the button.
+name: Release check
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  # Needed to attach the verified build to the tag's release. Nothing else here writes.
+  contents: write
+
+jobs:
+  frozen-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      # A tag that disagrees with VERSION means one of the two was typed by hand and got it
+      # wrong. verify_frozen.py compares the *bundled* VERSION against the repo's; nothing
+      # else compares either of them against the tag the release will carry.
+      - name: The tag matches VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match VERSION $version" >&2
+            exit 1
+          fi
+          echo "Tag $GITHUB_REF_NAME matches VERSION $version"
+
+      - run: python scripts/build.py
+
+      - run: python scripts/verify_frozen.py
+
+      # Only after the verification passes, so a refused build can never reach the Releases
+      # tab. Created as a draft: the release notes are written by hand in the app's own
+      # voice, and a tag push should not put anything in front of users on its own.
+      - name: Attach the verified build to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME exists - replacing its asset with this build."
+            gh release upload "$GITHUB_REF_NAME" dist/GoonerApp.exe --clobber
+          else
+            notes="Draft - write the user-facing notes, then publish."
+            notes="$notes The attached build was made from this tag and passed scripts/verify_frozen.py."
+            gh release create "$GITHUB_REF_NAME" dist/GoonerApp.exe \
+              --draft --title "$GITHUB_REF_NAME" --notes "$notes"
+          fi
