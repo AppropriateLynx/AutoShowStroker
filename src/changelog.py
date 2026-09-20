@@ -371,6 +371,18 @@ CHANGELOG = {
         "</ul>"
         "Your answer still counts for exactly as much as it did."
     ),
+    "0.14.2": (
+        "She never stopped talking. You just could not hear her over the video."
+        "<ul>"
+        "<li><b>Callouts are back during clips.</b> Every line she picked while a video was "
+        "playing was thrown away behind the picture - so the moment your attention was most "
+        "held, she went quiet. She has been talking the whole time. Now you get to be told "
+        "about it</li>"
+        "<li>The session clock and your record chase were hidden the same way, and they are "
+        "back too</li>"
+        "</ul>"
+        "Found by AppropriateLynx, who also worked out why."
+    ),
 }
 
 
