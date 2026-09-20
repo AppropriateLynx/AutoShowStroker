@@ -383,6 +383,18 @@ CHANGELOG = {
         "</ul>"
         "Found by AppropriateLynx, who also worked out why."
     ),
+    "0.14.3": (
+        "If something breaks now, it tells you. It does not just walk out on you."
+        "<ul>"
+        "<li><b>An unexpected error no longer ends your session.</b> The app used to vanish "
+        "mid-stroke without a word - no message, no trace, nothing to report. Now it stays "
+        "up, says what went wrong, and lets you decide whether to carry on</li>"
+        "<li><b>And it hands you the details.</b> The technical part sits behind a button, "
+        "ready to copy straight into the Discord. Nothing is sent anywhere - it never was, "
+        "and it still is not</li>"
+        "</ul>"
+        "The same fault only interrupts you once, however often it happens."
+    ),
 }
 
 
