@@ -3,12 +3,16 @@ import sys
 from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QApplication
 
-from src import theme
+from src import crash_handler, theme
 from src.GoonerApp import GoonerApp
 from src.SplashScreen import SplashScreen
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    # Before anything that could fail, and after the QApplication so the report has
+    # somewhere to appear. PyQt6 aborts the process when an exception escapes a slot, so
+    # this hook is the only chance to leave anything behind - see src/crash_handler.py.
+    crash_handler.install()
     # QStandardPaths resolves the app data directory through these, so UserDataStore
     # writes to %LOCALAPPDATA%\GoonerCock\GoonerApp. They match the QSettings org/app names
     # GoonerApp passes explicitly, so the registry location is unaffected.
